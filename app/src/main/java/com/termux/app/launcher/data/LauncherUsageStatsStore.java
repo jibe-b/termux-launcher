@@ -15,6 +15,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
@@ -100,7 +101,9 @@ public final class LauncherUsageStatsStore {
         if (raw == null || raw.trim().isEmpty()) return;
         try {
             JSONObject root = new JSONObject(raw);
-            for (String key : root.keySet()) {
+            Iterator<String> keyIterator = root.keys();
+            while (keyIterator.hasNext()) {
+                String key = keyIterator.next();
                 JSONObject statJson = root.optJSONObject(key);
                 if (statJson == null) continue;
                 UsageStat stat = new UsageStat();
