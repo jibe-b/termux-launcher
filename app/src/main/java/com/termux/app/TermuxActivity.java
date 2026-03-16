@@ -454,6 +454,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     
         registerTermuxActivityBroadcastReceiver();
         registerPackageChangeReceiver();
+        refreshSuggestionBarFromPackageState();
     }
 
     @Override
@@ -2153,6 +2154,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mPackageChangeReceiverRegistered = true;
     }
 
+    private void refreshSuggestionBarFromPackageState() {
+        if (mSuggestionBarView == null) {
+            return;
+        }
+        mSuggestionBarView.clearAppCache();
+        mSuggestionBarView.reloadAllApps();
+        syncAzScrubLettersAndTint();
+        String input = "";
+        if (mTerminalView != null) {
+            input = normalizeSuggestionBarInput(mTerminalView.getCurrentInput());
+        }
+        mSuggestionBarView.reloadWithInput(input, mTerminalView);
+    }
+
     private void unregisterPackageChangeReceiver() {
         if (!mPackageChangeReceiverRegistered)
             return;
@@ -2184,9 +2199,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (Intent.ACTION_PACKAGE_ADDED.equals(action) ||
                 Intent.ACTION_PACKAGE_REMOVED.equals(action) ||
                 Intent.ACTION_PACKAGE_CHANGED.equals(action)) {
-                mSuggestionBarView.clearAppCache();
-                mSuggestionBarView.reloadAllApps();
-                syncAzScrubLettersAndTint();
+                refreshSuggestionBarFromPackageState();
             }
         }
     }
