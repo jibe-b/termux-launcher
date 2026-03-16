@@ -1092,6 +1092,8 @@ public final class SuggestionBarView extends GridLayout {
         if (entry.icon != null && showIcons) {
             FrameLayout shell = new FrameLayout(getContext());
             shell.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            shell.setClipChildren(false);
+            shell.setClipToPadding(false);
 
             ImageButton imageButton = new ImageButton(getContext());
             imageButton.setImageDrawable(entry.icon);

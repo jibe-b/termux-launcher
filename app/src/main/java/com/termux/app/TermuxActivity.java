@@ -1097,17 +1097,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         cancelAzOverflowRefresh();
         float rowHeight = Math.max(1f, mAzScrubRowView.getHeight());
         float filterUpperBound = -(rowHeight * 0.10f);
-        float filterLowerBound = rowHeight * 0.92f;
-        float lockThreshold = -(rowHeight * 0.16f);
+        float filterLowerBound = rowHeight * 1.34f;
+        float lockThreshold = -(rowHeight * 0.18f);
         float unlockThreshold = rowHeight * 0.20f;
-        float unlockMaxBound = rowHeight * 1.08f;
+        float unlockMaxBound = rowHeight * 1.46f;
         float minUpwardTravel = Math.max(getResources().getDisplayMetrics().density * 6f, rowHeight * 0.12f);
         float dyFromDown = touchY - mAzGestureDownTouchY;
         float dxFromDown = touchX - mAzGestureDownTouchX;
-        boolean upwardIntent = dyFromDown <= -minUpwardTravel
-            && Math.abs(dyFromDown) >= (Math.abs(dxFromDown) * 0.45f);
+        boolean upwardIntent = touchY <= (rowHeight * 0.30f)
+            && dyFromDown <= -minUpwardTravel
+            && Math.abs(dyFromDown) >= (Math.abs(dxFromDown) * 0.20f);
         boolean withinAzFilterBand = touchY >= filterUpperBound && touchY <= filterLowerBound;
-        boolean enteringIconTrack = touchY <= lockThreshold || upwardIntent;
+        boolean enteringIconTrack = touchY <= lockThreshold || (upwardIntent && touchY <= (rowHeight * 0.22f));
         boolean returningToAzTrack = touchY >= unlockThreshold && touchY <= unlockMaxBound;
 
         if (mAzGestureMode == AzGestureMode.AZ_TRACKING) {
