@@ -165,6 +165,12 @@ public final class SuggestionBarView extends GridLayout {
     private final Map<String, WeakReference<View>> azRenderedEntryTargets = new HashMap<>();
     private int azRenderedSlotCount = 0;
     private boolean azPreviewRendered = false;
+    @Nullable private Character azCachedRankLetter;
+    @NonNull private List<LauncherAppEntry> azCachedRankedCandidates = new ArrayList<>();
+    @Nullable private Character azLastRenderLetter;
+    private int azLastRenderPageIndex = -1;
+    private int azLastRenderSlots = -1;
+    private int azLastRenderSignature = 0;
     private int lastAzResolvedSlot = -1;
     @Nullable private LauncherUsageStatsStore usageStatsStore;
     @Nullable private String azFocusedEntryKey;
@@ -173,9 +179,9 @@ public final class SuggestionBarView extends GridLayout {
     private long lastAzFocusBounceUptimeMs = 0L;
     private long azFocusLastSeenUptimeMs = 0L;
     private static final long AZ_FOCUS_BOUNCE_COOLDOWN_MS = 320L;
-    private static final long AZ_FOCUS_LOSS_GRACE_MS = 95L;
-    private static final float AZ_FOCUS_REST_SCALE = 1.04f;
-    private static final float AZ_FOCUS_REST_LIFT_DP = 3.2f;
+    private static final long AZ_FOCUS_LOSS_GRACE_MS = 180L;
+    private static final float AZ_FOCUS_REST_SCALE = 1.08f;
+    private static final float AZ_FOCUS_REST_LIFT_DP = 6.4f;
 
     public static final int AZ_EDGE_NONE = 0;
     public static final int AZ_EDGE_LEFT = -1;
@@ -296,6 +302,7 @@ public final class SuggestionBarView extends GridLayout {
 
     public void clearLauncherUsageRanking() {
         getUsageStatsStore().clear();
+        invalidateAzRankCache();
         if (activeAzLetter != null) {
             previewAzLetter(activeAzLetter, activeAzSelection, false);
         }
@@ -316,6 +323,8 @@ public final class SuggestionBarView extends GridLayout {
         activeAzCandidates = new ArrayList<>();
         activeAzPageIndex = 0;
         injectedSuggestionButtons = null;
+        invalidateAzRankCache();
+        invalidateAzRenderState();
         launchTargetViews.clear();
         launchTargetViewsByPackage.clear();
         cancelAzResetTimeout();
@@ -345,6 +354,7 @@ public final class SuggestionBarView extends GridLayout {
         if (configRepository != null) {
             pinnedItems = configRepository.loadPinnedItems();
         }
+        invalidateAzRankCache();
     }
 
     public void previewAzLetter(char letter, int selectionIndex, boolean commit) {
@@ -359,8 +369,14 @@ public final class SuggestionBarView extends GridLayout {
         activeAzLetter = normalized;
         activeAzSelection = Math.max(0, selectionIndex);
         cancelAzResetTimeout();
-        List<LauncherAppEntry> candidates = appDataProvider.getAppsForLetter(activeAzLetter);
-        activeAzCandidates = getUsageStatsStore().rankForAz(candidates);
+        if (azCachedRankLetter != null && azCachedRankLetter == activeAzLetter && !azCachedRankedCandidates.isEmpty()) {
+            activeAzCandidates = azCachedRankedCandidates;
+        } else {
+            List<LauncherAppEntry> candidates = appDataProvider.getAppsForLetter(activeAzLetter);
+            activeAzCandidates = getUsageStatsStore().rankForAz(candidates);
+            azCachedRankLetter = activeAzLetter;
+            azCachedRankedCandidates = activeAzCandidates;
+        }
         if (activeAzCandidates.isEmpty()) {
             if (commit) {
                 clearAzPreview();
@@ -377,7 +393,11 @@ public final class SuggestionBarView extends GridLayout {
             return;
         }
 
+        if (shouldSkipAzPreviewRender(activeAzLetter, activeAzPageIndex, Math.max(1, maxButtonCount), activeAzCandidates)) {
+            return;
+        }
         renderButtons(activeAzCandidates, true);
+        captureAzRenderState(activeAzLetter, activeAzPageIndex, Math.max(1, maxButtonCount), activeAzCandidates);
     }
 
     public void persistAzPreview(char letter, int selectionIndex) {
@@ -458,7 +478,7 @@ public final class SuggestionBarView extends GridLayout {
             edge = AZ_EDGE_RIGHT;
         }
 
-        if (localY < -dp(10) || localY > height + dp(12)) {
+        if (localY < -dp(24) || localY > height + dp(24)) {
             lastAzResolvedSlot = -1;
             return new AzDragFocusResult(null, null, null, edge, pageLeft, pageRight);
         }
@@ -468,7 +488,7 @@ public final class SuggestionBarView extends GridLayout {
         int candidateSlot = clamp((int) ((clampedX / width) * azRenderedSlotCount), 0, azRenderedSlotCount - 1);
         int slot = candidateSlot;
         if (lastAzResolvedSlot >= 0 && lastAzResolvedSlot < azRenderedSlotCount && candidateSlot != lastAzResolvedSlot) {
-            float hysteresis = slotWidth * 0.16f;
+            float hysteresis = slotWidth * 0.22f;
             if (candidateSlot > lastAzResolvedSlot) {
                 float boundary = (lastAzResolvedSlot + 1) * slotWidth;
                 if (clampedX < boundary + hysteresis) {
@@ -564,7 +584,6 @@ public final class SuggestionBarView extends GridLayout {
         }
         azFocusLastSeenUptimeMs = now;
         if (key.equals(azFocusedEntryKey) && target == azFocusedView) {
-            applyAzFocusRestState(target);
             return;
         }
         clearAzFocusedEntry();
@@ -640,6 +659,7 @@ public final class SuggestionBarView extends GridLayout {
         activeAzSelection = 0;
         activeAzPageIndex = 0;
         activeAzCandidates = new ArrayList<>();
+        invalidateAzRenderState();
         reloadWithInput(lastInput, lastTerminalView);
     }
 
@@ -658,6 +678,7 @@ public final class SuggestionBarView extends GridLayout {
                     activeAzSelection = 0;
                     activeAzPageIndex = 0;
                     activeAzCandidates = new ArrayList<>();
+                    invalidateAzRenderState();
                     reloadWithInput(lastInput, lastTerminalView);
                     setAlpha(0.35f);
                     animate()
@@ -780,6 +801,7 @@ public final class SuggestionBarView extends GridLayout {
             activeAzSelection = 0;
             activeAzPageIndex = 0;
             activeAzCandidates = new ArrayList<>();
+            invalidateAzRenderState();
             cancelAzResetTimeout();
         }
 
@@ -791,8 +813,16 @@ public final class SuggestionBarView extends GridLayout {
         }
 
         if (activeAzLetter != null) {
-            List<LauncherAppEntry> candidates = appDataProvider.getAppsForLetter(activeAzLetter);
-            renderButtons(candidates, true);
+            if (azCachedRankLetter == null || azCachedRankLetter != activeAzLetter || azCachedRankedCandidates.isEmpty()) {
+                List<LauncherAppEntry> candidates = appDataProvider.getAppsForLetter(activeAzLetter);
+                activeAzCandidates = getUsageStatsStore().rankForAz(candidates);
+                azCachedRankLetter = activeAzLetter;
+                azCachedRankedCandidates = activeAzCandidates;
+            } else {
+                activeAzCandidates = azCachedRankedCandidates;
+            }
+            renderButtons(activeAzCandidates, true);
+            captureAzRenderState(activeAzLetter, activeAzPageIndex, Math.max(1, maxButtonCount), activeAzCandidates);
             return;
         }
 
@@ -834,6 +864,9 @@ public final class SuggestionBarView extends GridLayout {
         azRenderedEntryTargets.clear();
         azRenderedSlotCount = 0;
         azPreviewRendered = azPreview;
+        if (!azPreview) {
+            invalidateAzRenderState();
+        }
         int buttonCount = Math.max(1, maxButtonCount);
         int renderStartCol = 0;
         List<PinnedItem> pinnedForSlots = new ArrayList<>();
@@ -3792,6 +3825,9 @@ public final class SuggestionBarView extends GridLayout {
                             public void onAnimationEnd(Animator animation) {
                                 setListenerSafe(null);
                                 pageSwitchAnimating = false;
+                                if (activeAzLetter != null) {
+                                    captureAzRenderState(activeAzLetter, activeAzPageIndex, Math.max(1, maxButtonCount), activeAzCandidates);
+                                }
                             }
                         })
                         .start();
@@ -4010,6 +4046,48 @@ public final class SuggestionBarView extends GridLayout {
     @NonNull
     private static String stableEntryKey(@NonNull LauncherAppEntry entry) {
         return entry.appRef.stableId();
+    }
+
+    private void invalidateAzRankCache() {
+        azCachedRankLetter = null;
+        azCachedRankedCandidates = new ArrayList<>();
+    }
+
+    private void invalidateAzRenderState() {
+        azLastRenderLetter = null;
+        azLastRenderPageIndex = -1;
+        azLastRenderSlots = -1;
+        azLastRenderSignature = 0;
+    }
+
+    private boolean shouldSkipAzPreviewRender(char letter, int pageIndex, int slots, @NonNull List<LauncherAppEntry> rankedCandidates) {
+        if (!azPreviewRendered || azLastRenderLetter == null) return false;
+        int signature = computeAzPageSignature(rankedCandidates, pageIndex, slots);
+        return azLastRenderLetter == letter
+            && azLastRenderPageIndex == pageIndex
+            && azLastRenderSlots == slots
+            && azLastRenderSignature == signature;
+    }
+
+    private void captureAzRenderState(char letter, int pageIndex, int slots, @NonNull List<LauncherAppEntry> rankedCandidates) {
+        azLastRenderLetter = letter;
+        azLastRenderPageIndex = pageIndex;
+        azLastRenderSlots = slots;
+        azLastRenderSignature = computeAzPageSignature(rankedCandidates, pageIndex, slots);
+    }
+
+    private int computeAzPageSignature(@NonNull List<LauncherAppEntry> rankedCandidates, int pageIndex, int slots) {
+        int perPage = Math.max(1, slots);
+        int start = Math.max(0, pageIndex) * perPage;
+        int end = Math.min(rankedCandidates.size(), start + perPage);
+        int signature = 17;
+        for (int i = start; i < end; i++) {
+            String key = stableEntryKey(rankedCandidates.get(i));
+            signature = (31 * signature) + (key == null ? 0 : key.hashCode());
+        }
+        signature = (31 * signature) + start;
+        signature = (31 * signature) + end;
+        return signature;
     }
 
     private int computeFolderPopupIconSize(int rows, int cols, int screenW, int screenH) {
