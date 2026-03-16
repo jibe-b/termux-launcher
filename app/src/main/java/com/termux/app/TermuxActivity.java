@@ -1078,13 +1078,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         mAzGestureActive = true;
         cancelAzOverflowRefresh();
-        float lockThreshold = -(mAzScrubRowView.getHeight() * 0.16f);
-        float unlockThreshold = mAzScrubRowView.getHeight() * 0.12f;
+        float rowHeight = Math.max(1f, mAzScrubRowView.getHeight());
+        float filterUpperBound = -(rowHeight * 0.10f);
+        float filterLowerBound = rowHeight * 0.92f;
+        float lockThreshold = -(rowHeight * 0.16f);
+        float unlockThreshold = rowHeight * 0.20f;
+        float unlockMaxBound = rowHeight * 1.08f;
+        boolean withinAzFilterBand = touchY >= filterUpperBound && touchY <= filterLowerBound;
         boolean enteringIconTrack = touchY <= lockThreshold;
-        boolean returningToAzTrack = touchY >= unlockThreshold;
+        boolean returningToAzTrack = touchY >= unlockThreshold && touchY <= unlockMaxBound;
 
         if (mAzGestureMode == AzGestureMode.AZ_TRACKING) {
-            mSuggestionBarView.persistAzPreview(letter, selectionIndex);
+            if (withinAzFilterBand || phase == AzScrubRowView.GesturePhase.DOWN) {
+                mSuggestionBarView.persistAzPreview(letter, selectionIndex);
+            }
             if (enteringIconTrack) {
                 mAzGestureMode = AzGestureMode.ICON_TRACKING_LOCKED;
                 mAzLockedLetter = letter;
@@ -1100,7 +1107,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mAzScrubRowView.setInteractionMode(AzScrubRowView.InteractionMode.WAVE_TRACK);
                 mAzScrubRowView.setLockedInlineLetter(null);
                 mSuggestionBarView.clearAzFocusedEntry();
-                mSuggestionBarView.persistAzPreview(letter, selectionIndex);
+                if (withinAzFilterBand) {
+                    mSuggestionBarView.persistAzPreview(letter, selectionIndex);
+                } else {
+                    mSuggestionBarView.persistAzPreview(mAzLockedLetter, mAzLockedSelectionIndex);
+                }
             } else {
                 mSuggestionBarView.persistAzPreview(mAzLockedLetter, mAzLockedSelectionIndex);
                 mAzScrubRowView.setLockedInlineLetter(Character.toUpperCase(mAzLockedLetter));
