@@ -889,6 +889,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (viewPager == null) {
             return;
         }
+        viewPager.setClipChildren(false);
+        viewPager.setClipToPadding(false);
+        ViewParent vpParent = viewPager.getParent();
+        if (vpParent instanceof ViewGroup) {
+            ViewGroup parentGroup = (ViewGroup) vpParent;
+            parentGroup.setClipChildren(false);
+            parentGroup.setClipToPadding(false);
+        }
 
         if (mPreferences != null) {
             if (mLauncherAppDataProvider == null) {

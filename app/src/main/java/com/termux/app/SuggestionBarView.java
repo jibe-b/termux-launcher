@@ -171,7 +171,9 @@ public final class SuggestionBarView extends GridLayout {
     @Nullable private View azFocusedView;
     @Nullable private Animator azFocusAnimator;
     private long lastAzFocusBounceUptimeMs = 0L;
+    private long azFocusLastSeenUptimeMs = 0L;
     private static final long AZ_FOCUS_BOUNCE_COOLDOWN_MS = 320L;
+    private static final long AZ_FOCUS_LOSS_GRACE_MS = 95L;
     private static final float AZ_FOCUS_REST_SCALE = 1.04f;
     private static final float AZ_FOCUS_REST_LIFT_DP = 3.2f;
 
@@ -210,6 +212,31 @@ public final class SuggestionBarView extends GridLayout {
 
     public SuggestionBarView(Context context, AttributeSet attrs) {
         super(context, attrs);
+        initFocusSurface();
+    }
+
+    private void initFocusSurface() {
+        setClipChildren(false);
+        setClipToPadding(false);
+    }
+
+    @Override
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        setClipChildren(false);
+        setClipToPadding(false);
+        ViewParent parent = getParent();
+        if (parent instanceof ViewGroup) {
+            ViewGroup parentGroup = (ViewGroup) parent;
+            parentGroup.setClipChildren(false);
+            parentGroup.setClipToPadding(false);
+            ViewParent grandParent = parentGroup.getParent();
+            if (grandParent instanceof ViewGroup) {
+                ViewGroup grandParentGroup = (ViewGroup) grandParent;
+                grandParentGroup.setClipChildren(false);
+                grandParentGroup.setClipToPadding(false);
+            }
+        }
     }
 
     public void setMaxButtonCount(int maxButtonCount) {
@@ -508,7 +535,11 @@ public final class SuggestionBarView extends GridLayout {
     }
 
     public void updateAzFocusedEntry(@Nullable AzDragFocusResult focusResult) {
+        long now = SystemClock.uptimeMillis();
         if (focusResult == null || focusResult.entry == null) {
+            if (azFocusedView != null && (now - azFocusLastSeenUptimeMs) <= AZ_FOCUS_LOSS_GRACE_MS) {
+                return;
+            }
             clearAzFocusedEntry();
             return;
         }
@@ -525,9 +556,13 @@ public final class SuggestionBarView extends GridLayout {
             }
         }
         if (target == null || !target.isAttachedToWindow()) {
+            if (azFocusedView != null && (now - azFocusLastSeenUptimeMs) <= AZ_FOCUS_LOSS_GRACE_MS) {
+                return;
+            }
             clearAzFocusedEntry();
             return;
         }
+        azFocusLastSeenUptimeMs = now;
         if (key.equals(azFocusedEntryKey) && target == azFocusedView) {
             applyAzFocusRestState(target);
             return;
@@ -535,7 +570,6 @@ public final class SuggestionBarView extends GridLayout {
         clearAzFocusedEntry();
         azFocusedEntryKey = key;
         azFocusedView = target;
-        long now = SystemClock.uptimeMillis();
         if ((now - lastAzFocusBounceUptimeMs) >= AZ_FOCUS_BOUNCE_COOLDOWN_MS) {
             lastAzFocusBounceUptimeMs = now;
             animateAzFocusBounce(target);
@@ -557,6 +591,7 @@ public final class SuggestionBarView extends GridLayout {
         }
         azFocusedView = null;
         azFocusedEntryKey = null;
+        azFocusLastSeenUptimeMs = 0L;
     }
 
     private void animateAzFocusBounce(@NonNull View target) {
