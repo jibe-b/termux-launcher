@@ -316,9 +316,9 @@ public final class LauncherAzGestureFxView extends View {
         }
 
         float glowHeight = Math.max(dp(34f), bottom - top);
-        float edgeWidth = Math.max(dp(42f), getWidth() * 0.11f);
-        float spread = Math.max(dp(42f), edgeWidth * 1.7f);
-        float radius = Math.max(dp(24f), glowHeight * 0.42f);
+        float edgeWidth = Math.max(dp(24f), getWidth() * 0.062f);
+        float spread = Math.max(dp(20f), edgeWidth * 1.18f);
+        float radius = Math.max(dp(18f), glowHeight * 0.30f);
 
         if (interactionCanPageLeft) {
             drawEdgeGlowAmbient(canvas, 0f, top, edgeWidth, bottom, radius, spread, false);
@@ -339,12 +339,12 @@ public final class LauncherAzGestureFxView extends View {
         }
         glow.top -= dp(10f);
         glow.bottom += dp(10f);
-        edgePaint.setColor(withAlpha(overflowGlowTintColor, 156));
+        edgePaint.setColor(withAlpha(overflowGlowTintColor, 74));
         canvas.drawRoundRect(glow, radius, radius, edgePaint);
 
         RectF innerGlow = new RectF(glow);
-        innerGlow.inset(spread * 0.22f, dp(4f));
-        edgePaint.setColor(withAlpha(overflowGlowTintColor, 118));
+        innerGlow.inset(spread * 0.30f, dp(6f));
+        edgePaint.setColor(withAlpha(overflowGlowTintColor, 52));
         canvas.drawRoundRect(innerGlow, Math.max(dp(16f), radius - dp(6f)), Math.max(dp(16f), radius - dp(6f)), edgePaint);
     }
 
@@ -368,8 +368,8 @@ public final class LauncherAzGestureFxView extends View {
             bottom = getHeight();
         }
 
-        float edgeWidth = Math.max(dp(42f), getWidth() * 0.11f);
-        float radius = Math.max(dp(24f), Math.max(dp(34f), bottom - top) * 0.42f);
+        float edgeWidth = Math.max(dp(24f), getWidth() * 0.062f);
+        float radius = Math.max(dp(18f), Math.max(dp(34f), bottom - top) * 0.30f);
         if (interactionCanPageLeft) {
             drawEdgeGlowBeacon(canvas, 0f, top, edgeWidth, bottom, radius, false);
         }
@@ -380,22 +380,22 @@ public final class LauncherAzGestureFxView extends View {
 
     private void drawEdgeGlowBeacon(Canvas canvas, float left, float top, float right, float bottom, float radius, boolean rightEdge) {
         RectF beacon = new RectF(left, top, right, bottom);
-        float beaconInsetY = Math.max(dp(2f), (bottom - top) * 0.10f);
-        float beaconInsetX = Math.max(dp(1.2f), (right - left) * 0.08f);
+        float beaconInsetY = Math.max(dp(4f), (bottom - top) * 0.14f);
+        float beaconInsetX = Math.max(dp(2f), (right - left) * 0.16f);
         if (rightEdge) {
-            beacon.left = Math.max(left, right - Math.max(dp(12f), (right - left) * 0.44f));
+            beacon.left = Math.max(left, right - Math.max(dp(9f), (right - left) * 0.28f));
         } else {
-            beacon.right = Math.min(right, left + Math.max(dp(12f), (right - left) * 0.44f));
+            beacon.right = Math.min(right, left + Math.max(dp(9f), (right - left) * 0.28f));
         }
         beacon.inset(beaconInsetX, beaconInsetY);
-        edgePaint.setColor(withAlpha(overflowGlowTintColor, 228));
+        edgePaint.setColor(withAlpha(overflowGlowTintColor, 196));
         canvas.drawRoundRect(beacon, Math.max(dp(16f), radius * 0.68f), Math.max(dp(16f), radius * 0.68f), edgePaint);
 
         RectF beaconCore = new RectF(beacon);
-        float coreInsetX = Math.max(dp(4f), (right - left) * 0.20f);
-        float coreInsetY = Math.max(dp(4f), beacon.height() * 0.18f);
+        float coreInsetX = Math.max(dp(1.2f), beacon.width() * 0.18f);
+        float coreInsetY = Math.max(dp(5f), beacon.height() * 0.20f);
         beaconCore.inset(coreInsetX, coreInsetY);
-        edgeInnerPaint.setColor(withAlpha(Color.WHITE, 176));
+        edgeInnerPaint.setColor(withAlpha(Color.WHITE, 208));
         canvas.drawRoundRect(beaconCore, Math.max(dp(10f), radius * 0.42f), Math.max(dp(10f), radius * 0.42f), edgeInnerPaint);
     }
 
@@ -548,16 +548,16 @@ public final class LauncherAzGestureFxView extends View {
         float height = Math.max(dp(18f), bottom - top);
         boolean passiveLetterState = interactionMode == InteractionMode.LETTER_TRACK || !dragActive;
         float capsuleW = passiveLetterState
-            ? Math.max(dp(12f), width * 0.032f)
-            : Math.max(dp(18f), width * 0.055f);
+            ? Math.max(dp(7f), width * 0.018f)
+            : Math.max(dp(9f), width * 0.024f);
         float capsuleH = passiveLetterState
-            ? Math.max(dp(20f), height * 0.68f)
-            : Math.max(dp(26f), height * 0.80f);
+            ? Math.max(dp(18f), height * 0.44f)
+            : Math.max(dp(20f), height * 0.54f);
         float cy = top + (height * 0.5f);
         float radius = passiveLetterState ? capsuleW * 0.74f : capsuleW * 0.56f;
-        float inset = passiveLetterState ? dp(1.5f) : dp(4f);
-        float baseIntensity = passiveLetterState ? 0.14f : 0.20f;
-        float proximityGain = passiveLetterState ? 0.16f : 0.40f;
+        float inset = passiveLetterState ? dp(4f) : dp(6f);
+        float baseIntensity = passiveLetterState ? 0.12f : 0.17f;
+        float proximityGain = passiveLetterState ? 0.10f : 0.26f;
 
         if (canPageLeft) {
             float intensity = baseIntensity + (proximityGain * edgeProximityLeft);
@@ -580,8 +580,8 @@ public final class LauncherAzGestureFxView extends View {
 
     private void drawEdgeCapsule(Canvas canvas, float left, float top, float right, float bottom, float radius, float intensity) {
         RectF glow = new RectF(left, top, right, bottom);
-        float spreadX = Math.max(dp(16f), (right - left) * 2.0f);
-        float spreadY = Math.max(dp(8f), (bottom - top) * 0.34f);
+        float spreadX = Math.max(dp(8f), (right - left) * 1.2f);
+        float spreadY = Math.max(dp(4f), (bottom - top) * 0.20f);
         boolean rightEdge = right >= (getWidth() * 0.5f);
         if (rightEdge) {
             glow.left -= spreadX * 0.22f;
@@ -592,26 +592,26 @@ public final class LauncherAzGestureFxView extends View {
         }
         glow.top -= spreadY;
         glow.bottom += spreadY;
-        edgePaint.setColor(withAlpha(edgeTintColor, (int) (86f * intensity)));
+        edgePaint.setColor(withAlpha(edgeTintColor, (int) (54f * intensity)));
         canvas.drawRoundRect(glow, radius + spreadY, radius + spreadY, edgePaint);
 
         RectF glowCore = new RectF(glow);
-        glowCore.inset(spreadX * 0.28f, spreadY * 0.22f);
-        edgePaint.setColor(withAlpha(edgeTintColor, (int) (58f * intensity)));
+        glowCore.inset(spreadX * 0.34f, spreadY * 0.26f);
+        edgePaint.setColor(withAlpha(edgeTintColor, (int) (36f * intensity)));
         canvas.drawRoundRect(glowCore, radius + (spreadY * 0.5f), radius + (spreadY * 0.5f), edgePaint);
 
         tmpRect.set(left, top, right, bottom);
-        edgePaint.setColor(withAlpha(edgeTintColor, (int) (168f * intensity)));
+        edgePaint.setColor(withAlpha(edgeTintColor, (int) (124f * intensity)));
         canvas.drawRoundRect(tmpRect, radius, radius, edgePaint);
 
-        edgeInnerPaint.setColor(withAlpha(Color.WHITE, (int) (52f * intensity)));
-        float pad = Math.max(dp(2.2f), (right - left) * 0.16f);
+        edgeInnerPaint.setColor(withAlpha(Color.WHITE, (int) (64f * intensity)));
+        float pad = Math.max(dp(1.6f), (right - left) * 0.14f);
         RectF inner = new RectF(tmpRect);
         inner.inset(pad, pad * 1.2f);
         canvas.drawRoundRect(inner, Math.max(dp(7f), radius - pad), Math.max(dp(7f), radius - pad), edgeInnerPaint);
 
-        glassStrokePaint.setStrokeWidth(dp(1.4f));
-        glassStrokePaint.setColor(withAlpha(Color.WHITE, (int) (102f * intensity)));
+        glassStrokePaint.setStrokeWidth(dp(1.0f));
+        glassStrokePaint.setColor(withAlpha(Color.WHITE, (int) (88f * intensity)));
         canvas.drawRoundRect(tmpRect, radius, radius, glassStrokePaint);
     }
 
@@ -622,11 +622,12 @@ public final class LauncherAzGestureFxView extends View {
 
         float rowTop = appsRowRawBounds.top - locationOnScreen[1];
         float rowBottom = appsRowRawBounds.bottom - locationOnScreen[1];
-        float cy = rowTop + ((rowBottom - rowTop) * 0.82f);
-        float spacing = dp(8f);
-        float activeWidth = dp(18f);
-        float inactiveWidth = dp(7f);
-        float height = dp(5f);
+        float rowHeight = Math.max(dp(18f), rowBottom - rowTop);
+        float cy = rowTop + (rowHeight * 0.74f);
+        float spacing = dp(7f);
+        float activeWidth = dp(20f);
+        float inactiveWidth = dp(8f);
+        float height = dp(6f);
         float totalWidth = 0f;
         for (int i = 0; i < pageCount; i++) {
             totalWidth += (i == currentPageIndex ? activeWidth : inactiveWidth);
@@ -634,17 +635,38 @@ public final class LauncherAzGestureFxView extends View {
                 totalWidth += spacing;
             }
         }
-        float left = (getWidth() - totalWidth) * 0.5f;
+        float railPadX = dp(9f);
+        float railPadY = dp(5f);
+        float railHeight = height + (railPadY * 2f);
+        float railWidth = totalWidth + (railPadX * 2f);
+        float railLeft = (getWidth() - railWidth) * 0.5f;
+        RectF rail = new RectF(railLeft, cy - (railHeight * 0.5f), railLeft + railWidth, cy + (railHeight * 0.5f));
+        pageIndicatorPaint.setColor(withAlpha(glassTintColor, 108));
+        canvas.drawRoundRect(rail, railHeight * 0.5f, railHeight * 0.5f, pageIndicatorPaint);
+        RectF railInner = new RectF(rail);
+        railInner.inset(dp(1.1f), dp(1.1f));
+        pageIndicatorInnerPaint.setColor(withAlpha(Color.WHITE, 34));
+        canvas.drawRoundRect(railInner, Math.max(dp(4f), (railHeight * 0.5f) - dp(1f)), Math.max(dp(4f), (railHeight * 0.5f) - dp(1f)), pageIndicatorInnerPaint);
+        glassStrokePaint.setStrokeWidth(dp(1f));
+        glassStrokePaint.setColor(withAlpha(Color.WHITE, 92));
+        canvas.drawRoundRect(rail, railHeight * 0.5f, railHeight * 0.5f, glassStrokePaint);
+
+        float left = railLeft + railPadX;
         for (int i = 0; i < pageCount; i++) {
             float width = i == currentPageIndex ? activeWidth : inactiveWidth;
             float radius = height * 0.5f;
             tmpRect.set(left, cy - (height * 0.5f), left + width, cy + (height * 0.5f));
-            pageIndicatorPaint.setColor(withAlpha(edgeTintColor, i == currentPageIndex ? 198 : 106));
+            pageIndicatorPaint.setColor(withAlpha(edgeTintColor, i == currentPageIndex ? 216 : 90));
             canvas.drawRoundRect(tmpRect, radius, radius, pageIndicatorPaint);
-            pageIndicatorInnerPaint.setColor(withAlpha(Color.WHITE, i == currentPageIndex ? 118 : 64));
+            pageIndicatorInnerPaint.setColor(withAlpha(Color.WHITE, i == currentPageIndex ? 152 : 72));
             RectF inner = new RectF(tmpRect);
             inner.inset(dp(1f), dp(1f));
             canvas.drawRoundRect(inner, Math.max(dp(2f), radius - dp(1f)), Math.max(dp(2f), radius - dp(1f)), pageIndicatorInnerPaint);
+            if (i == currentPageIndex) {
+                glassStrokePaint.setStrokeWidth(dp(0.9f));
+                glassStrokePaint.setColor(withAlpha(Color.WHITE, 132));
+                canvas.drawRoundRect(tmpRect, radius, radius, glassStrokePaint);
+            }
             left += width + spacing;
         }
     }
