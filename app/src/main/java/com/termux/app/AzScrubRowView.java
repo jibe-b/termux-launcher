@@ -331,7 +331,7 @@ public final class AzScrubRowView extends AppCompatTextView {
             case MotionEvent.ACTION_DOWN:
                 stopSettleAnimation();
                 activeTouchX = x;
-                activeLetterIndex = -1;
+                activeLetterIndex = indexOfVisibleLetter(letter);
                 waveStrength = 1f;
                 if (interactionMode == InteractionMode.WAVE_TRACK) {
                     lockedInlineLetter = null;
@@ -395,6 +395,12 @@ public final class AzScrubRowView extends AppCompatTextView {
 
     private void animateWaveRelease() {
         stopSettleAnimation();
+        if (!isAttachedToWindow()) {
+            waveStrength = 0f;
+            activeTouchX = -1f;
+            invalidate();
+            return;
+        }
         settleAnimator = ValueAnimator.ofFloat(waveStrength, 0f);
         settleAnimator.setDuration(165L);
         settleAnimator.addUpdateListener(animation -> {
