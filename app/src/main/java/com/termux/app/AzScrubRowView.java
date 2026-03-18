@@ -78,6 +78,8 @@ public final class AzScrubRowView extends AppCompatTextView {
     private boolean suppressUpScrub;
     @NonNull private InteractionMode interactionMode = InteractionMode.WAVE_TRACK;
     @Nullable private Character lockedInlineLetter;
+    private int activeLetterIndex = -1;
+    private static final float LETTER_SLOT_HYSTERESIS_RATIO = 0.22f;
 
     public AzScrubRowView(Context context) {
         super(context);
@@ -321,7 +323,7 @@ public final class AzScrubRowView extends AppCompatTextView {
     public boolean onTouchEvent(MotionEvent event) {
         if (callback == null) return super.onTouchEvent(event);
         float x = Math.max(0f, Math.min(getWidth(), event.getX()));
-        char letter = pickLetter(event.getX());
+        char letter = pickLetter(x, event.getActionMasked() != MotionEvent.ACTION_DOWN);
         int selectionIndex = Math.max(0, (int) ((-event.getY()) / Math.max(12f, getHeight() / 2f)));
         currentSelectionIndex = selectionIndex;
 
@@ -329,6 +331,7 @@ public final class AzScrubRowView extends AppCompatTextView {
             case MotionEvent.ACTION_DOWN:
                 stopSettleAnimation();
                 activeTouchX = x;
+                activeLetterIndex = -1;
                 waveStrength = 1f;
                 if (interactionMode == InteractionMode.WAVE_TRACK) {
                     lockedInlineLetter = null;
@@ -367,6 +370,7 @@ public final class AzScrubRowView extends AppCompatTextView {
                 } else {
                     waveStrength = 0f;
                     activeTouchX = -1f;
+                    activeLetterIndex = -1;
                     invalidate();
                 }
                 return true;
@@ -378,6 +382,7 @@ public final class AzScrubRowView extends AppCompatTextView {
                 } else {
                     waveStrength = 0f;
                     activeTouchX = -1f;
+                    activeLetterIndex = -1;
                     invalidate();
                 }
                 return true;
@@ -395,6 +400,17 @@ public final class AzScrubRowView extends AppCompatTextView {
             updateInteractionLayerOffset();
             invalidate();
         });
+        settleAnimator.addListener(new android.animation.AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationEnd(android.animation.Animator animation) {
+                activeLetterIndex = -1;
+            }
+
+            @Override
+            public void onAnimationCancel(android.animation.Animator animation) {
+                activeLetterIndex = -1;
+            }
+        });
         settleAnimator.start();
     }
 
@@ -405,11 +421,32 @@ public final class AzScrubRowView extends AppCompatTextView {
         }
     }
 
-    private char pickLetter(float x) {
+    private char pickLetter(float x, boolean applyHysteresis) {
         float width = Math.max(1f, getWidth());
         int len = Math.max(1, visibleLetters.length);
+        float slotWidth = width / len;
         int index = (int) ((x / width) * len);
         index = Math.max(0, Math.min(len - 1, index));
+        if (interactionMode == InteractionMode.WAVE_TRACK) {
+            if (activeLetterIndex < 0 || !applyHysteresis) {
+                activeLetterIndex = index;
+            } else if (Math.abs(index - activeLetterIndex) > 1) {
+                activeLetterIndex = index;
+            } else if (index != activeLetterIndex) {
+                float boundary = Math.max(index, activeLetterIndex) * slotWidth;
+                float hysteresis = slotWidth * LETTER_SLOT_HYSTERESIS_RATIO;
+                if (index > activeLetterIndex) {
+                    if (x >= (boundary + hysteresis)) {
+                        activeLetterIndex = index;
+                    }
+                } else if (x <= (boundary - hysteresis)) {
+                    activeLetterIndex = index;
+                }
+            }
+            index = activeLetterIndex;
+        } else {
+            activeLetterIndex = index;
+        }
         return visibleLetters[index];
     }
 

@@ -62,4 +62,36 @@ public class AzScrubRowViewTest {
         view.onTouchEvent(MotionEvent.obtain(0, 40, MotionEvent.ACTION_UP, 200f, -40f, 0));
         assertTrue(committed[0]);
     }
+
+    @Test
+    public void scrubMapping_usesBoundaryHysteresisDuringWaveTrack() {
+        AzScrubRowView view = new AzScrubRowView(RuntimeEnvironment.application);
+        view.measure(
+            android.view.View.MeasureSpec.makeMeasureSpec(540, android.view.View.MeasureSpec.EXACTLY),
+            android.view.View.MeasureSpec.makeMeasureSpec(48, android.view.View.MeasureSpec.EXACTLY)
+        );
+        view.layout(0, 0, 540, 48);
+
+        final char[] lastLetter = {'?'};
+        view.setScrubCallback(new AzScrubRowView.ScrubCallback() {
+            @Override
+            public void onScrub(char letter, int selectionIndex, float touchX, float touchY, float rawX, float rawY, AzScrubRowView.GesturePhase phase) {
+                lastLetter[0] = letter;
+            }
+
+            @Override
+            public void onCancel() {}
+        });
+
+        view.onTouchEvent(MotionEvent.obtain(0, 10, MotionEvent.ACTION_DOWN, 0f, 24f, 0));
+        assertEquals(AzScrubRowView.PINNED_APPS_SYMBOL, lastLetter[0]);
+
+        // Cross the raw slot boundary a little, but not far enough to commit the neighboring slot.
+        view.onTouchEvent(MotionEvent.obtain(0, 15, MotionEvent.ACTION_MOVE, 21f, 24f, 0));
+        assertEquals(AzScrubRowView.PINNED_APPS_SYMBOL, lastLetter[0]);
+
+        // Move deeper into the next slot and confirm the letter now advances.
+        view.onTouchEvent(MotionEvent.obtain(0, 20, MotionEvent.ACTION_MOVE, 25f, 24f, 0));
+        assertEquals('A', lastLetter[0]);
+    }
 }

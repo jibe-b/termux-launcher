@@ -35,6 +35,8 @@ public final class LauncherAzGestureFxView extends View {
     private final Paint edgePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint edgeInnerPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint bloomPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint pageIndicatorPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint pageIndicatorInnerPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Path liquidBridgePath = new Path();
 
     private final RectF tmpRect = new RectF();
@@ -63,6 +65,8 @@ public final class LauncherAzGestureFxView extends View {
     private boolean filteredOverflowActive;
     private boolean canPageLeft;
     private boolean canPageRight;
+    private int currentPageIndex;
+    private int pageCount = 1;
     private float edgeProximityLeft;
     private float edgeProximityRight;
 
@@ -105,6 +109,8 @@ public final class LauncherAzGestureFxView extends View {
         bridgePaint.setStyle(Paint.Style.FILL);
         edgePaint.setStyle(Paint.Style.FILL);
         edgeInnerPaint.setStyle(Paint.Style.FILL);
+        pageIndicatorPaint.setStyle(Paint.Style.FILL);
+        pageIndicatorInnerPaint.setStyle(Paint.Style.FILL);
 
         applyBlurIfSupported(false);
     }
@@ -162,10 +168,12 @@ public final class LauncherAzGestureFxView extends View {
         }
     }
 
-    public void setFilteredOverflowState(boolean active, boolean pageLeft, boolean pageRight) {
+    public void setFilteredOverflowState(boolean active, boolean pageLeft, boolean pageRight, int currentPageIndex, int pageCount) {
         filteredOverflowActive = active;
         canPageLeft = pageLeft;
         canPageRight = pageRight;
+        this.currentPageIndex = Math.max(0, currentPageIndex);
+        this.pageCount = Math.max(1, pageCount);
         applyBlurIfSupported(dragActive && interactionMode == InteractionMode.ICON_TRACK_LOCKED);
         invalidate();
     }
@@ -189,6 +197,8 @@ public final class LauncherAzGestureFxView extends View {
             filteredOverflowActive = false;
             canPageLeft = false;
             canPageRight = false;
+            currentPageIndex = 0;
+            pageCount = 1;
         }
         launchBloomActive = false;
         launchBloomProgress = 0f;
@@ -226,6 +236,7 @@ public final class LauncherAzGestureFxView extends View {
                 setVisibility(VISIBLE);
             }
             drawGlassEdgeCapsules(canvas);
+            drawPageIndicators(canvas);
         }
     }
 
@@ -443,6 +454,40 @@ public final class LauncherAzGestureFxView extends View {
         glassStrokePaint.setStrokeWidth(dp(1.4f));
         glassStrokePaint.setColor(withAlpha(Color.WHITE, (int) (102f * intensity)));
         canvas.drawRoundRect(tmpRect, radius, radius, glassStrokePaint);
+    }
+
+    private void drawPageIndicators(Canvas canvas) {
+        if (!filteredOverflowActive || pageCount <= 1 || appsRowRawBounds.isEmpty()) {
+            return;
+        }
+
+        float rowTop = appsRowRawBounds.top - locationOnScreen[1];
+        float rowBottom = appsRowRawBounds.bottom - locationOnScreen[1];
+        float cy = rowTop + ((rowBottom - rowTop) * 0.82f);
+        float spacing = dp(8f);
+        float activeWidth = dp(18f);
+        float inactiveWidth = dp(7f);
+        float height = dp(5f);
+        float totalWidth = 0f;
+        for (int i = 0; i < pageCount; i++) {
+            totalWidth += (i == currentPageIndex ? activeWidth : inactiveWidth);
+            if (i < pageCount - 1) {
+                totalWidth += spacing;
+            }
+        }
+        float left = (getWidth() - totalWidth) * 0.5f;
+        for (int i = 0; i < pageCount; i++) {
+            float width = i == currentPageIndex ? activeWidth : inactiveWidth;
+            float radius = height * 0.5f;
+            tmpRect.set(left, cy - (height * 0.5f), left + width, cy + (height * 0.5f));
+            pageIndicatorPaint.setColor(withAlpha(edgeTintColor, i == currentPageIndex ? 198 : 106));
+            canvas.drawRoundRect(tmpRect, radius, radius, pageIndicatorPaint);
+            pageIndicatorInnerPaint.setColor(withAlpha(Color.WHITE, i == currentPageIndex ? 118 : 64));
+            RectF inner = new RectF(tmpRect);
+            inner.inset(dp(1f), dp(1f));
+            canvas.drawRoundRect(inner, Math.max(dp(2f), radius - dp(1f)), Math.max(dp(2f), radius - dp(1f)), pageIndicatorInnerPaint);
+            left += width + spacing;
+        }
     }
 
     private void drawLaunchGlassBloom(Canvas canvas) {

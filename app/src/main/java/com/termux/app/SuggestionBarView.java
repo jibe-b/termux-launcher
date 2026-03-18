@@ -459,6 +459,14 @@ public final class SuggestionBarView extends GridLayout {
         return hasAzOverflowPages() && activeAzPageIndex < (getAzPagesCount() - 1);
     }
 
+    public int getAzCurrentPageIndex() {
+        return Math.max(0, activeAzPageIndex);
+    }
+
+    public int getAzVisiblePageCount() {
+        return getAzPagesCount();
+    }
+
     public boolean requestAzPageDelta(int pageDelta, float velocityPxPerSec) {
         if (!isAzPreviewActive() || pageDelta == 0 || pageSwitchAnimating) {
             return false;
@@ -491,7 +499,7 @@ public final class SuggestionBarView extends GridLayout {
         float height = Math.max(1f, getHeight());
 
         int edge = AZ_EDGE_NONE;
-        float edgeZone = Math.max(dp(20), width * 0.08f);
+        float edgeZone = Math.max(dp(28), width * 0.12f);
         if (localX <= edgeZone && pageLeft) {
             edge = AZ_EDGE_LEFT;
         } else if (localX >= (width - edgeZone) && pageRight) {
