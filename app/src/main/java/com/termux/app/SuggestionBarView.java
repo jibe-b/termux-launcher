@@ -142,6 +142,7 @@ public final class SuggestionBarView extends GridLayout {
     private int activeAzSelection = 0;
     private int activeAzPageIndex = 0;
     private List<LauncherAppEntry> activeAzCandidates = new ArrayList<>();
+    private final List<Integer> azPageStarts = new ArrayList<>();
     private int pinnedPageIndex = 0;
     private int pinnedItemsPerPage = 1;
     private float swipeDownX = 0f;
@@ -411,7 +412,7 @@ public final class SuggestionBarView extends GridLayout {
         }
 
         if (commit) {
-            int pageOffset = activeAzPageIndex * Math.max(1, maxButtonCount);
+            int pageOffset = getAzPageStart(activeAzCandidates, activeAzPageIndex, Math.max(1, maxButtonCount));
             int index = pageOffset + Math.min(activeAzSelection, Math.max(0, maxButtonCount - 1));
             index = Math.min(index, activeAzCandidates.size() - 1);
             launchEntry(activeAzCandidates.get(index), lastTerminalView);
@@ -459,11 +460,11 @@ public final class SuggestionBarView extends GridLayout {
     }
 
     public boolean canAzPageLeft() {
-        return hasAzOverflowPages() && activeAzPageIndex > 0;
+        return hasAzOverflowPages();
     }
 
     public boolean canAzPageRight() {
-        return hasAzOverflowPages() && activeAzPageIndex < (getAzPagesCount() - 1);
+        return hasAzOverflowPages();
     }
 
     public int getAzCurrentPageIndex() {
@@ -504,10 +505,6 @@ public final class SuggestionBarView extends GridLayout {
         }
         int totalPages = getAzPagesCount();
         if (totalPages <= 1) {
-            return false;
-        }
-        int targetPage = clamp(activeAzPageIndex + pageDelta, 0, totalPages - 1);
-        if (targetPage == activeAzPageIndex) {
             return false;
         }
         animateAzPageSwitch(pageDelta, velocityPxPerSec);
@@ -808,7 +805,7 @@ public final class SuggestionBarView extends GridLayout {
                 if (activeAzLetter != null) {
                     int totalPages = getAzPagesCount();
                     if (totalPages > 1) {
-                        int next = clamp(activeAzPageIndex + pageDelta, 0, totalPages - 1);
+                        int next = wrapAzPageIndex(activeAzPageIndex + pageDelta, totalPages);
                         if (next != activeAzPageIndex) {
                             animateAzPageSwitch(pageDelta, Math.max(Math.abs(vx), Math.abs(dx) * 8f));
                             if (swipeVelocityTracker != null) {
@@ -948,7 +945,7 @@ public final class SuggestionBarView extends GridLayout {
             int perPage = Math.max(1, maxButtonCount);
             int totalPages = getAzPagesCount();
             activeAzPageIndex = clamp(activeAzPageIndex, 0, Math.max(0, totalPages - 1));
-            int offset = activeAzPageIndex * perPage;
+            int offset = getAzPageStart(entries, activeAzPageIndex, perPage);
             List<LauncherAppEntry> pageEntries = new ArrayList<>();
             for (int i = offset; i < entries.size() && pageEntries.size() < perPage; i++) {
                 pageEntries.add(entries.get(i));
@@ -1100,7 +1097,7 @@ public final class SuggestionBarView extends GridLayout {
         }
 
         int visibleCount = Math.max(1, maxButtonCount);
-        int startIndex = azPreview ? activeAzPageIndex * visibleCount : 0;
+        int startIndex = azPreview ? getAzPageStart(entries, activeAzPageIndex, visibleCount) : 0;
         if (startIndex >= entries.size()) {
             startIndex = 0;
         }
@@ -3901,8 +3898,7 @@ public final class SuggestionBarView extends GridLayout {
         if (pageSwitchAnimating) return;
         int totalPages = getAzPagesCount();
         if (totalPages <= 1) return;
-        int targetPage = clamp(activeAzPageIndex + pageDelta, 0, totalPages - 1);
-        if (targetPage == activeAzPageIndex) return;
+        int targetPage = wrapAzPageIndex(activeAzPageIndex + pageDelta, totalPages);
 
         pageSwitchAnimating = true;
         final int direction = pageDelta > 0 ? 1 : -1;
@@ -4209,7 +4205,7 @@ public final class SuggestionBarView extends GridLayout {
 
     private int computeAzPageSignature(@NonNull List<LauncherAppEntry> rankedCandidates, int pageIndex, int slots) {
         int perPage = Math.max(1, slots);
-        int start = Math.max(0, pageIndex) * perPage;
+        int start = getAzPageStart(rankedCandidates, pageIndex, perPage);
         int end = Math.min(rankedCandidates.size(), start + perPage);
         int signature = 17;
         for (int i = start; i < end; i++) {
@@ -4261,10 +4257,44 @@ public final class SuggestionBarView extends GridLayout {
     }
 
     private int getAzPagesCount() {
-        int total = activeAzCandidates == null ? 0 : activeAzCandidates.size();
-        int perPage = Math.max(1, maxButtonCount);
-        if (total <= 0) return 1;
-        return (total + perPage - 1) / perPage;
+        rebuildAzPageStarts(activeAzCandidates, Math.max(1, maxButtonCount));
+        return Math.max(1, azPageStarts.size());
+    }
+
+    private void rebuildAzPageStarts(@Nullable List<LauncherAppEntry> entries, int slots) {
+        azPageStarts.clear();
+        int total = entries == null ? 0 : entries.size();
+        int perPage = Math.max(1, slots);
+        if (total <= 0) {
+            azPageStarts.add(0);
+            return;
+        }
+        int maxStart = Math.max(0, total - perPage);
+        int start = 0;
+        azPageStarts.add(0);
+        while (start < maxStart) {
+            start = Math.min(start + perPage, maxStart);
+            if (azPageStarts.get(azPageStarts.size() - 1) != start) {
+                azPageStarts.add(start);
+            }
+        }
+    }
+
+    private int getAzPageStart(@Nullable List<LauncherAppEntry> entries, int pageIndex, int slots) {
+        rebuildAzPageStarts(entries, slots);
+        int safeIndex = clamp(pageIndex, 0, Math.max(0, azPageStarts.size() - 1));
+        return azPageStarts.get(safeIndex);
+    }
+
+    private int wrapAzPageIndex(int targetPage, int totalPages) {
+        if (totalPages <= 0) {
+            return 0;
+        }
+        int wrapped = targetPage % totalPages;
+        if (wrapped < 0) {
+            wrapped += totalPages;
+        }
+        return wrapped;
     }
 
     private float dp(float value) {

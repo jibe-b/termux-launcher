@@ -28,6 +28,11 @@ public final class LauncherAzGestureFxView extends View {
         ICON_TRACK_LOCKED
     }
 
+    public enum RenderLayer {
+        UNDERLAY,
+        OVERLAY
+    }
+
     private final Paint glassFillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint glassInnerPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint glassStrokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -76,6 +81,7 @@ public final class LauncherAzGestureFxView extends View {
     private boolean interactionShowsPageIndicators;
     private float edgeProximityLeft;
     private float edgeProximityRight;
+    @NonNull private RenderLayer renderLayer = RenderLayer.OVERLAY;
 
     @NonNull private InteractionMode interactionMode = InteractionMode.LETTER_TRACK;
     private long lastFocusUpdateUptimeMs = 0L;
@@ -183,6 +189,7 @@ public final class LauncherAzGestureFxView extends View {
         this.currentPageIndex = Math.max(0, currentPageIndex);
         this.pageCount = Math.max(1, pageCount);
         applyBlurIfSupported(dragActive && interactionMode == InteractionMode.ICON_TRACK_LOCKED);
+        refreshVisibility();
         invalidate();
     }
 
@@ -193,12 +200,19 @@ public final class LauncherAzGestureFxView extends View {
         interactionCurrentPageIndex = Math.max(0, currentPageIndex);
         interactionPageCount = Math.max(1, pageCount);
         interactionShowsPageIndicators = showPageIndicators;
+        refreshVisibility();
         invalidate();
     }
 
     public void setEdgeProximity(float left, float right) {
         edgeProximityLeft = clamp01(left);
         edgeProximityRight = clamp01(right);
+        invalidate();
+    }
+
+    public void setRenderLayer(@NonNull RenderLayer renderLayer) {
+        this.renderLayer = renderLayer;
+        refreshVisibility();
         invalidate();
     }
 
@@ -227,7 +241,17 @@ public final class LauncherAzGestureFxView extends View {
         launchBloomActive = false;
         launchBloomProgress = 0f;
         applyBlurIfSupported(false);
+        refreshVisibility();
         invalidate();
+    }
+
+    private void refreshVisibility() {
+        boolean shouldDrawInteractionOverflow = interactionOverflowActive
+            && (interactionCanPageLeft || interactionCanPageRight || interactionPageCount > 1);
+        boolean shouldDrawAzOverflow = filteredOverflowActive
+            && interactionShowsPageIndicators
+            && (canPageLeft || canPageRight || pageCount > 1);
+        setVisibility((shouldDrawInteractionOverflow || shouldDrawAzOverflow) ? VISIBLE : GONE);
     }
 
     public void playLaunchBloom(float rawX, float rawY) {
@@ -255,26 +279,23 @@ public final class LauncherAzGestureFxView extends View {
         boolean shouldDrawAzOverflow = filteredOverflowActive
             && interactionShowsPageIndicators
             && (canPageLeft || canPageRight || pageCount > 1);
-        boolean shouldStayVisible = shouldDrawInteractionOverflow || shouldDrawAzOverflow;
-        if (!shouldStayVisible && getVisibility() != GONE) {
-            setVisibility(GONE);
+        if (!shouldDrawInteractionOverflow && !shouldDrawAzOverflow) {
             return;
         }
-        if (shouldStayVisible) {
-            if (getVisibility() != VISIBLE) {
-                setVisibility(VISIBLE);
+        if (shouldDrawInteractionOverflow) {
+            if (renderLayer == RenderLayer.UNDERLAY) {
+                drawEdgeGlowAmbient(canvas);
+            } else {
+                drawEdgeGlowBeacon(canvas);
             }
-            if (shouldDrawInteractionOverflow) {
-                drawEdgeGlowUnderlay(canvas);
-            }
-            if (shouldDrawAzOverflow) {
-                drawGlassEdgeCapsules(canvas);
-                drawPageIndicators(canvas);
-            }
+        }
+        if (shouldDrawAzOverflow && renderLayer == RenderLayer.OVERLAY) {
+            drawGlassEdgeCapsules(canvas);
+            drawPageIndicators(canvas);
         }
     }
 
-    private void drawEdgeGlowUnderlay(Canvas canvas) {
+    private void drawEdgeGlowAmbient(Canvas canvas) {
         float top = Float.MAX_VALUE;
         float bottom = -Float.MAX_VALUE;
         if (!appsRowRawBounds.isEmpty()) {
@@ -300,14 +321,14 @@ public final class LauncherAzGestureFxView extends View {
         float radius = Math.max(dp(24f), glowHeight * 0.42f);
 
         if (interactionCanPageLeft) {
-            drawEdgeGlow(canvas, 0f, top, edgeWidth, bottom, radius, spread, false);
+            drawEdgeGlowAmbient(canvas, 0f, top, edgeWidth, bottom, radius, spread, false);
         }
         if (interactionCanPageRight) {
-            drawEdgeGlow(canvas, getWidth() - edgeWidth, top, getWidth(), bottom, radius, spread, true);
+            drawEdgeGlowAmbient(canvas, getWidth() - edgeWidth, top, getWidth(), bottom, radius, spread, true);
         }
     }
 
-    private void drawEdgeGlow(Canvas canvas, float left, float top, float right, float bottom, float radius, float spread, boolean rightEdge) {
+    private void drawEdgeGlowAmbient(Canvas canvas, float left, float top, float right, float bottom, float radius, float spread, boolean rightEdge) {
         RectF glow = new RectF(left, top, right, bottom);
         if (rightEdge) {
             glow.left -= spread * 0.28f;
@@ -325,10 +346,48 @@ public final class LauncherAzGestureFxView extends View {
         innerGlow.inset(spread * 0.22f, dp(4f));
         edgePaint.setColor(withAlpha(overflowGlowTintColor, 118));
         canvas.drawRoundRect(innerGlow, Math.max(dp(16f), radius - dp(6f)), Math.max(dp(16f), radius - dp(6f)), edgePaint);
+    }
 
+    private void drawEdgeGlowBeacon(Canvas canvas) {
+        float top = Float.MAX_VALUE;
+        float bottom = -Float.MAX_VALUE;
+        if (!appsRowRawBounds.isEmpty()) {
+            top = Math.min(top, appsRowRawBounds.top - locationOnScreen[1]);
+            bottom = Math.max(bottom, appsRowRawBounds.bottom - locationOnScreen[1]);
+        }
+        if (!azRowRawBounds.isEmpty()) {
+            top = Math.min(top, azRowRawBounds.top - locationOnScreen[1]);
+            bottom = Math.max(bottom, azRowRawBounds.bottom - locationOnScreen[1]);
+        }
+        if (!extraKeysRawBounds.isEmpty()) {
+            top = Math.min(top, extraKeysRawBounds.top - locationOnScreen[1]);
+            bottom = Math.max(bottom, extraKeysRawBounds.bottom - locationOnScreen[1]);
+        }
+        if (top == Float.MAX_VALUE || bottom <= top) {
+            top = 0f;
+            bottom = getHeight();
+        }
+
+        float edgeWidth = Math.max(dp(42f), getWidth() * 0.11f);
+        float radius = Math.max(dp(24f), Math.max(dp(34f), bottom - top) * 0.42f);
+        if (interactionCanPageLeft) {
+            drawEdgeGlowBeacon(canvas, 0f, top, edgeWidth, bottom, radius, false);
+        }
+        if (interactionCanPageRight) {
+            drawEdgeGlowBeacon(canvas, getWidth() - edgeWidth, top, getWidth(), bottom, radius, true);
+        }
+    }
+
+    private void drawEdgeGlowBeacon(Canvas canvas, float left, float top, float right, float bottom, float radius, boolean rightEdge) {
         RectF beacon = new RectF(left, top, right, bottom);
         float beaconInsetY = Math.max(dp(2f), (bottom - top) * 0.10f);
-        beacon.inset(0f, beaconInsetY);
+        float beaconInsetX = Math.max(dp(1.2f), (right - left) * 0.08f);
+        if (rightEdge) {
+            beacon.left = Math.max(left, right - Math.max(dp(12f), (right - left) * 0.44f));
+        } else {
+            beacon.right = Math.min(right, left + Math.max(dp(12f), (right - left) * 0.44f));
+        }
+        beacon.inset(beaconInsetX, beaconInsetY);
         edgePaint.setColor(withAlpha(overflowGlowTintColor, 228));
         canvas.drawRoundRect(beacon, Math.max(dp(16f), radius * 0.68f), Math.max(dp(16f), radius * 0.68f), edgePaint);
 

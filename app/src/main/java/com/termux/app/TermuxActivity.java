@@ -166,7 +166,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     SuggestionBarView mSuggestionBarView;
     AzScrubRowView mAzScrubRowView;
-    LauncherAzGestureFxView mLauncherAzGestureFxView;
+    LauncherAzGestureFxView mLauncherAzGestureFxUnderlayView;
+    LauncherAzGestureFxView mLauncherAzGestureFxOverlayView;
 
     private LauncherAppDataProvider mLauncherAppDataProvider;
     private LauncherConfigRepository mLauncherConfigRepository;
@@ -274,6 +275,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private float mAzLastRawY = 0f;
     private float mAzLastAnchorRawX = 0f;
     private float mAzLastAnchorRawY = 0f;
+    private float mAzLockedAnchorRawX = 0f;
+    private float mAzLockedAnchorRawY = 0f;
     private final RectF mAzRowRawBounds = new RectF();
     private final RectF mAppsRowRawBounds = new RectF();
     private final RectF mExtraKeysRawBounds = new RectF();
@@ -558,6 +561,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View extraKeysBackground = findViewById(R.id.extrakeys_background);
         View extraKeysBackgroundBlur = findViewById(R.id.extrakeys_backgroundblur);
         View azRow = findViewById(R.id.apps_bar_az_row);
+        View azFxUnderlay = findViewById(R.id.apps_bar_az_fx_underlay);
         View azFxOverlay = findViewById(R.id.apps_bar_az_fx_overlay);
 
         boolean isToolbarShown = mPreferences.shouldShowTerminalToolbar();
@@ -586,6 +590,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (azFxOverlay != null) {
                 azFxOverlay.setVisibility(View.GONE);
             }
+            if (azFxUnderlay != null) {
+                azFxUnderlay.setVisibility(View.GONE);
+            }
             return;
         }
 
@@ -598,8 +605,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (azRow != null) {
             azRow.setVisibility(mPreferences.isAppLauncherAzRowEnabled() ? View.VISIBLE : View.GONE);
         }
+        if (azFxUnderlay != null) {
+            azFxUnderlay.setVisibility(View.VISIBLE);
+        }
         if (azFxOverlay != null) {
-            azFxOverlay.setVisibility(mPreferences.isAppLauncherAzRowEnabled() ? View.VISIBLE : View.GONE);
+            azFxOverlay.setVisibility(View.VISIBLE);
         }
 
         if (extraKeysBackground != null) {
@@ -904,7 +914,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void setSuggestionBarView() {
         final ViewPager viewPager = findViewById(R.id.apps_bar_viewpager);
         mAzScrubRowView = findViewById(R.id.apps_bar_az_row);
-        mLauncherAzGestureFxView = findViewById(R.id.apps_bar_az_fx_overlay);
+        mLauncherAzGestureFxUnderlayView = findViewById(R.id.apps_bar_az_fx_underlay);
+        mLauncherAzGestureFxOverlayView = findViewById(R.id.apps_bar_az_fx_overlay);
+        if (mLauncherAzGestureFxUnderlayView != null) {
+            mLauncherAzGestureFxUnderlayView.setRenderLayer(LauncherAzGestureFxView.RenderLayer.UNDERLAY);
+        }
+        if (mLauncherAzGestureFxOverlayView != null) {
+            mLauncherAzGestureFxOverlayView.setRenderLayer(LauncherAzGestureFxView.RenderLayer.OVERLAY);
+        }
         if (viewPager == null) {
             return;
         }
@@ -1053,16 +1070,23 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mAzScrubRowView.setInteractionAccentColor(base);
         mAzScrubRowView.setInteractionMode(AzScrubRowView.InteractionMode.WAVE_TRACK);
         mAzScrubRowView.setLockedInlineLetter(null);
-        if (mLauncherAzGestureFxView != null) {
-            int orbColor = brightMonetShade(base);
-            int edgeColor = edgeMonetVariant(base);
-            mLauncherAzGestureFxView.setColors(orbColor, edgeColor);
-            updateAzOverflowAffordance();
+        int orbColor = brightMonetShade(base);
+        int edgeColor = edgeMonetVariant(base);
+        if (mLauncherAzGestureFxUnderlayView != null) {
+            mLauncherAzGestureFxUnderlayView.setColors(orbColor, edgeColor);
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                mLauncherAzGestureFxView.setElevation(0f);
-                mLauncherAzGestureFxView.setTranslationZ(-dpToPx(8));
+                mLauncherAzGestureFxUnderlayView.setElevation(0f);
+                mLauncherAzGestureFxUnderlayView.setTranslationZ(-dpToPx(8));
             }
         }
+        if (mLauncherAzGestureFxOverlayView != null) {
+            mLauncherAzGestureFxOverlayView.setColors(orbColor, edgeColor);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                mLauncherAzGestureFxOverlayView.setElevation(dpToPx(30));
+                mLauncherAzGestureFxOverlayView.setTranslationZ(dpToPx(30));
+            }
+        }
+        updateAzOverflowAffordance();
         mAzScrubRowView.setBackgroundColor(Color.TRANSPARENT);
         mAzScrubRowView.bringToFront();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
@@ -1143,9 +1167,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             && Math.abs(dyFromDown) >= (Math.abs(dxFromDown) * AZ_UPWARD_DIRECTION_RATIO);
         boolean withinAzFilterBand = touchY >= filterUpperBound && touchY <= filterLowerBound;
         boolean enteringUpwardLock = upwardIntent;
-        boolean enteringIconTrack = isInAppsRowCorridor(rawY);
+        boolean enteringIconTrack = isInAppsRowCorridor(rawY) || isInAzCaptureWedge(rawX, rawY);
         boolean returningToUpwardTrack = touchY >= unlockThreshold && touchY <= unlockMaxBound;
-        boolean returningToIconTrack = !enteringIconTrack && isInAzReturnBand(rawY);
+        boolean returningToIconTrack = !isInAppsRowCorridor(rawY) && !isInAzCaptureWedge(rawX, rawY) && isInAzReturnBand(rawY);
 
         if (mAzGestureMode == AzGestureMode.AZ_TRACKING) {
             if (enteringUpwardLock) {
@@ -1204,8 +1228,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (phase == AzScrubRowView.GesturePhase.UP) {
             boolean launched = false;
             if (mAzGestureMode == AzGestureMode.ICON_TRACKING_LOCKED && focusResult != null && focusResult.hasFocusEntry()) {
-                if (mLauncherAzGestureFxView != null) {
-                    mLauncherAzGestureFxView.playLaunchBloom(rawX, rawY);
+                if (mLauncherAzGestureFxOverlayView != null) {
+                    mLauncherAzGestureFxOverlayView.playLaunchBloom(rawX, rawY);
                 }
                 launched = mSuggestionBarView.launchAzFocusedEntry(focusResult);
             }
@@ -1236,6 +1260,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         persistAzPreviewAnchor(mAzLockedLetter, mAzLockedSelectionIndex);
         mAzGestureMode = targetMode;
         mAzHasLockedSelection = true;
+        mAzLockedAnchorRawX = mAzLastAnchorRawX;
+        mAzLockedAnchorRawY = mAzLastAnchorRawY;
         mAzScrubRowView.setInteractionMode(AzScrubRowView.InteractionMode.INLINE_EMPHASIS_TRACK);
         mAzScrubRowView.setLockedInlineLetter(Character.toUpperCase(mAzLockedLetter));
     }
@@ -1251,6 +1277,23 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return rawY >= (mAppsRowRawBounds.top - tolerance) && rawY <= (mAppsRowRawBounds.bottom + tolerance);
     }
 
+    private boolean isInAzCaptureWedge(float rawX, float rawY) {
+        if (!mAzHasLockedSelection || mAppsRowRawBounds.isEmpty()) {
+            return false;
+        }
+        float startY = mAzLockedAnchorRawY - dpToPx(4);
+        float topLimit = mAppsRowRawBounds.top - dpToPx(20);
+        float bottomLimit = mAppsRowRawBounds.bottom + dpToPx(20);
+        if (rawY > startY || rawY < topLimit || rawY > bottomLimit) {
+            return false;
+        }
+        float wedgeTravel = Math.max(dpToPx(24), startY - topLimit);
+        float progress = Math.max(0f, Math.min(1f, (startY - rawY) / wedgeTravel));
+        float targetHalfWidth = Math.max(dpToPx(28), mAppsRowRawBounds.width() * 0.14f);
+        float halfWidth = dpToPx(10) + (targetHalfWidth * progress);
+        return Math.abs(rawX - mAzLockedAnchorRawX) <= halfWidth;
+    }
+
     private boolean isInAzReturnBand(float rawY) {
         if (mAzRowRawBounds.isEmpty()) {
             return false;
@@ -1264,13 +1307,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private void updateAzOverlayState(@Nullable SuggestionBarView.AzDragFocusResult focusResult, char activeLetter) {
-        if (mLauncherAzGestureFxView == null) {
+        if (mLauncherAzGestureFxUnderlayView == null && mLauncherAzGestureFxOverlayView == null) {
             return;
         }
         populateRawBounds(mAzScrubRowView, mAzRowRawBounds);
         populateRawBounds(mSuggestionBarView, mAppsRowRawBounds);
         populateRawBounds(findViewById(R.id.terminal_toolbar_view_pager), mExtraKeysRawBounds);
-        mLauncherAzGestureFxView.setRowBounds(mAzRowRawBounds, mAppsRowRawBounds, mExtraKeysRawBounds);
+        applyAzFxRowBounds();
         LauncherAzGestureFxView.InteractionMode interactionMode =
             mAzGestureMode == AzGestureMode.ICON_TRACKING_LOCKED
                 ? LauncherAzGestureFxView.InteractionMode.ICON_TRACK_LOCKED
@@ -1301,8 +1344,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean canRight = mSuggestionBarView != null && mSuggestionBarView.canAzPageRight();
         int currentPageIndex = mSuggestionBarView != null ? mSuggestionBarView.getAzCurrentPageIndex() : 0;
         int pageCount = mSuggestionBarView != null ? mSuggestionBarView.getAzVisiblePageCount() : 1;
-        mLauncherAzGestureFxView.setFilteredOverflowState(overflowActive, canLeft, canRight, currentPageIndex, pageCount);
-        mLauncherAzGestureFxView.setInteractionOverflowState(mAzGestureActive, canLeft, canRight, currentPageIndex, pageCount, true);
+        applyAzFxFilteredOverflowState(overflowActive, canLeft, canRight, currentPageIndex, pageCount);
+        applyAzFxInteractionOverflowState(mAzGestureActive, canLeft, canRight, currentPageIndex, pageCount, true);
 
         float leftProximity = 0f;
         float rightProximity = 0f;
@@ -1319,8 +1362,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 rightProximity = Math.max(0f, 1f - ((width - localX) / Math.max(1f, edgeZone)));
             }
         }
-        mLauncherAzGestureFxView.setEdgeProximity(leftProximity, rightProximity);
-        mLauncherAzGestureFxView.updateDrag(
+        applyAzFxEdgeProximity(leftProximity, rightProximity);
+        applyAzFxDrag(
             mAzGestureActive,
             mAzLastRawX,
             mAzLastRawY,
@@ -1343,15 +1386,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private void updateAzOverflowAffordance() {
-        if (mLauncherAzGestureFxView == null || mSuggestionBarView == null) {
+        if ((mLauncherAzGestureFxUnderlayView == null && mLauncherAzGestureFxOverlayView == null) || mSuggestionBarView == null) {
             return;
         }
         populateRawBounds(mAzScrubRowView, mAzRowRawBounds);
         populateRawBounds(mSuggestionBarView, mAppsRowRawBounds);
         populateRawBounds(findViewById(R.id.terminal_toolbar_view_pager), mExtraKeysRawBounds);
-        mLauncherAzGestureFxView.setRowBounds(mAzRowRawBounds, mAppsRowRawBounds, mExtraKeysRawBounds);
+        applyAzFxRowBounds();
         boolean azOverflowActive = mSuggestionBarView.hasAzOverflowPages();
-        mLauncherAzGestureFxView.setFilteredOverflowState(
+        applyAzFxFilteredOverflowState(
             azOverflowActive,
             mSuggestionBarView.canAzPageLeft(),
             mSuggestionBarView.canAzPageRight(),
@@ -1376,7 +1419,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             currentPageIndex = mSuggestionBarView.getPinnedCurrentPageIndex();
             pageCount = mSuggestionBarView.getPinnedVisiblePageCount();
         }
-        mLauncherAzGestureFxView.setInteractionOverflowState(
+        applyAzFxInteractionOverflowState(
             interactionActive,
             canLeft,
             canRight,
@@ -1384,6 +1427,51 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             pageCount,
             showPageIndicators
         );
+    }
+
+    private void applyAzFxRowBounds() {
+        if (mLauncherAzGestureFxUnderlayView != null) {
+            mLauncherAzGestureFxUnderlayView.setRowBounds(mAzRowRawBounds, mAppsRowRawBounds, mExtraKeysRawBounds);
+        }
+        if (mLauncherAzGestureFxOverlayView != null) {
+            mLauncherAzGestureFxOverlayView.setRowBounds(mAzRowRawBounds, mAppsRowRawBounds, mExtraKeysRawBounds);
+        }
+    }
+
+    private void applyAzFxFilteredOverflowState(boolean active, boolean canLeft, boolean canRight, int currentPageIndex, int pageCount) {
+        if (mLauncherAzGestureFxUnderlayView != null) {
+            mLauncherAzGestureFxUnderlayView.setFilteredOverflowState(active, canLeft, canRight, currentPageIndex, pageCount);
+        }
+        if (mLauncherAzGestureFxOverlayView != null) {
+            mLauncherAzGestureFxOverlayView.setFilteredOverflowState(active, canLeft, canRight, currentPageIndex, pageCount);
+        }
+    }
+
+    private void applyAzFxInteractionOverflowState(boolean active, boolean canLeft, boolean canRight, int currentPageIndex, int pageCount, boolean showPageIndicators) {
+        if (mLauncherAzGestureFxUnderlayView != null) {
+            mLauncherAzGestureFxUnderlayView.setInteractionOverflowState(active, canLeft, canRight, currentPageIndex, pageCount, showPageIndicators);
+        }
+        if (mLauncherAzGestureFxOverlayView != null) {
+            mLauncherAzGestureFxOverlayView.setInteractionOverflowState(active, canLeft, canRight, currentPageIndex, pageCount, showPageIndicators);
+        }
+    }
+
+    private void applyAzFxEdgeProximity(float leftProximity, float rightProximity) {
+        if (mLauncherAzGestureFxUnderlayView != null) {
+            mLauncherAzGestureFxUnderlayView.setEdgeProximity(leftProximity, rightProximity);
+        }
+        if (mLauncherAzGestureFxOverlayView != null) {
+            mLauncherAzGestureFxOverlayView.setEdgeProximity(leftProximity, rightProximity);
+        }
+    }
+
+    private void applyAzFxDrag(boolean active, float rawX, float rawY, boolean anchorVisible, float anchorRawX, float anchorRawY, @Nullable RectF focusedBoundsRaw, @NonNull LauncherAzGestureFxView.InteractionMode mode) {
+        if (mLauncherAzGestureFxUnderlayView != null) {
+            mLauncherAzGestureFxUnderlayView.updateDrag(active, rawX, rawY, anchorVisible, anchorRawX, anchorRawY, focusedBoundsRaw, mode);
+        }
+        if (mLauncherAzGestureFxOverlayView != null) {
+            mLauncherAzGestureFxOverlayView.updateDrag(active, rawX, rawY, anchorVisible, anchorRawX, anchorRawY, focusedBoundsRaw, mode);
+        }
     }
 
     private void updateAzEdgePagingLoop(@Nullable SuggestionBarView.AzDragFocusResult focusResult) {
@@ -1456,8 +1544,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mSuggestionBarView != null) {
             mSuggestionBarView.clearAzFocusedEntry();
         }
-        if (mLauncherAzGestureFxView != null) {
-            mLauncherAzGestureFxView.clearDrag(keepOverflowAffordance);
+        if (mLauncherAzGestureFxUnderlayView != null) {
+            mLauncherAzGestureFxUnderlayView.clearDrag(keepOverflowAffordance);
+        }
+        if (mLauncherAzGestureFxOverlayView != null) {
+            mLauncherAzGestureFxOverlayView.clearDrag(keepOverflowAffordance);
         }
         if (clearPreview && mSuggestionBarView != null) {
             mSuggestionBarView.clearAzPreview();
