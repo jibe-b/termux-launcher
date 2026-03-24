@@ -223,7 +223,7 @@
     <View
         android:id="@+id/activity_termux_bottom_space_view"
         android:layout_width="match_parent"
-        android:layout_height="1dp"
+        android:layout_height="0dp"
         android:background="@android:color/transparent" />
 
 </com.termux.app.terminal.TermuxActivityRootView>
