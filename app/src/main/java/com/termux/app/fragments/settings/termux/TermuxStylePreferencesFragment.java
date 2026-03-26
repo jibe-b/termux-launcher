@@ -112,9 +112,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 // Legacy compatibility: keep both toggles in sync even if old UI writes this key.
                 setMonetBackgroundAndOverlayEnabled(value);
                 break;
-            case "app_launcher_show_icons":
-                mPreferences.setAppLauncherShowIconsEnabled(value);
-                break;
             case "app_launcher_bw_icons":
                 mPreferences.setAppLauncherBwIconsEnabled(value);
                 break;
@@ -146,8 +143,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.isMonetBackgroundEnabled();
             case "monet_overlay_enabled":
                 return mPreferences.isMonetBackgroundEnabled();
-            case "app_launcher_show_icons":
-                return mPreferences.isAppLauncherShowIconsEnabled();
             case "app_launcher_bw_icons":
                 return mPreferences.isAppLauncherBwIconsEnabled();
             case "app_launcher_az_row_enabled":

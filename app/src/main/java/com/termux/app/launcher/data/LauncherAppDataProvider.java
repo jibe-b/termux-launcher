@@ -21,11 +21,9 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -108,6 +106,12 @@ public final class LauncherAppDataProvider {
                 cachedById.putAll(snapshot.byId);
                 letterBuckets.clear();
                 letterBuckets.putAll(snapshot.letterBuckets);
+                iconCache.evictAll();
+                for (Map.Entry<String, Drawable> iconEntry : snapshot.iconById.entrySet()) {
+                    if (iconEntry.getValue() != null) {
+                        iconCache.put(iconEntry.getKey(), iconEntry.getValue());
+                    }
+                }
                 loaded = true;
                 loading = false;
                 callbacks = new ArrayList<>(pendingRefreshCallbacks);
@@ -138,44 +142,6 @@ public final class LauncherAppDataProvider {
         return bucket == null ? new ArrayList<>() : withCachedIcons(bucket);
     }
 
-    public void loadIconsAsync(@NonNull List<AppRef> refs, @Nullable Runnable callback) {
-        Set<String> missingStableIds = new LinkedHashSet<>();
-        synchronized (this) {
-            for (AppRef ref : refs) {
-                if (ref == null) continue;
-                if (iconCache.get(ref.stableId()) == null) {
-                    missingStableIds.add(ref.stableId());
-                }
-            }
-        }
-
-        if (missingStableIds.isEmpty()) {
-            return;
-        }
-
-        executor.execute(() -> {
-            PackageManager packageManager = context.getPackageManager();
-            List<LauncherAppEntry> entriesToLoad;
-            synchronized (LauncherAppDataProvider.this) {
-                entriesToLoad = new ArrayList<>(cachedApps);
-            }
-            for (LauncherAppEntry entry : entriesToLoad) {
-                if (entry == null) continue;
-                String stableId = entry.appRef.stableId();
-                if (!missingStableIds.contains(stableId)) continue;
-                Drawable icon = loadIcon(packageManager, entry.appRef);
-                if (icon != null) {
-                    synchronized (LauncherAppDataProvider.this) {
-                        iconCache.put(stableId, icon);
-                    }
-                }
-            }
-            if (callback != null) {
-                mainHandler.post(callback);
-            }
-        });
-    }
-
     private void dispatchRefreshCallbacksLocked() {
         List<Runnable> callbacks = new ArrayList<>(pendingRefreshCallbacks);
         pendingRefreshCallbacks.clear();
@@ -201,9 +167,13 @@ public final class LauncherAppDataProvider {
             CharSequence labelSequence = info.loadLabel(packageManager);
             String label = labelSequence != null ? labelSequence.toString() : info.packageName;
             AppRef ref = new AppRef(info.packageName, info.name);
-            LauncherAppEntry entry = new LauncherAppEntry(ref, label, null);
+            Drawable icon = loadIcon(packageManager, ref);
+            LauncherAppEntry entry = new LauncherAppEntry(ref, label, icon);
             snapshot.apps.add(entry);
             snapshot.byId.put(ref.stableId(), entry);
+            if (icon != null) {
+                snapshot.iconById.put(ref.stableId(), icon);
+            }
             char key = normalizeLetter(label.isEmpty() ? '#' : label.charAt(0));
             List<LauncherAppEntry> bucket = snapshot.letterBuckets.get(key);
             if (bucket == null) {
@@ -249,6 +219,9 @@ public final class LauncherAppDataProvider {
     @NonNull
     private LauncherAppEntry withCachedIcon(@NonNull LauncherAppEntry entry) {
         Drawable icon = iconCache.get(entry.appRef.stableId());
+        if (icon == null) {
+            icon = entry.icon;
+        }
         if (icon == entry.icon) {
             return entry;
         }
@@ -272,5 +245,6 @@ public final class LauncherAppDataProvider {
         final List<LauncherAppEntry> apps = new ArrayList<>();
         final Map<String, LauncherAppEntry> byId = new LinkedHashMap<>();
         final Map<Character, List<LauncherAppEntry>> letterBuckets = new HashMap<>();
+        final Map<String, Drawable> iconById = new LinkedHashMap<>();
     }
 }

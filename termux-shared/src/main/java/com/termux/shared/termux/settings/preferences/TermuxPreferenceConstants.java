@@ -161,13 +161,6 @@ public final class TermuxPreferenceConstants {
         public static final float DEFAULT_APP_LAUNCHER_BAR_HEIGHT = 1.45f;
 
         /**
-         * Defines the key for app launcher show icons.
-         */
-        public static final String KEY_APP_LAUNCHER_SHOW_ICONS = "app_launcher_show_icons";
-
-        public static final boolean DEFAULT_APP_LAUNCHER_SHOW_ICONS = true;
-
-        /**
          * Defines the key for app launcher black and white icons.
          */
         public static final String KEY_APP_LAUNCHER_BW_ICONS = "app_launcher_bw_icons";

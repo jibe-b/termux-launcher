@@ -113,7 +113,6 @@ public final class SuggestionBarView extends GridLayout {
     private List<LauncherAppEntry> allApps = new ArrayList<>();
     private int maxButtonCount = 7;
     private float textSize = 12f;
-    private boolean showIcons = true;
     private boolean bandW = false;
     private int searchTolerance = 70;
     private float iconScale = 1.0f;
@@ -263,7 +262,7 @@ public final class SuggestionBarView extends GridLayout {
     }
 
     public void setShowIcons(boolean showIcons) {
-        this.showIcons = showIcons;
+        // Retained for test/backward compatibility; icons are always shown.
     }
 
     public void setBandW(boolean bandW) {
@@ -424,7 +423,6 @@ public final class SuggestionBarView extends GridLayout {
             return;
         }
         renderButtons(activeAzCandidates, true);
-        requestVisibleIcons(activeAzCandidates, true);
         captureAzRenderState(activeAzLetter, activeAzPageIndex, Math.max(1, maxButtonCount), activeAzCandidates);
     }
 
@@ -877,7 +875,6 @@ public final class SuggestionBarView extends GridLayout {
             azCachedRankLetter = activeAzLetter;
             azCachedRankedCandidates = activeAzCandidates;
             renderButtons(activeAzCandidates, true);
-            requestVisibleIcons(activeAzCandidates, true);
             captureAzRenderState(activeAzLetter, activeAzPageIndex, Math.max(1, maxButtonCount), activeAzCandidates);
             return;
         }
@@ -895,7 +892,6 @@ public final class SuggestionBarView extends GridLayout {
                         return;
                     }
                     renderButtons(suggestionEntries, false);
-                    requestVisibleIcons(suggestionEntries, false);
                 });
             });
             return;
@@ -903,7 +899,6 @@ public final class SuggestionBarView extends GridLayout {
 
         List<LauncherAppEntry> suggestionEntries = buildPinnedOrDefaultSurface();
         renderButtons(suggestionEntries, false);
-        requestVisibleIcons(suggestionEntries, false);
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -1091,40 +1086,6 @@ public final class SuggestionBarView extends GridLayout {
         }
     }
 
-    private void requestVisibleIcons(@NonNull List<LauncherAppEntry> entries, boolean azPreview) {
-        if (!showIcons || appDataProvider == null || entries.isEmpty()) {
-            return;
-        }
-
-        int visibleCount = Math.max(1, maxButtonCount);
-        int startIndex = azPreview ? getAzPageStart(entries, activeAzPageIndex, visibleCount) : 0;
-        if (startIndex >= entries.size()) {
-            startIndex = 0;
-        }
-
-        List<AppRef> refs = new ArrayList<>();
-        int endIndex = Math.min(entries.size(), startIndex + visibleCount);
-        for (int i = startIndex; i < endIndex; i++) {
-            LauncherAppEntry entry = entries.get(i);
-            if (entry == null || entry.icon != null) continue;
-            refs.add(entry.appRef);
-        }
-
-        if (refs.isEmpty()) {
-            return;
-        }
-
-        appDataProvider.loadIconsAsync(refs, () -> {
-            if (azPreview) {
-                if (activeAzLetter != null) {
-                    previewAzLetter(activeAzLetter, activeAzSelection, false);
-                }
-            } else {
-                reloadWithInput(lastInput, lastTerminalView);
-            }
-        });
-    }
-
     @NonNull
     private static int[] buildAzPriorityColumnsAround(int center, int count) {
         int safeCount = Math.max(1, count);
@@ -1192,48 +1153,37 @@ public final class SuggestionBarView extends GridLayout {
     }
 
     private View createEntryButton(@NonNull LauncherAppEntry entry) {
-        if (entry.icon != null && showIcons) {
-            FrameLayout shell = new FrameLayout(getContext());
-            shell.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-            shell.setClipChildren(false);
-            shell.setClipToPadding(false);
+        FrameLayout shell = new FrameLayout(getContext());
+        shell.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        shell.setClipChildren(false);
+        shell.setClipToPadding(false);
 
-            ImageButton imageButton = new ImageButton(getContext());
-            imageButton.setImageDrawable(entry.icon);
-            int size = iconSizePx();
-            imageButton.setScaleType(ImageButton.ScaleType.CENTER_INSIDE);
-            imageButton.setAdjustViewBounds(true);
-            imageButton.setPadding(0, 0, 0, 0);
-            imageButton.setBackgroundColor(0x00000000);
-            imageButton.setLayoutParams(new FrameLayout.LayoutParams(size, size, Gravity.CENTER));
-            imageButton.setMinimumHeight(size);
-            imageButton.setMinimumWidth(size);
-            if (bandW) {
-                float[] colorMatrix = {
-                    0.33f, 0.33f, 0.33f, 0, 0,
-                    0.33f, 0.33f, 0.33f, 0, 0,
-                    0.33f, 0.33f, 0.33f, 0, 0,
-                    0, 0, 0, 1, 0
-                };
-                ColorFilter colorFilter = new ColorMatrixColorFilter(colorMatrix);
-                imageButton.setColorFilter(colorFilter);
-            }
-            imageButton.setOnClickListener(v -> launchEntryFromTouch(v, entry, lastTerminalView));
-            imageButton.setContentDescription(entry.label);
-            registerLaunchTarget(entry.appRef, imageButton);
-            shell.addView(imageButton);
-            return shell;
+        ImageButton imageButton = new ImageButton(getContext());
+        Drawable icon = entry.icon != null ? entry.icon : getContext().getPackageManager().getDefaultActivityIcon();
+        imageButton.setImageDrawable(icon);
+        int size = iconSizePx();
+        imageButton.setScaleType(ImageButton.ScaleType.CENTER_INSIDE);
+        imageButton.setAdjustViewBounds(true);
+        imageButton.setPadding(0, 0, 0, 0);
+        imageButton.setBackgroundColor(0x00000000);
+        imageButton.setLayoutParams(new FrameLayout.LayoutParams(size, size, Gravity.CENTER));
+        imageButton.setMinimumHeight(size);
+        imageButton.setMinimumWidth(size);
+        if (bandW) {
+            float[] colorMatrix = {
+                0.33f, 0.33f, 0.33f, 0, 0,
+                0.33f, 0.33f, 0.33f, 0, 0,
+                0.33f, 0.33f, 0.33f, 0, 0,
+                0, 0, 0, 1, 0
+            };
+            ColorFilter colorFilter = new ColorMatrixColorFilter(colorMatrix);
+            imageButton.setColorFilter(colorFilter);
         }
-
-        Button button = new Button(getContext(), null, android.R.attr.buttonBarButtonStyle);
-        button.setTextSize(textSize);
-        button.setText(entry.label);
-        button.setTypeface(Typeface.DEFAULT_BOLD);
-        button.setTextColor(TEXT_COLOR);
-        button.setPadding(0, 0, 0, 0);
-        button.setOnClickListener(v -> launchEntryFromTouch(v, entry, lastTerminalView));
-        registerLaunchTarget(entry.appRef, button);
-        return button;
+        imageButton.setOnClickListener(v -> launchEntryFromTouch(v, entry, lastTerminalView));
+        imageButton.setContentDescription(entry.label);
+        registerLaunchTarget(entry.appRef, imageButton);
+        shell.addView(imageButton);
+        return shell;
     }
 
     private LayoutParams createSlotParams(int col) {
@@ -3930,7 +3880,6 @@ public final class SuggestionBarView extends GridLayout {
                         refreshActiveAzCandidates(activeAzLetter);
                     }
                     renderButtons(activeAzCandidates, true);
-                    requestVisibleIcons(activeAzCandidates, true);
                     setTranslationX(direction * travel * 0.68f);
                     setRotationY(phaseTwoRotation);
                     setScaleX(0.984f);
@@ -3985,14 +3934,9 @@ public final class SuggestionBarView extends GridLayout {
     }
 
     private View createPopupEntryButton(@NonNull LauncherAppEntry entry, int sizePx, @NonNull PinnedFolderItem sourceFolder) {
-        if (entry.icon == null || !showIcons) {
-            View fallback = createEntryButton(entry);
-            View pressTarget = resolvePrimaryPressTarget(fallback);
-            bindAppContextLongPress(pressTarget, entry, -1, sourceFolder, resolveForSelectionRef(entry.appRef), false);
-            return fallback;
-        }
         ImageButton button = new ImageButton(getContext());
-        button.setImageDrawable(entry.icon);
+        Drawable icon = entry.icon != null ? entry.icon : getContext().getPackageManager().getDefaultActivityIcon();
+        button.setImageDrawable(icon);
         button.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         button.setAdjustViewBounds(true);
         button.setPadding(0, 0, 0, 0);
@@ -4342,5 +4286,19 @@ public final class SuggestionBarView extends GridLayout {
             out.add(new LauncherAppEntry(ref, label, button.getIcon()));
         }
         return out;
+    }
+
+    public void releaseResources() {
+        removeCallbacks(azResetRunnable);
+        removeCallbacks(azPostLaunchClearRunnable);
+        clearAzFocusedEntry();
+        dismissShortcutsPopup();
+        dismissAppContextPopup();
+        dismissFolderPopup();
+        if (swipeVelocityTracker != null) {
+            swipeVelocityTracker.recycle();
+            swipeVelocityTracker = null;
+        }
+        searchExecutor.shutdownNow();
     }
 }

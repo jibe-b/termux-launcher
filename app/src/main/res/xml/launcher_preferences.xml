@@ -59,12 +59,6 @@
             app:showSeekBarValue="true" />
 
         <SwitchPreferenceCompat
-            app:key="app_launcher_show_icons"
-            app:title="@string/termux_app_launcher_show_icons_title"
-            app:summary="@string/termux_app_launcher_show_icons_summary"
-            android:defaultValue="true" />
-
-        <SwitchPreferenceCompat
             app:key="app_launcher_bw_icons"
             app:title="@string/termux_app_launcher_bw_icons_title"
             app:summary="@string/termux_app_launcher_bw_icons_summary"
