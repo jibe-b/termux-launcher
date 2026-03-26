@@ -1350,7 +1350,42 @@ public final class SuggestionBarView extends GridLayout {
                 return entry;
             }
         }
-        return null;
+        return buildEntryFromPackageManager(ref, defaultComponent);
+    }
+
+    @Nullable
+    private LauncherAppEntry buildEntryFromPackageManager(@NonNull AppRef originalRef, @Nullable ComponentName defaultComponent) {
+        PackageManager packageManager = getContext().getPackageManager();
+        ComponentName component = defaultComponent;
+        if (component == null && !TextUtils.isEmpty(originalRef.activityName)) {
+            component = new ComponentName(originalRef.packageName, originalRef.activityName);
+        }
+
+        AppRef resolvedRef = originalRef;
+        String label = originalRef.packageName;
+        Drawable icon = null;
+
+        try {
+            if (component != null) {
+                resolvedRef = new AppRef(component.getPackageName(), component.getClassName());
+                label = String.valueOf(packageManager.getActivityInfo(component, 0).loadLabel(packageManager));
+                icon = packageManager.getActivityIcon(component);
+            }
+        } catch (Exception ignored) {
+        }
+
+        if (icon == null) {
+            try {
+                label = String.valueOf(packageManager.getApplicationLabel(
+                    packageManager.getApplicationInfo(originalRef.packageName, 0)
+                ));
+                icon = packageManager.getApplicationIcon(originalRef.packageName);
+            } catch (Exception ignored) {
+                return null;
+            }
+        }
+
+        return new LauncherAppEntry(resolvedRef, label, icon);
     }
 
     private boolean tryStartMainActivity(@NonNull Context context, @Nullable ComponentName componentName, @Nullable LaunchAnimationContext animationContext) {
@@ -2200,7 +2235,9 @@ public final class SuggestionBarView extends GridLayout {
         dismissShortcutsPopup();
         if (configRepository != null) {
             configRepository.savePinnedItems(pinnedItems);
+            pinnedItems = configRepository.loadPinnedItems();
         }
+        pinnedPageIndex = 0;
         reloadWithInput("", lastTerminalView);
     }
 
