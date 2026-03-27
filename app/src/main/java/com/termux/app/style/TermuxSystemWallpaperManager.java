@@ -45,6 +45,15 @@ public class TermuxSystemWallpaperManager {
         this.handler = new Handler(Looper.getMainLooper());
     }
 
+    public void destroy() {
+        try {
+            mActivityResultLauncher.unregister();
+        } catch (Exception ignored) {
+        }
+        handler.removeCallbacksAndMessages(null);
+        executor.shutdownNow();
+    }
+
     private ActivityResultLauncher<String> registerActivityResultLauncher() {
         return mActivity.registerForActivityResult(new ActivityResultContracts.GetContent(), uri -> {
             if (uri != null) {

@@ -78,6 +78,15 @@ public class TermuxBackgroundManager {
         this.handler = new Handler(Looper.getMainLooper());
     }
 
+    public void destroy() {
+        try {
+            mActivityResultLauncher.unregister();
+        } catch (Exception ignored) {
+        }
+        handler.removeCallbacksAndMessages(null);
+        executor.shutdownNow();
+    }
+
     /**
      * Registers for activity result launcher. It's safe to call before fragment
      * or activity is created.
