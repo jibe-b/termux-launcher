@@ -861,6 +861,9 @@ public final class SuggestionBarView extends GridLayout {
         if (event == null) return super.dispatchTouchEvent(event);
         int action = event.getActionMasked();
         if (action == MotionEvent.ACTION_DOWN) {
+            if (activeAzLetter != null) {
+                scheduleAzResetTimeout();
+            }
             // Always normalize row transform at new gesture start to avoid stale offsets.
             animate().cancel();
             setListenerSafe(null);
@@ -879,6 +882,9 @@ public final class SuggestionBarView extends GridLayout {
         } else if (action == MotionEvent.ACTION_MOVE) {
             setRowInteractionActive(true);
             if (swipeVelocityTracker != null) swipeVelocityTracker.addMovement(event);
+            if (activeAzLetter != null) {
+                scheduleAzResetTimeout();
+            }
             float dx = event.getX() - swipeDownX;
             float dy = event.getY() - swipeDownY;
             int slop = ViewConfiguration.get(getContext()).getScaledTouchSlop();
@@ -888,6 +894,9 @@ public final class SuggestionBarView extends GridLayout {
                 cancelPendingContextLongPresses();
             }
         } else if (action == MotionEvent.ACTION_UP) {
+            if (activeAzLetter != null) {
+                scheduleAzResetTimeout();
+            }
             if (swipeVelocityTracker != null) {
                 swipeVelocityTracker.addMovement(event);
                 swipeVelocityTracker.computeCurrentVelocity(1000);
@@ -1031,6 +1040,9 @@ public final class SuggestionBarView extends GridLayout {
     }
 
     private void renderButtons(@NonNull List<LauncherAppEntry> entries, boolean azPreview) {
+        folderDragHoverIndex = -1;
+        setTranslationX(0f);
+        setAlpha(1f);
         removeAllViews();
         clearAzFocusedEntry();
         lastAzResolvedSlot = -1;
@@ -1074,7 +1086,7 @@ public final class SuggestionBarView extends GridLayout {
                 PinnedItem item = pinnedItems.get(i);
                 if (item != null) pinnedForSlots.add(item);
             }
-            buttonCount = Math.max(1, pinnedForSlots.size());
+            buttonCount = Math.max(1, pinnedItemsPerPage);
             entries = entriesForPinnedItems(pinnedForSlots);
         } else {
             pinnedItemsPerPage = 1;
@@ -1391,6 +1403,9 @@ public final class SuggestionBarView extends GridLayout {
             Log.w(LOG_TAG, "Failed to launch package " + entry.appRef.packageName
                 + " activity=" + entry.appRef.activityName);
             return;
+        }
+        if (activeAzLetter != null) {
+            clearAzPreview();
         }
         getUsageStatsStore().recordLaunch(entry.appRef.stableId());
 
