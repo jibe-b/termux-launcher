@@ -34,7 +34,7 @@ public final class TerminalRenderer {
     final float mFontWidth;
 
     /**
-     * The {@link Paint#getFontSpacing()}. See http://www.fampennings.nl/maarten/android/08numgrid/font.png
+     * The font line height, derived from {@link Paint.FontMetricsInt} descent-ascent.
      */
     final int mFontLineSpacing;
 
@@ -56,7 +56,7 @@ public final class TerminalRenderer {
     final float mItalicFontWidth;
 
     /**
-     * The {@link Paint#getFontSpacing()}. See http://www.fampennings.nl/maarten/android/08numgrid/font.png
+     * The italic font line height, derived from {@link Paint.FontMetricsInt} descent-ascent.
      */
     final int mItalicFontLineSpacing;
 
@@ -70,6 +70,10 @@ public final class TerminalRenderer {
      */
     final int mItalicFontLineSpacingAndAscent;
 
+    private static final int POWERLINE_PRIVATE_USE_START = 0xE0A0;
+    private static final int POWERLINE_PRIVATE_USE_END = 0xE0D7;
+    private static final float POWERLINE_BASELINE_NUDGE_PX = 1f;
+
     public TerminalRenderer(int textSize, Typeface typeface, Typeface italicTypeface) {
         mTextSize = textSize;
         mTypeface = typeface;
@@ -77,8 +81,9 @@ public final class TerminalRenderer {
         mTextPaint.setTypeface(typeface);
         mTextPaint.setAntiAlias(true);
         mTextPaint.setTextSize(textSize);
-        mFontLineSpacing = (int) Math.ceil(mTextPaint.getFontSpacing());
-        mFontAscent = (int) Math.ceil(mTextPaint.ascent());
+        Paint.FontMetricsInt fontMetrics = mTextPaint.getFontMetricsInt();
+        mFontAscent = fontMetrics.ascent;
+        mFontLineSpacing = fontMetrics.descent - mFontAscent;
         mFontLineSpacingAndAscent = mFontLineSpacing + mFontAscent;
         mFontWidth = mTextPaint.measureText("X");
         StringBuilder sb = new StringBuilder(" ");
@@ -89,8 +94,9 @@ public final class TerminalRenderer {
         mTextPaint.setTypeface(italicTypeface);
         mTextPaint.setAntiAlias(true);
         mTextPaint.setTextSize(textSize);
-        mItalicFontLineSpacing = (int) Math.ceil(mTextPaint.getFontSpacing());
-        mItalicFontAscent = (int) Math.ceil(mTextPaint.ascent());
+        Paint.FontMetricsInt italicFontMetrics = mTextPaint.getFontMetricsInt();
+        mItalicFontAscent = italicFontMetrics.ascent;
+        mItalicFontLineSpacing = italicFontMetrics.descent - mItalicFontAscent;
         mItalicFontLineSpacingAndAscent = mItalicFontLineSpacing + mItalicFontAscent;
         mItalicFontWidth = mTextPaint.measureText("X");
     }
@@ -286,10 +292,31 @@ public final class TerminalRenderer {
             mTextPaint.setStrikeThruText(strikeThrough);
             mTextPaint.setColor(foreColor);
             // The text alignment is the default Paint.Align.LEFT.
-            canvas.drawTextRun(text, startCharIndex, runWidthChars, startCharIndex, runWidthChars, left, y - mFontLineSpacingAndAscent, false, mTextPaint);
+            float baseline = y - fontLineSpacingAndAscent;
+            if (runContainsPowerlineGlyph(text, startCharIndex, runWidthChars))
+                baseline -= POWERLINE_BASELINE_NUDGE_PX;
+            canvas.drawTextRun(text, startCharIndex, runWidthChars, startCharIndex, runWidthChars, left, baseline, false, mTextPaint);
         }
         if (savedMatrix)
             canvas.restore();
+    }
+
+    private static boolean runContainsPowerlineGlyph(char[] text, int startCharIndex, int runWidthChars) {
+        int end = startCharIndex + runWidthChars;
+        for (int i = startCharIndex; i < end; ) {
+            char ch = text[i];
+            int codePoint;
+            if (Character.isHighSurrogate(ch) && i + 1 < end && Character.isLowSurrogate(text[i + 1])) {
+                codePoint = Character.toCodePoint(ch, text[i + 1]);
+                i += 2;
+            } else {
+                codePoint = ch;
+                i++;
+            }
+            if (codePoint >= POWERLINE_PRIVATE_USE_START && codePoint <= POWERLINE_PRIVATE_USE_END)
+                return true;
+        }
+        return false;
     }
 
     public float getFontWidth() {
