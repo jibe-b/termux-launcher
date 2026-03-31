@@ -262,8 +262,6 @@ public abstract class TermuxSharedProperties {
             /* float */
             case TermuxPropertyConstants.KEY_TERMINAL_TOOLBAR_HEIGHT_SCALE_FACTOR:
                 return (float) getTerminalToolbarHeightScaleFactorInternalPropertyValueFromValue(value);
-            case TermuxPropertyConstants.KEY_TERMINAL_POWERLINE_BASELINE_NUDGE:
-                return (float) getTerminalPowerlineBaselineNudgeInternalPropertyValueFromValue(value);
             /* Integer (may be null) */
             case TermuxPropertyConstants.KEY_SHORTCUT_CREATE_SESSION:
             case TermuxPropertyConstants.KEY_SHORTCUT_NEXT_SESSION:
@@ -418,23 +416,6 @@ public abstract class TermuxSharedProperties {
      */
     public static float getTerminalToolbarHeightScaleFactorInternalPropertyValueFromValue(String value) {
         return SharedProperties.getDefaultIfNotInRange(TermuxPropertyConstants.KEY_TERMINAL_TOOLBAR_HEIGHT_SCALE_FACTOR, DataUtils.getFloatFromString(value, TermuxPropertyConstants.DEFAULT_IVALUE_TERMINAL_TOOLBAR_HEIGHT_SCALE_FACTOR), TermuxPropertyConstants.DEFAULT_IVALUE_TERMINAL_TOOLBAR_HEIGHT_SCALE_FACTOR, TermuxPropertyConstants.IVALUE_TERMINAL_TOOLBAR_HEIGHT_SCALE_FACTOR_MIN, TermuxPropertyConstants.IVALUE_TERMINAL_TOOLBAR_HEIGHT_SCALE_FACTOR_MAX, true, true, LOG_TAG);
-    }
-
-    /**
-     * Returns the float for the value if its not null and is between
-     * {@link TermuxPropertyConstants#IVALUE_TERMINAL_POWERLINE_BASELINE_NUDGE_MIN} and
-     * {@link TermuxPropertyConstants#IVALUE_TERMINAL_POWERLINE_BASELINE_NUDGE_MAX},
-     * otherwise returns {@link TermuxPropertyConstants#DEFAULT_IVALUE_TERMINAL_POWERLINE_BASELINE_NUDGE}.
-     */
-    public static float getTerminalPowerlineBaselineNudgeInternalPropertyValueFromValue(String value) {
-        return SharedProperties.getDefaultIfNotInRange(
-            TermuxPropertyConstants.KEY_TERMINAL_POWERLINE_BASELINE_NUDGE,
-            DataUtils.getFloatFromString(value, TermuxPropertyConstants.DEFAULT_IVALUE_TERMINAL_POWERLINE_BASELINE_NUDGE),
-            TermuxPropertyConstants.DEFAULT_IVALUE_TERMINAL_POWERLINE_BASELINE_NUDGE,
-            TermuxPropertyConstants.IVALUE_TERMINAL_POWERLINE_BASELINE_NUDGE_MIN,
-            TermuxPropertyConstants.IVALUE_TERMINAL_POWERLINE_BASELINE_NUDGE_MAX,
-            true, true, LOG_TAG
-        );
     }
 
     /**
@@ -654,10 +635,6 @@ public abstract class TermuxSharedProperties {
 
     public float getTerminalToolbarHeightScaleFactor() {
         return (float) getInternalPropertyValue(TermuxPropertyConstants.KEY_TERMINAL_TOOLBAR_HEIGHT_SCALE_FACTOR, true);
-    }
-
-    public float getTerminalPowerlineBaselineNudge() {
-        return (float) getInternalPropertyValue(TermuxPropertyConstants.KEY_TERMINAL_POWERLINE_BASELINE_NUDGE, true);
     }
 
     public boolean isBackKeyTheEscapeKey() {

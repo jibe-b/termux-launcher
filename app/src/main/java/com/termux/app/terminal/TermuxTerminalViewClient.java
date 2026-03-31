@@ -43,7 +43,6 @@ import com.termux.shared.view.ViewUtils;
 import com.termux.terminal.KeyHandler;
 import com.termux.terminal.TerminalEmulator;
 import com.termux.terminal.TerminalSession;
-import com.termux.view.TerminalRenderer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -141,7 +140,6 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
      */
     public void onReloadProperties() {
         setSessionShortcuts();
-        applyTerminalRendererTuningFromProperties();
     }
 
     /**
@@ -168,15 +166,6 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
             // double back press. Check TerminalView.setTerminalCursorBlinkerState().
             setTerminalCursorBlinkerState(true);
             mTerminalCursorBlinkerStateAlreadySet = true;
-        }
-    }
-
-    private void applyTerminalRendererTuningFromProperties() {
-        float nudgePx = mActivity.getProperties().getTerminalPowerlineBaselineNudge();
-        TerminalRenderer.setPowerlineBaselineNudgePx(nudgePx);
-        if (mActivity.getTerminalView() != null && mActivity.getTerminalView().mRenderer != null) {
-            // Recreate renderer immediately so a `termux-reload-settings` reflects the new value.
-            mActivity.getTerminalView().setTextSize(mActivity.getPreferences().getFontSize());
         }
     }
 
