@@ -114,10 +114,11 @@ public class TermuxActivityRootView extends LinearLayout implements ViewTreeObse
             if (ROOT_VIEW_LOGGING_ENABLED)
                 Logger.logVerbose(LOG_TAG, "onMeasure: Setting bottom margin to " + marginBottom);
             ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) getLayoutParams();
-            params.setMargins(0, 0, 0, marginBottom);
-            setLayoutParams(params);
+            if (params.bottomMargin != marginBottom) {
+                params.setMargins(0, 0, 0, marginBottom);
+                setLayoutParams(params);
+            }
             marginBottom = null;
-            requestLayout();
         }
     }
 
@@ -220,13 +221,6 @@ public class TermuxActivityRootView extends LinearLayout implements ViewTreeObse
             } else {
                 if (root_view_logging_enabled)
                     Logger.logVerbose(LOG_TAG, "Bottom margin already equals 0");
-                // This is done so that when next time onMeasure() is called, lastMarginBottom is used.
-                // This is done since we **expect** the keyboard to have same dimensions next time layout
-                // changes, so best set margin while view is drawn the first time, otherwise it will
-                // cause a jitter when OnGlobalLayoutListener is called with margin 0 and it sets the
-                // likely same lastMarginBottom again and requesting a redraw. Hopefully, this logic
-                // works fine for all cases.
-                marginBottom = lastMarginBottom;
             }
         }
         // ELse find the part of the extra keys/terminal that is hidden and add a margin accordingly

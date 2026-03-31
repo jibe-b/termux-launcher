@@ -220,10 +220,25 @@
         </RelativeLayout>
     </FrameLayout>
 
-    <View
+    <FrameLayout
         android:id="@+id/activity_termux_bottom_space_view"
         android:layout_width="match_parent"
-        android:layout_height="1dp"
-        android:background="@android:color/transparent" />
+        android:layout_height="1dp">
+
+        <com.github.mmin18.widget.RealtimeBlurView
+            android:id="@+id/activity_termux_bottom_space_blur"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:visibility="gone"
+            app:realtimeBlurRadius="10dp"
+            app:realtimeOverlayColor="@android:color/transparent" />
+
+        <View
+            android:id="@+id/activity_termux_bottom_space_background"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:visibility="gone"
+            android:background="@color/background_accent" />
+    </FrameLayout>
 
 </com.termux.app.terminal.TermuxActivityRootView>
