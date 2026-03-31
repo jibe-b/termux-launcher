@@ -567,8 +567,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View appsBarViewPager = findViewById(R.id.apps_bar_viewpager);
         View extraKeysBackground = findViewById(R.id.extrakeys_background);
         View extraKeysBackgroundBlur = findViewById(R.id.extrakeys_backgroundblur);
-        View bottomSpaceBackground = findViewById(R.id.activity_termux_bottom_space_background);
-        View bottomSpaceBlur = findViewById(R.id.activity_termux_bottom_space_blur);
         View azRow = findViewById(R.id.apps_bar_az_row);
         View azFxUnderlay = findViewById(R.id.apps_bar_az_fx_underlay);
         View azFxOverlay = findViewById(R.id.apps_bar_az_fx_overlay);
@@ -578,7 +576,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         float barAlpha = mPreferences.getAppBarOpacity() / 100f;
         int blurRadiusDp = mPreferences.getExtraKeysBlurRadius();
         applyRealtimeBlurRadius(extraKeysBackgroundBlur, blurRadiusDp);
-        applyRealtimeBlurRadius(bottomSpaceBlur, blurRadiusDp);
         // App bar uses the combined extra-keys background surface.
 
         if (!isToolbarShown) {
@@ -590,12 +587,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
             if (extraKeysBackground != null) {
                 extraKeysBackground.setVisibility(View.GONE);
-            }
-            if (bottomSpaceBackground != null) {
-                bottomSpaceBackground.setVisibility(View.GONE);
-            }
-            if (bottomSpaceBlur != null) {
-                bottomSpaceBlur.setVisibility(View.GONE);
             }
             if (appsBarViewPager != null) {
                 appsBarViewPager.setVisibility(View.GONE);
@@ -632,16 +623,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             extraKeysBackground.setVisibility(View.VISIBLE);
             extraKeysBackground.setAlpha(isBlurEnabled ? barAlpha : 1.0f);
         }
-        if (bottomSpaceBackground != null) {
-            bottomSpaceBackground.setVisibility(View.VISIBLE);
-            bottomSpaceBackground.setAlpha(isBlurEnabled ? barAlpha : 1.0f);
-        }
 
         if (extraKeysBackgroundBlur != null) {
             extraKeysBackgroundBlur.setVisibility(isBlurEnabled ? View.VISIBLE : View.GONE);
-        }
-        if (bottomSpaceBlur != null) {
-            bottomSpaceBlur.setVisibility(isBlurEnabled ? View.VISIBLE : View.GONE);
         }
     }
 

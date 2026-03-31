@@ -50,8 +50,8 @@ import com.termux.shared.view.ViewUtils;
  * This overlap may happen even without `enforce-char-based-input=true` for keyboards with extended layouts
  * like number row, etc.
  *
- * To fix these issues, `activity_termux.xml` has a transparent
- * `activity_termux_bottom_space_view` probe view at the bottom that does not consume visible height.
+ * To fix these issues, `activity_termux.xml` has a transparent 1dp
+ * `activity_termux_bottom_space_view` probe view at the bottom.
  * When {@link TermuxActivity} {@link ViewTreeObserver.OnGlobalLayoutListener} is
  * called when any of the sub view layouts change,  like keyboard opening/closing keyboard,
  * extra keys/input view switched, etc, we check if the bottom space view is visible or not.
@@ -68,6 +68,7 @@ public class TermuxActivityRootView extends LinearLayout implements ViewTreeObse
     public Integer lastMarginBottom;
     public long lastMarginBottomTime;
     public long lastMarginBottomExtraTime;
+    private long lastMarginApplyTime;
 
     /** Log root view events. */
     private boolean ROOT_VIEW_LOGGING_ENABLED = false;
@@ -75,6 +76,10 @@ public class TermuxActivityRootView extends LinearLayout implements ViewTreeObse
     private static final String LOG_TAG = "TermuxActivityRootView";
 
     private static int mStatusBarHeight;
+    private static final int SMALL_MARGIN_THRESHOLD_DP = 16;
+    private static final int MAX_MARGIN_ADJUSTMENT_DP = 240;
+    private static final int JITTER_DELTA_THRESHOLD_DP = 28;
+    private static final long MARGIN_APPLY_DEBOUNCE_MS = 140L;
 
     public TermuxActivityRootView(Context context) {
         super(context);
@@ -227,11 +232,30 @@ public class TermuxActivityRootView extends LinearLayout implements ViewTreeObse
         // ELse find the part of the extra keys/terminal that is hidden and add a margin accordingly
         else {
             int pxHidden = bottomSpaceViewRect.bottom - windowAvailableRect.bottom;
+            // Avoid tiny margin oscillations that can cause flicker during keyboard transitions.
+            int smallMarginThresholdPx = (int) ViewUtils.dpToPx(getContext(), SMALL_MARGIN_THRESHOLD_DP);
+            if (pxHidden > 0 && pxHidden <= smallMarginThresholdPx) {
+                pxHidden = 0;
+            }
+            // Guard against pathological IME measurements that can push content too far.
+            int maxMarginPx = (int) ViewUtils.dpToPx(getContext(), MAX_MARGIN_ADJUSTMENT_DP);
+            if (pxHidden > maxMarginPx) {
+                pxHidden = maxMarginPx;
+            }
 
             if (root_view_logging_enabled)
                 Logger.logVerbose(LOG_TAG, "pxHidden " + pxHidden + ", bottom " + params.bottomMargin);
 
             boolean setMargin = params.bottomMargin != pxHidden;
+            // Debounce small, rapid margin churn while IME candidate/suggestion rows animate.
+            int jitterDeltaPx = (int) ViewUtils.dpToPx(getContext(), JITTER_DELTA_THRESHOLD_DP);
+            long now = System.currentTimeMillis();
+            if (params.bottomMargin > 0 && pxHidden > 0 &&
+                Math.abs(pxHidden - params.bottomMargin) <= jitterDeltaPx &&
+                (now - lastMarginApplyTime) < MARGIN_APPLY_DEBOUNCE_MS) {
+                setMargin = false;
+                pxHidden = params.bottomMargin;
+            }
 
             // If invisible despite margin, i.e a margin was added, but the bottom of bottomSpaceViewRect
             // is still below that of windowAvailableRect, this will trigger OnGlobalLayoutListener
@@ -265,6 +289,7 @@ public class TermuxActivityRootView extends LinearLayout implements ViewTreeObse
                 params.setMargins(0, 0, 0, pxHidden);
                 setLayoutParams(params);
                 lastMarginBottom = pxHidden;
+                lastMarginApplyTime = now;
             } else {
                 if (root_view_logging_enabled)
                     Logger.logVerbose(LOG_TAG, "Bottom margin already equals " + pxHidden);
