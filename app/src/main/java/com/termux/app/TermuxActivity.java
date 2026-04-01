@@ -90,6 +90,7 @@ import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
 import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsAnimationCompat;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsCompat.Type;
@@ -337,6 +338,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean mSeamlessStatusBackgroundActive;
     private long mLastEmptySessionRecoveryElapsedMs;
     private int mImeBottomInsetPx;
+    private int mPendingImeBottomInsetPx;
+    private boolean mImeInsetsAnimationRunning;
     private long mLastImeMarginApplyTimeMs;
     private static final int IME_MARGIN_SMALL_THRESHOLD_DP = 16;
     private static final int IME_MARGIN_MAX_DP = 240;
@@ -388,11 +391,42 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mStatusBarInsetTop = insetsCompat.getInsets(Type.statusBars()).top;
             int imeInsetBottom = insetsCompat.getInsets(Type.ime()).bottom;
             mImeBottomInsetPx = Math.max(0, imeInsetBottom - mNavBarHeight);
+            mPendingImeBottomInsetPx = mImeBottomInsetPx;
             applyTerminalStatusBarInset(mSeamlessStatusBackgroundActive ? mStatusBarInsetTop : 0);
             if (mPreferences != null && mPreferences.isTerminalMarginAdjustmentEnabled() && shouldUseImeInsetsMarginAdjustment()) {
-                scheduleImeDrivenRootBottomMarginApply(mImeBottomInsetPx);
+                if (!mImeInsetsAnimationRunning) {
+                    scheduleImeDrivenRootBottomMarginApply(mImeBottomInsetPx);
+                }
             }
             return insetsCompat.toWindowInsets();
+        });
+        ViewCompat.setWindowInsetsAnimationCallback(content, new WindowInsetsAnimationCompat.Callback(
+            WindowInsetsAnimationCompat.Callback.DISPATCH_MODE_STOP
+        ) {
+            @Override
+            public void onPrepare(@NonNull WindowInsetsAnimationCompat animation) {
+                mImeInsetsAnimationRunning = true;
+            }
+
+            @NonNull
+            @Override
+            public WindowInsetsCompat onProgress(@NonNull WindowInsetsCompat insets,
+                                                 @NonNull List<WindowInsetsAnimationCompat> runningAnimations) {
+                if (shouldUseImeInsetsMarginAdjustment()) {
+                    int imeInsetBottom = insets.getInsets(Type.ime()).bottom;
+                    mImeBottomInsetPx = Math.max(0, imeInsetBottom - mNavBarHeight);
+                    mPendingImeBottomInsetPx = mImeBottomInsetPx;
+                }
+                return insets;
+            }
+
+            @Override
+            public void onEnd(@NonNull WindowInsetsAnimationCompat animation) {
+                mImeInsetsAnimationRunning = false;
+                if (mPreferences != null && mPreferences.isTerminalMarginAdjustmentEnabled() && shouldUseImeInsetsMarginAdjustment()) {
+                    scheduleImeDrivenRootBottomMarginApply(mPendingImeBottomInsetPx);
+                }
+            }
         });
         applySeamlessStatusBackgroundModeIfNeeded();
         ViewCompat.requestApplyInsets(content);
@@ -839,6 +873,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         unregisterTermuxActivityBroadcastReceiver();
         unregisterPackageChangeReceiver();
         unregisterLauncherAppsCallback();
+        mImeInsetsAnimationRunning = false;
         if (mPendingImeMarginApplyRunnable != null) {
             mAzGestureHandler.removeCallbacks(mPendingImeMarginApplyRunnable);
             mPendingImeMarginApplyRunnable = null;
