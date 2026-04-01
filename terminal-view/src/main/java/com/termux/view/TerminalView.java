@@ -169,6 +169,9 @@ public final class TerminalView extends View {
     public final static int KEY_EVENT_SOURCE_SOFT_KEYBOARD = 0;
 
     private static final String LOG_TAG = "TerminalView";
+    private boolean mScreenInvalidateScheduled;
+    private boolean mDeferSizeUpdate;
+    private boolean mPendingDeferredSizeUpdate;
 
     public TerminalView(Context context, AttributeSet attributes) {
         // NO_UCD (unused code)
@@ -530,7 +533,7 @@ public final class TerminalView extends View {
             mTopRow = 0;
         }
         mEmulator.clearScrollCounter();
-        invalidate();
+        scheduleScreenInvalidate();
         if (mAccessibilityEnabled) {
             // fire off events that the content of this control changed,
             // so that the accessibility service gets the updated text
@@ -1290,6 +1293,25 @@ public final class TerminalView extends View {
      * Check if the terminal size in rows and columns should be updated.
      */
     public void updateSize() {
+        if (mDeferSizeUpdate) {
+            mPendingDeferredSizeUpdate = true;
+            return;
+        }
+        updateSizeInternal();
+    }
+
+    public void setDeferSizeUpdate(boolean defer) {
+        if (mDeferSizeUpdate == defer) {
+            return;
+        }
+        mDeferSizeUpdate = defer;
+        if (!defer && mPendingDeferredSizeUpdate) {
+            mPendingDeferredSizeUpdate = false;
+            updateSizeInternal();
+        }
+    }
+
+    private void updateSizeInternal() {
         int viewWidth = getWidth();
         int viewHeight = getHeight();
         if (viewWidth == 0 || viewHeight == 0 || mTermSession == null)
@@ -1312,6 +1334,7 @@ public final class TerminalView extends View {
 
     @Override
     protected void onDraw(Canvas canvas) {
+        mScreenInvalidateScheduled = false;
         if (mEmulator == null) {
             canvas.drawColor(0XFF000000);
         } else {
@@ -1323,6 +1346,18 @@ public final class TerminalView extends View {
             mRenderer.render(mEmulator, canvas, mTopRow, sel[0], sel[1], sel[2], sel[3]);
             // render the text selection handles
             renderTextSelection();
+        }
+    }
+
+    private void scheduleScreenInvalidate() {
+        if (mScreenInvalidateScheduled) {
+            return;
+        }
+        mScreenInvalidateScheduled = true;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN) {
+            postInvalidateOnAnimation();
+        } else {
+            postInvalidate();
         }
     }
 

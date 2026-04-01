@@ -406,6 +406,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @Override
             public void onPrepare(@NonNull WindowInsetsAnimationCompat animation) {
                 mImeInsetsAnimationRunning = true;
+                if (mTerminalView != null && shouldUseImeInsetsMarginAdjustment()) {
+                    mTerminalView.setDeferSizeUpdate(true);
+                }
             }
 
             @NonNull
@@ -423,6 +426,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @Override
             public void onEnd(@NonNull WindowInsetsAnimationCompat animation) {
                 mImeInsetsAnimationRunning = false;
+                if (mTerminalView != null) {
+                    mTerminalView.setDeferSizeUpdate(false);
+                }
                 if (mPreferences != null && mPreferences.isTerminalMarginAdjustmentEnabled() && shouldUseImeInsetsMarginAdjustment()) {
                     scheduleImeDrivenRootBottomMarginApply(mPendingImeBottomInsetPx);
                 }
@@ -510,6 +516,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             } else {
                 addTermuxActivityRootViewGlobalLayoutListener();
             }
+        }
+        if (mTerminalView != null) {
+            mTerminalView.setDeferSizeUpdate(false);
         }
 
         if (mPreferences.isMonetBackgroundEnabled()) {
@@ -874,6 +883,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         unregisterPackageChangeReceiver();
         unregisterLauncherAppsCallback();
         mImeInsetsAnimationRunning = false;
+        if (mTerminalView != null) {
+            mTerminalView.setDeferSizeUpdate(false);
+        }
         if (mPendingImeMarginApplyRunnable != null) {
             mAzGestureHandler.removeCallbacks(mPendingImeMarginApplyRunnable);
             mPendingImeMarginApplyRunnable = null;
