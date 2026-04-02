@@ -52,16 +52,17 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     private static final String LOG_TAG = "TermuxTerminalSessionActivityClient";
     private final Handler mUiHandler = new Handler(Looper.getMainLooper());
     private boolean mTerminalScreenUpdatePending;
-    private final Runnable mTerminalScreenUpdateRunnable = () -> {
-        mTerminalScreenUpdatePending = false;
-        if (!mActivity.isVisible()) return;
-        if (mActivity.getCurrentSession() != null) {
-            mActivity.getTerminalView().onScreenUpdated();
-        }
-    };
+    private final Runnable mTerminalScreenUpdateRunnable;
 
     public TermuxTerminalSessionActivityClient(TermuxActivity activity) {
         this.mActivity = activity;
+        this.mTerminalScreenUpdateRunnable = () -> {
+            mTerminalScreenUpdatePending = false;
+            if (!mActivity.isVisible()) return;
+            if (mActivity.getCurrentSession() != null) {
+                mActivity.getTerminalView().onScreenUpdated();
+            }
+        };
     }
 
     /**
