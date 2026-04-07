@@ -2610,7 +2610,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         applyBackgroundLayerBottomInset(R.id.terminal_monetbackground, insetBottom);
         applyBackgroundLayerBottomInset(R.id.terminal_backgroundblur, insetBottom);
-        applyBackgroundLayerBottomInset(R.id.terminal_grain_overlay, insetBottom);
     }
 
     private void enforceAccessoryFxInvariants() {
