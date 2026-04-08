@@ -734,6 +734,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         blurView.setVisibility(blurRadiusDp > 0 ? View.VISIBLE : View.GONE);
     }
 
+    private boolean shouldUseWallpaperPassthroughMode() {
+        return mPreferences != null
+            && mPreferences.isUseSystemWallpaperEnabled()
+            && !mPreferences.isBackgroundImageEnabled();
+    }
+
+    private void syncTerminalWallpaperRenderingMode() {
+        if (mTerminalView == null) {
+            return;
+        }
+        mTerminalView.setUseTransparentFrameClear(shouldUseWallpaperPassthroughMode());
+    }
+
     private boolean shouldEnableSeamlessStatusBackground() {
         if (mPreferences == null || mProperties == null || mProperties.isUsingFullScreen()) {
             return false;
@@ -999,9 +1012,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // day or night theme takes affect.
         AppCompatActivityUtils.setNightMode(this, NightMode.getAppNightMode().getName(), true);
 
-        boolean useWallpaperTheme = mPreferences != null
-            && mPreferences.isUseSystemWallpaperEnabled()
-            && !mPreferences.isBackgroundImageEnabled();
+        boolean useWallpaperTheme = shouldUseWallpaperPassthroughMode();
         setTheme(useWallpaperTheme ? R.style.Theme_TermuxActivity_Wallpaper : R.style.Theme_TermuxActivity_DayNight_NoActionBar);
         Logger.logDebug(LOG_TAG, "Applied " + (useWallpaperTheme ? "wallpaper" : "normal") + " theme");
 
@@ -1807,6 +1818,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Set termux terminal view
         mTerminalView = findViewById(R.id.terminal_view);
         mTerminalView.setTerminalViewClient(mTermuxTerminalViewClient);
+        syncTerminalWallpaperRenderingMode();
         applySuggestionBarInputChar();
         if (mTermuxTerminalViewClient != null)
             mTermuxTerminalViewClient.onCreate();
@@ -2763,6 +2775,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         applyTerminalBlurBackground();
         applySeamlessStatusBackgroundModeIfNeeded();
+        syncTerminalWallpaperRenderingMode();
         if (mTermuxBackgroundManager != null)
             mTermuxBackgroundManager.updateBackground(true);
         FileReceiverActivity.updateFileReceiverActivityComponentsState(this);

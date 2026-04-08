@@ -68,6 +68,8 @@ public final class TerminalView extends View {
 
     public TerminalViewClient mClient;
 
+    private boolean mUseTransparentFrameClear;
+
     private TextSelectionCursorController mTextSelectionCursorController;
 
     private Handler mTerminalCursorBlinkerHandler;
@@ -1320,10 +1322,16 @@ public final class TerminalView extends View {
             if (mTextSelectionCursorController != null) {
                 mTextSelectionCursorController.getSelectors(sel);
             }
-            mRenderer.render(mEmulator, canvas, mTopRow, sel[0], sel[1], sel[2], sel[3]);
+            mRenderer.render(mEmulator, canvas, mTopRow, sel[0], sel[1], sel[2], sel[3], mUseTransparentFrameClear);
             // render the text selection handles
             renderTextSelection();
         }
+    }
+
+    public void setUseTransparentFrameClear(boolean useTransparentFrameClear) {
+        if (mUseTransparentFrameClear == useTransparentFrameClear) return;
+        mUseTransparentFrameClear = useTransparentFrameClear;
+        invalidate();
     }
 
     public TerminalSession getCurrentSession() {
