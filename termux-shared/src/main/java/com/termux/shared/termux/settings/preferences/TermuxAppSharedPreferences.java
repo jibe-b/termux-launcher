@@ -459,15 +459,6 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_BLUR_DOWNSAMPLE_FACTOR, DataUtils.clamp(value, 1, 8), false);
     }
 
-    public int getSessionsBlurRadius() {
-        int radius = SharedPreferenceUtils.getInt(mSharedPreferences, TERMUX_APP.KEY_SESSIONS_BLUR_RADIUS, TERMUX_APP.DEFAULT_VALUE_SESSIONS_BLUR_RADIUS);
-        return Math.max(radius, 0);
-    }
-
-    public void setSessionsBlurRadius(int value) {
-        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_SESSIONS_BLUR_RADIUS, Math.max(value, 0), false);
-    }
-
     public int getSessionsOpacity() {
         int opacity = SharedPreferenceUtils.getInt(mSharedPreferences, TERMUX_APP.KEY_SESSIONS_OPACITY, TERMUX_APP.DEFAULT_VALUE_SESSIONS_OPACITY);
         return DataUtils.clamp(opacity, 0, 100);

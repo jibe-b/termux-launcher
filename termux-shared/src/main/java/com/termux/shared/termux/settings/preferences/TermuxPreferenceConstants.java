@@ -323,13 +323,6 @@ public final class TermuxPreferenceConstants {
         public static final int DEFAULT_VALUE_TERMINAL_BLUR_DOWNSAMPLE_FACTOR = 4;
 
         /**
-         * Defines the key for sessions blur radius (dp). 0 disables blur.
-         */
-        public static final String KEY_SESSIONS_BLUR_RADIUS = "sessions_blur_radius";
-
-        public static final int DEFAULT_VALUE_SESSIONS_BLUR_RADIUS = 10;
-
-        /**
          * Defines the key for sessions menu opacity (percentage), where 100 is fully opaque.
          */
         public static final String KEY_SESSIONS_OPACITY = "sessions_opacity";

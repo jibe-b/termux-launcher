@@ -55,13 +55,9 @@ public class TermuxStylePreferencesFragment extends PreferenceFragmentCompat {
             return;
         boolean wallpaperPassthrough = preferences.isUseSystemWallpaperEnabled();
         Preference terminalBlurRadius = findPreference("terminal_blur_radius");
-        if (terminalBlurRadius != null) {
-            terminalBlurRadius.setEnabled(!wallpaperPassthrough);
-        }
+        if (terminalBlurRadius != null) terminalBlurRadius.setEnabled(!wallpaperPassthrough);
         Preference terminalBlurIntensity = findPreference("terminal_blur_downsample_factor");
-        if (terminalBlurIntensity != null) {
-            terminalBlurIntensity.setEnabled(!wallpaperPassthrough);
-        }
+        if (terminalBlurIntensity != null) terminalBlurIntensity.setEnabled(!wallpaperPassthrough);
     }
 }
 
@@ -171,9 +167,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
             case "terminal_blur_downsample_factor":
                 mPreferences.setTerminalBlurDownsampleFactor(value);
                 break;
-            case "sessions_blur_radius":
-                mPreferences.setSessionsBlurRadius(value);
-                break;
             case "sessions_opacity":
                 mPreferences.setSessionsOpacity(value);
                 break;
@@ -210,8 +203,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.getTerminalBlurRadius();
             case "terminal_blur_downsample_factor":
                 return mPreferences.getTerminalBlurDownsampleFactor();
-            case "sessions_blur_radius":
-                return mPreferences.getSessionsBlurRadius();
             case "sessions_opacity":
                 return mPreferences.getSessionsOpacity();
             case "extrakeys_blur_radius":

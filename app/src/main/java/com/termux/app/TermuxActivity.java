@@ -16,6 +16,7 @@ import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Rect;
 import android.graphics.RenderEffect;
 import android.graphics.RectF;
 import android.graphics.Shader;
@@ -532,6 +533,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mPreferences == null) {
             return;
         }
+        View drawerLayout = findViewById(R.id.drawer_layout);
         View terminalStatusSurface = findViewById(R.id.terminal_monetbackground);
         View terminalSurfaceHost = findViewById(R.id.terminal_surface_host);
         View terminalBodySurface = findViewById(R.id.terminal_background);
@@ -547,9 +549,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (shouldUseWallpaperPassthroughMode()) {
             boolean showSurface = shouldShowTerminalGlassSurface();
             int terminalSurfaceColor = showSurface ? resolveTerminalSurfaceColor() : Color.TRANSPARENT;
+            if (drawerLayout != null) {
+                drawerLayout.setBackgroundColor(terminalSurfaceColor);
+            }
             terminalSurfaceHost.setBackgroundColor(Color.TRANSPARENT);
-            terminalBodySurface.setBackgroundColor(terminalSurfaceColor);
-            terminalBodySurface.setVisibility(showSurface && Color.alpha(terminalSurfaceColor) > 0 ? View.VISIBLE : View.GONE);
+            terminalBodySurface.setBackgroundColor(Color.TRANSPARENT);
+            terminalBodySurface.setVisibility(View.GONE);
             if (terminalView != null) {
                 terminalView.setBackgroundColor(Color.TRANSPARENT);
             }
@@ -565,6 +570,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean blurEnabled = !shouldUseWallpaperPassthroughMode() && mPreferences.getTerminalBlurRadius() > 0;
         boolean showSurface = shouldShowTerminalGlassSurface() && !blurEnabled;
         int terminalSurfaceColor = showSurface ? resolveTerminalSurfaceColor() : Color.TRANSPARENT;
+        if (drawerLayout != null) {
+            drawerLayout.setBackgroundColor(Color.TRANSPARENT);
+        }
         terminalSurfaceHost.setBackgroundColor(Color.TRANSPARENT);
         terminalBodySurface.setBackgroundColor(terminalSurfaceColor);
         terminalBodySurface.setVisibility(showSurface && Color.alpha(terminalSurfaceColor) > 0 ? View.VISIBLE : View.GONE);
@@ -608,6 +616,52 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int baseColor = resolveGlassSurfaceBaseColor();
         int alpha = Math.round(Math.max(0f, Math.min(1f, surfaceAlpha)) * 255f);
         return (alpha << 24) | (baseColor & 0x00FFFFFF);
+    }
+
+    @Nullable
+    private Rect resolveAccessoryContentBounds() {
+        View accessoryContainer = findViewById(R.id.accessory_stack_container);
+        if (accessoryContainer == null || accessoryContainer.getWidth() <= 0 || accessoryContainer.getHeight() <= 0) {
+            return null;
+        }
+        int top = Integer.MAX_VALUE;
+        int bottom = Integer.MIN_VALUE;
+        int[] candidateIds = {
+            R.id.apps_bar_viewpager,
+            R.id.apps_bar_az_row,
+            R.id.terminal_toolbar_view_pager
+        };
+        for (int candidateId : candidateIds) {
+            View candidate = findViewById(candidateId);
+            if (candidate == null || candidate.getVisibility() != View.VISIBLE || candidate.getHeight() <= 0) {
+                continue;
+            }
+            top = Math.min(top, candidate.getTop());
+            bottom = Math.max(bottom, candidate.getBottom());
+        }
+        if (top == Integer.MAX_VALUE || bottom <= top) {
+            return null;
+        }
+        return new Rect(0, top, accessoryContainer.getWidth(), bottom);
+    }
+
+    private void applyAccessoryLayerBounds(int viewId, @Nullable Rect bounds) {
+        View view = findViewById(viewId);
+        if (view == null) {
+            return;
+        }
+        ViewGroup.LayoutParams layoutParams = view.getLayoutParams();
+        if (!(layoutParams instanceof RelativeLayout.LayoutParams)) {
+            return;
+        }
+        RelativeLayout.LayoutParams params = (RelativeLayout.LayoutParams) layoutParams;
+        int targetTop = bounds != null ? bounds.top : 0;
+        int targetHeight = bounds != null ? Math.max(0, bounds.height()) : ViewGroup.LayoutParams.MATCH_PARENT;
+        if (params.topMargin != targetTop || params.height != targetHeight) {
+            params.topMargin = targetTop;
+            params.height = targetHeight;
+            view.setLayoutParams(params);
+        }
     }
 
     private boolean shouldShowTerminalGlassSurface() {
@@ -726,7 +780,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void updateAccessoryRenderEffectBackdrop(@NonNull AccessoryRenderState state) {
         ImageView backdrop = findViewById(R.id.accessory_blur_backdrop);
         View accessoryContainer = findViewById(R.id.accessory_stack_container);
-        if (backdrop == null || accessoryContainer == null || accessoryContainer.getWidth() <= 0 || accessoryContainer.getHeight() <= 0) {
+        Rect contentBounds = resolveAccessoryContentBounds();
+        if (contentBounds != null) {
+            int topTrimPx = Math.min(
+                Math.round(ViewUtils.dpToPx(this, Math.min(6f, Math.max(0, state.blurRadiusDp) * 0.25f))),
+                Math.max(0, contentBounds.height() / 3)
+            );
+            contentBounds.top = Math.min(contentBounds.bottom, contentBounds.top + topTrimPx);
+        }
+        applyAccessoryLayerBounds(R.id.accessory_blur_backdrop, contentBounds);
+        applyAccessoryLayerBounds(R.id.extrakeys_background, contentBounds);
+        applyAccessoryLayerBounds(R.id.extrakeys_backgroundblur, contentBounds);
+        if (backdrop == null || accessoryContainer == null || accessoryContainer.getWidth() <= 0 || accessoryContainer.getHeight() <= 0 || contentBounds == null) {
             clearAccessoryRenderEffectBackdrop();
             return;
         }
@@ -735,7 +800,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
 
-        Bitmap wallpaperBackdrop = createWallpaperBackdropBitmapForView(accessoryContainer);
+        Bitmap wallpaperBackdrop = createWallpaperBackdropBitmapForView(backdrop);
         if (wallpaperBackdrop == null) {
             clearAccessoryRenderEffectBackdrop();
             return;

@@ -90,7 +90,6 @@
     <string name="action_font_and_color">Font and Color</string>
     <string name="action_set_background_image">Set system wallpaper</string>
     <string name="action_remove_background_image">Use opaque background</string>
-    <string name="action_set_system_wallpaper">Set system wallpaper</string>
 
     <string name="action_toggle_keep_screen_on">Keep screen on</string>
     <string name="action_open_help">Help</string>
@@ -136,21 +135,6 @@
     <string name="action_file_received_edit">Edit</string>
     <string name="action_file_received_open_directory">Open directory</string>
 
-
-
-    <!-- Termux Background Manager -->
-    <string name="title_restore_background_image">Background image detected. Do you want to restore it?</string>
-    <string name="error_background_image_loading_failed">Couldn\'t load background image. Setting background color.</string>
-    <string name="error_background_image_loading_from_gallery_failed">Failed to load image. Try another image.</string>
-
-
-
-    <!-- Termux System Wallpaper -->
-    <string name="error_termux_api_not_installed">Termux:API app not installed. Install it to enable termux-wallpaper.</string>
-    <string name="error_termux_wallpaper_not_found">termux-wallpaper not found. Run pkg install termux-api in Termux.</string>
-    <string name="error_termux_wallpaper_start_failed">Couldn\'t run termux-wallpaper. Using Android wallpaper setter.</string>
-    <string name="error_wallpaper_image_read_failed">Couldn\'t read the selected image. Check storage access or pick another image.</string>
-    <string name="error_wallpaper_image_write_failed">Couldn\'t save the image for wallpaper. Check storage access.</string>
     <string name="error_wallpaper_set_failed">Couldn\'t set wallpaper.</string>
 
 
@@ -283,12 +267,6 @@
             <!-- Background Category -->
             <string name="termux_background_header">Background</string>
 
-                <!-- Background Image -->
-                <string name="termux_background_image_enabled_title">Display background image</string>
-                <string name="termux_background_image_enabled_off">Background image will be disabled.
-                    To enable it, make sure that appropriate portrait and landscape files are present.
-                    If you want to set a new background, set it from context menu by long click on Terminal. (Default)</string>
-                <string name="termux_background_image_enabled_on">Background image will be enabled.</string>
                 <string name="termux_use_system_wallpaper_title">Use wallpaper passthrough</string>
                 <string name="termux_use_system_wallpaper_on">Use the Android system wallpaper behind the terminal surfaces.</string>
                 <string name="termux_use_system_wallpaper_off">Use an opaque terminal background instead of wallpaper passthrough.</string>
@@ -299,9 +277,6 @@
                 <string name="termux_monet_background_enabled_on">Tint the terminal overlay using wallpaper-derived Material colors.</string>
                 <string name="termux_terminal_background_opacity_title">Terminal opacity</string>
                 <string name="termux_terminal_background_opacity_summary">Adjust the opacity of the terminal faux-glass overlay.</string>
-                <string name="termux_monet_overlay_enabled_title">Use Monet overlay color</string>
-                <string name="termux_monet_overlay_enabled_off">Use the overlay color defined in termux.properties.</string>
-                <string name="termux_monet_overlay_enabled_on">Use the current Monet surface color for the overlay.</string>
                 <string name="termux_terminal_blur_radius_title">Terminal blur amount</string>
                 <string name="termux_terminal_blur_radius_summary">Adjust the radius of the terminal faux-glass blur. 0 disables blur.</string>
                 <string name="termux_terminal_blur_downsample_factor_title">Terminal blur intensity</string>
