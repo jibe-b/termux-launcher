@@ -512,8 +512,6 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     }
 
     public void updateBackgroundColor() {
-        // Background color may have changed. If the background is image and already set,
-        // no need for update.
-        mActivity.getmTermuxBackgroundManager().updateBackground(false);
+        mActivity.updateWindowBackgroundForCurrentSession();
     }
 }

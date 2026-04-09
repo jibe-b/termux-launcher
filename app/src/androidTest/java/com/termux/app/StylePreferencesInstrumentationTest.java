@@ -19,7 +19,6 @@ import static org.junit.Assert.assertNotNull;
 public class StylePreferencesInstrumentationTest {
 
     private static final String[] STYLE_PREFERENCE_KEYS = {
-            "background_image_enabled",
             "use_system_wallpaper",
             "terminal_background_opacity",
             "app_bar_opacity",

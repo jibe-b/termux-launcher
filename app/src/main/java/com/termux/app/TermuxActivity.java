@@ -53,8 +53,6 @@ import com.termux.app.launcher.data.LauncherConfigRepository;
 import com.termux.launcherctl.LauncherCtlApiServer;
 import com.termux.privileged.PrivilegedBackendManager;
 import com.termux.privileged.ShizukuBackend;
-import com.termux.app.style.TermuxBackgroundManager;
-import com.termux.app.style.TermuxSystemWallpaperManager;
 import com.termux.app.terminal.AccessoryStackLayoutPolicy;
 import com.termux.app.terminal.TermuxActivityRootView;
 import com.termux.app.terminal.TermuxTerminalSessionActivityClient;
@@ -183,16 +181,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * The termux sessions list controller.
      */
     TermuxSessionsListViewController mTermuxSessionListViewController;
-
-    /**
-     * The termux background manager for updating background.
-     */
-    TermuxBackgroundManager mTermuxBackgroundManager;
-
-    /**
-     * The termux system wallpaper manager for setting system wallpaper.
-     */
-    TermuxSystemWallpaperManager mTermuxSystemWallpaperManager;
 
     /**
      * The {@link TermuxActivity} broadcast receiver for various things like terminal style configuration changes.
@@ -410,8 +398,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         // Must be done every time activity is created in order to registerForActivityResult,
         // Even if the logic of launching is based on user input.
-        setBackgroundManager();
-        setSystemWallpaperManager();
         setTermuxTerminalViewAndClients();
         setTerminalToolbarView(savedInstanceState);
         setSettingsButtonView();
@@ -473,8 +459,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mTermuxTerminalSessionActivityClient.onStart();
         if (mTermuxTerminalViewClient != null)
             mTermuxTerminalViewClient.onStart();
-        if (mTermuxBackgroundManager != null)
-            mTermuxBackgroundManager.updateBackground(true);
+        updateWindowBackgroundForCurrentSession();
     
         if (mPreferences.isTerminalMarginAdjustmentEnabled()) {
             addTermuxActivityRootViewGlobalLayoutListener();
@@ -512,6 +497,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mTermuxTerminalViewClient.onResume();
         maybeRecoverFromEmptySession("onResume");
 
+        updateWindowBackgroundForCurrentSession();
         syncTerminalWallpaperRenderingMode();
         applyTerminalSurfaceAppearance();
         configureBackgroundBlur(R.id.sessions_backgroundblur, R.id.sessions_background, false, mPreferences.getSessionsOpacity() / 100f, 0);
@@ -781,8 +767,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private boolean shouldUseWallpaperPassthroughMode() {
         return mPreferences != null
-            && mPreferences.isUseSystemWallpaperEnabled()
-            && !mPreferences.isBackgroundImageEnabled();
+            && mPreferences.isUseSystemWallpaperEnabled();
     }
 
     private void syncTerminalWallpaperRenderingMode() {
@@ -918,14 +903,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mSuggestionBarView != null) {
             mSuggestionBarView.releaseResources();
         }
-        if (mTermuxBackgroundManager != null) {
-            mTermuxBackgroundManager.destroy();
-            mTermuxBackgroundManager = null;
-        }
-        if (mTermuxSystemWallpaperManager != null) {
-            mTermuxSystemWallpaperManager.destroy();
-            mTermuxSystemWallpaperManager = null;
-        }
         if (mTermuxService != null) {
             // Do not leave service and session clients with references to activity.
             mTermuxService.unsetTermuxTerminalSessionClient();
@@ -950,8 +927,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     public void onConfigurationChanged(@NonNull Configuration newConfig) {
         Logger.logVerbose(LOG_TAG, "onConfigurationChanged");
         super.onConfigurationChanged(newConfig);
-        if (mTermuxBackgroundManager != null)
-            mTermuxBackgroundManager.updateBackground(true);
+        updateWindowBackgroundForCurrentSession();
     }
 
     /**
@@ -2061,12 +2037,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         });
     }
 
-    private void setBackgroundManager() {
-        this.mTermuxBackgroundManager = new TermuxBackgroundManager(TermuxActivity.this);
+    private void launchSystemWallpaperPicker() {
+        mPreferences.setBackgroundImageEnabled(false);
+        mPreferences.setUseSystemWallpaperEnabled(true);
+        requestTermuxActivityStylingOnNextResume(this, true);
+        try {
+            startActivity(new Intent(Intent.ACTION_SET_WALLPAPER));
+        } catch (ActivityNotFoundException e) {
+            Logger.logStackTraceWithMessage(LOG_TAG, "No system wallpaper picker available", e);
+            showToast(getString(R.string.error_wallpaper_set_failed), true);
+        }
     }
 
-    private void setSystemWallpaperManager() {
-        this.mTermuxSystemWallpaperManager = new TermuxSystemWallpaperManager(TermuxActivity.this);
+    private void makeTerminalBackgroundOpaque() {
+        mPreferences.setBackgroundImageEnabled(false);
+        mPreferences.setUseSystemWallpaperEnabled(false);
+        mPreferences.setTerminalBackgroundOpacity(100);
+        mPreferences.setAppBarOpacity(100);
+        updateTermuxActivityStyling(this, true);
     }
 
     @SuppressLint("RtlHardcoded")
@@ -2168,10 +2156,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 showFontAndColorDialog();
                 return true;
             case CONTEXT_SUBMENU_SET_BACKROUND_IMAGE_ID:
-                mTermuxBackgroundManager.setBackgroundImage();
+                launchSystemWallpaperPicker();
                 return true;
             case CONTEXT_SUBMENU_REMOVE_BACKGROUND_IMAGE_ID:
-                mTermuxBackgroundManager.removeBackgroundImage(true);
+                makeTerminalBackgroundOpaque();
                 return true;
             case CONTEXT_MENU_TOGGLE_KEEP_SCREEN_ON:
                 toggleKeepScreenOn();
@@ -2396,8 +2384,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return mProperties;
     }
 
-    public TermuxBackgroundManager getmTermuxBackgroundManager() {
-        return mTermuxBackgroundManager;
+    public void updateWindowBackgroundForCurrentSession() {
+        if (getWindow() == null) {
+            return;
+        }
+        if (shouldUseWallpaperPassthroughMode()) {
+            getWindow().getDecorView().setBackgroundColor(Color.TRANSPARENT);
+            return;
+        }
+        TerminalSession session = getCurrentSession();
+        if (session != null && session.getEmulator() != null) {
+            getWindow().getDecorView().setBackgroundColor(
+                session.getEmulator().mColors.mCurrentColors[TextStyle.COLOR_INDEX_BACKGROUND]
+            );
+        } else {
+            getWindow().getDecorView().setBackgroundColor(ContextCompat.getColor(this, R.color.background_accent));
+        }
     }
 
     @Override
@@ -2814,8 +2816,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         applyTerminalBlurBackground();
         applySeamlessStatusBackgroundModeIfNeeded();
         syncTerminalWallpaperRenderingMode();
-        if (mTermuxBackgroundManager != null)
-            mTermuxBackgroundManager.updateBackground(true);
+        updateWindowBackgroundForCurrentSession();
         FileReceiverActivity.updateFileReceiverActivityComponentsState(this);
         if (mTermuxTerminalSessionActivityClient != null)
             mTermuxTerminalSessionActivityClient.onReloadActivityStyling();

@@ -88,8 +88,8 @@
 
     <string name="action_style_terminal">Style</string>
     <string name="action_font_and_color">Font and Color</string>
-    <string name="action_set_background_image">Set background image</string>
-    <string name="action_remove_background_image">Remove background image</string>
+    <string name="action_set_background_image">Set system wallpaper</string>
+    <string name="action_remove_background_image">Use opaque background</string>
     <string name="action_set_system_wallpaper">Set system wallpaper</string>
 
     <string name="action_toggle_keep_screen_on">Keep screen on</string>
@@ -291,7 +291,7 @@
                 <string name="termux_background_image_enabled_on">Background image will be enabled.</string>
                 <string name="termux_use_system_wallpaper_title">Use wallpaper passthrough</string>
                 <string name="termux_use_system_wallpaper_on">Use the Android system wallpaper behind the terminal surfaces.</string>
-                <string name="termux_use_system_wallpaper_off">Use the app-owned background model instead of wallpaper passthrough.</string>
+                <string name="termux_use_system_wallpaper_off">Use an opaque terminal background instead of wallpaper passthrough.</string>
                 
                 <!-- Monet Background -->
                 <string name="termux_monet_background_enabled_title">Terminal overlay material coloring</string>

@@ -11,10 +11,8 @@ import androidx.preference.Preference;
 import androidx.preference.PreferenceDataStore;
 import androidx.preference.PreferenceFragmentCompat;
 import androidx.preference.PreferenceManager;
-import androidx.preference.SwitchPreferenceCompat;
 import com.termux.R;
 import com.termux.app.TermuxActivity;
-import com.termux.app.style.TermuxBackgroundManager;
 import com.termux.shared.data.DataUtils;
 import com.termux.shared.file.FileUtils;
 import com.termux.shared.logger.Logger;
@@ -55,15 +53,7 @@ public class TermuxStylePreferencesFragment extends PreferenceFragmentCompat {
         TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(context, true);
         if (preferences == null)
             return;
-        SwitchPreferenceCompat backgroundImagePreference = findPreference("background_image_enabled");
-        if (backgroundImagePreference != null) {
-            // If background image preference is disabled and background images are
-            // missing, then don't allow user to enable it from setting.
-            if (!preferences.isBackgroundImageEnabled() && !TermuxBackgroundManager.isImageFilesExist(context, false)) {
-                backgroundImagePreference.setEnabled(false);
-            }
-        }
-        boolean wallpaperPassthrough = preferences.isUseSystemWallpaperEnabled() && !preferences.isBackgroundImageEnabled();
+        boolean wallpaperPassthrough = preferences.isUseSystemWallpaperEnabled();
         Preference terminalBlurRadius = findPreference("terminal_blur_radius");
         if (terminalBlurRadius != null) {
             terminalBlurRadius.setEnabled(!wallpaperPassthrough);
