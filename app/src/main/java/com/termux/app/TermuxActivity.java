@@ -538,8 +538,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mPreferences == null) {
             return;
         }
-        View terminalSurface = findViewById(R.id.terminal_monetbackground);
-        if (terminalSurface == null) {
+        View terminalStatusSurface = findViewById(R.id.terminal_monetbackground);
+        View terminalSurfaceHost = findViewById(R.id.terminal_surface_host);
+        if (terminalStatusSurface == null || terminalSurfaceHost == null) {
             return;
         }
         int sharedSurfaceColor = resolveGlassSurfaceBaseColor();
@@ -549,13 +550,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         boolean blurEnabled = !shouldUseWallpaperPassthroughMode() && mPreferences.getTerminalBlurRadius() > 0;
         boolean showSurface = shouldShowTerminalGlassSurface() && !blurEnabled;
-        terminalSurface.setVisibility(showSurface ? View.VISIBLE : View.GONE);
-        if (!showSurface) {
-            return;
-        }
-
-        terminalSurface.setBackgroundColor(resolveTerminalSurfaceColor());
-        terminalSurface.setAlpha(1f);
+        int terminalSurfaceColor = showSurface ? resolveTerminalSurfaceColor() : Color.TRANSPARENT;
+        terminalSurfaceHost.setBackgroundColor(terminalSurfaceColor);
+        terminalStatusSurface.setBackgroundColor(terminalSurfaceColor);
+        terminalStatusSurface.setVisibility(showSurface && mSeamlessStatusBackgroundActive ? View.VISIBLE : View.GONE);
     }
 
     private int resolveGlassSurfaceBaseColor() {
@@ -878,7 +876,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private void applyTerminalStatusBarInset(int insetTop) {
         int safeInsetTop = Math.max(0, insetTop);
-        applyBackgroundLayerTopInset(R.id.terminal_monetbackground, safeInsetTop);
+        updateViewHeight(R.id.terminal_monetbackground, safeInsetTop);
         applyBackgroundLayerTopInset(R.id.terminal_backgroundblur, safeInsetTop);
     }
 

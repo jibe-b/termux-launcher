@@ -14,6 +14,13 @@
         android:layout_height="0dp"
         android:layout_weight="1">
 
+        <View
+            android:id="@+id/terminal_monetbackground"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:visibility="gone"
+            android:background="@color/background_accent"/>
+
         <RelativeLayout
             android:id="@+id/activity_termux_root_relative_layout"
             android:layout_width="match_parent"
@@ -37,12 +44,6 @@
                 android:layout_height="match_parent"
                 android:clipChildren="false"
                 android:clipToPadding="false">
-
-                <View
-                    android:id="@+id/terminal_monetbackground"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:background="@color/background_accent"/>
 
                 <com.github.mmin18.widget.RealtimeBlurView
                     android:id="@+id/terminal_backgroundblur"
