@@ -533,7 +533,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mPreferences == null) {
             return;
         }
-        View drawerLayout = findViewById(R.id.drawer_layout);
         View terminalStatusSurface = findViewById(R.id.terminal_monetbackground);
         View terminalSurfaceHost = findViewById(R.id.terminal_surface_host);
         View terminalBodySurface = findViewById(R.id.terminal_background);
@@ -549,12 +548,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (shouldUseWallpaperPassthroughMode()) {
             boolean showSurface = shouldShowTerminalGlassSurface();
             int terminalSurfaceColor = showSurface ? resolveTerminalSurfaceColor() : Color.TRANSPARENT;
-            if (drawerLayout != null) {
-                drawerLayout.setBackgroundColor(terminalSurfaceColor);
-            }
             terminalSurfaceHost.setBackgroundColor(Color.TRANSPARENT);
-            terminalBodySurface.setBackgroundColor(Color.TRANSPARENT);
-            terminalBodySurface.setVisibility(View.GONE);
+            terminalBodySurface.setBackgroundColor(terminalSurfaceColor);
+            terminalBodySurface.setVisibility(showSurface && Color.alpha(terminalSurfaceColor) > 0 ? View.VISIBLE : View.GONE);
             if (terminalView != null) {
                 terminalView.setBackgroundColor(Color.TRANSPARENT);
             }
@@ -570,9 +566,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean blurEnabled = !shouldUseWallpaperPassthroughMode() && mPreferences.getTerminalBlurRadius() > 0;
         boolean showSurface = shouldShowTerminalGlassSurface() && !blurEnabled;
         int terminalSurfaceColor = showSurface ? resolveTerminalSurfaceColor() : Color.TRANSPARENT;
-        if (drawerLayout != null) {
-            drawerLayout.setBackgroundColor(Color.TRANSPARENT);
-        }
         terminalSurfaceHost.setBackgroundColor(Color.TRANSPARENT);
         terminalBodySurface.setBackgroundColor(terminalSurfaceColor);
         terminalBodySurface.setVisibility(showSurface && Color.alpha(terminalSurfaceColor) > 0 ? View.VISIBLE : View.GONE);
@@ -783,8 +776,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         Rect contentBounds = resolveAccessoryContentBounds();
         if (contentBounds != null) {
             int topTrimPx = Math.min(
-                Math.round(ViewUtils.dpToPx(this, Math.min(6f, Math.max(0, state.blurRadiusDp) * 0.25f))),
-                Math.max(0, contentBounds.height() / 3)
+                Math.round(ViewUtils.dpToPx(this, Math.max(0, state.blurRadiusDp))),
+                Math.max(0, contentBounds.height() / 2)
             );
             contentBounds.top = Math.min(contentBounds.bottom, contentBounds.top + topTrimPx);
         }
