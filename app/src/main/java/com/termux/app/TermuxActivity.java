@@ -1072,8 +1072,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private void setMargins() {
         RelativeLayout relativeLayout = findViewById(R.id.activity_termux_root_relative_layout);
-        int marginHorizontal = mProperties.getTerminalMarginHorizontal();
-        int marginVertical = mProperties.getTerminalMarginVertical();
+        int marginHorizontal = shouldUseWallpaperPassthroughMode() ? 0 : mProperties.getTerminalMarginHorizontal();
+        int marginVertical = shouldUseWallpaperPassthroughMode() ? 0 : mProperties.getTerminalMarginVertical();
         ViewUtils.setLayoutMarginsInDp(relativeLayout, marginHorizontal, marginVertical, marginHorizontal, marginVertical);
     }
 
