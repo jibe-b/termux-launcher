@@ -169,12 +169,37 @@
             android:layout_alignParentBottom="true"
             android:visibility="gone">
 
-            <ImageView
-                android:id="@+id/accessory_blur_backdrop"
+            <FrameLayout
+                android:id="@+id/accessory_surface_host"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:scaleType="fitXY"
-                android:visibility="gone" />
+                android:layout_alignParentBottom="true"
+                android:clipChildren="true"
+                android:clipToPadding="true"
+                android:visibility="gone">
+
+                <ImageView
+                    android:id="@+id/accessory_blur_backdrop"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:scaleType="fitXY"
+                    android:visibility="gone" />
+
+                <com.github.mmin18.widget.RealtimeBlurView
+                    android:id="@+id/extrakeys_backgroundblur"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:visibility="gone"
+                    app:realtimeBlurRadius="10dp"
+                    app:realtimeOverlayColor="@android:color/transparent" />
+
+                <View
+                    android:id="@+id/extrakeys_background"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:visibility="gone"
+                    android:background="@color/background_accent"/>
+            </FrameLayout>
 
             <com.termux.app.LauncherAzGestureFxView
                 android:id="@+id/apps_bar_az_fx_underlay"
@@ -184,21 +209,6 @@
                 android:clickable="false"
                 android:focusable="false"
                 android:visibility="gone" />
-
-            <com.github.mmin18.widget.RealtimeBlurView
-                android:id="@+id/extrakeys_backgroundblur"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:visibility="gone"
-                app:realtimeBlurRadius="10dp"
-                app:realtimeOverlayColor="@android:color/transparent" />
-
-            <View
-                android:id="@+id/extrakeys_background"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:visibility="gone"
-                android:background="@color/background_accent"/>
 
             <androidx.viewpager.widget.ViewPager
                 android:id="@+id/apps_bar_viewpager"

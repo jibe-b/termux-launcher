@@ -101,7 +101,7 @@ public final class TerminalRenderer {
     /**
      * Render the terminal to a canvas with at a specified row scroll, and an optional rectangular selection.
      */
-    public final void render(TerminalEmulator mEmulator, Canvas canvas, int topRow, int selectionY1, int selectionY2, int selectionX1, int selectionX2, boolean transparentBackground) {
+    public final void render(TerminalEmulator mEmulator, Canvas canvas, int topRow, int selectionY1, int selectionY2, int selectionX1, int selectionX2, boolean transparentBackground, int transparentOverlayColor) {
         final boolean boldWithBright = mEmulator.isBoldWithBright();
         final boolean reverseVideo = mEmulator.isReverseVideo();
         final int endRow = topRow + mEmulator.mRows;
@@ -116,7 +116,7 @@ public final class TerminalRenderer {
         if (reverseVideo) {
             canvas.drawColor(palette[TextStyle.COLOR_INDEX_FOREGROUND], PorterDuff.Mode.SRC);
         } else if (transparentBackground) {
-            canvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.SRC);
+            canvas.drawColor(transparentOverlayColor, PorterDuff.Mode.SRC);
         }
         float heightOffset = mFontLineSpacingAndAscent;
         for (int row = topRow; row < endRow; row++) {

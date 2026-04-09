@@ -69,6 +69,7 @@ public final class TerminalView extends View {
     public TerminalViewClient mClient;
 
     private boolean mUseTransparentFrameClear;
+    private int mTransparentFrameOverlayColor;
 
     private TextSelectionCursorController mTextSelectionCursorController;
 
@@ -1322,7 +1323,7 @@ public final class TerminalView extends View {
             if (mTextSelectionCursorController != null) {
                 mTextSelectionCursorController.getSelectors(sel);
             }
-            mRenderer.render(mEmulator, canvas, mTopRow, sel[0], sel[1], sel[2], sel[3], mUseTransparentFrameClear);
+            mRenderer.render(mEmulator, canvas, mTopRow, sel[0], sel[1], sel[2], sel[3], mUseTransparentFrameClear, mTransparentFrameOverlayColor);
             // render the text selection handles
             renderTextSelection();
         }
@@ -1331,6 +1332,12 @@ public final class TerminalView extends View {
     public void setUseTransparentFrameClear(boolean useTransparentFrameClear) {
         if (mUseTransparentFrameClear == useTransparentFrameClear) return;
         mUseTransparentFrameClear = useTransparentFrameClear;
+        invalidate();
+    }
+
+    public void setTransparentFrameOverlayColor(int transparentFrameOverlayColor) {
+        if (mTransparentFrameOverlayColor == transparentFrameOverlayColor) return;
+        mTransparentFrameOverlayColor = transparentFrameOverlayColor;
         invalidate();
     }
 
