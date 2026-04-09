@@ -620,7 +620,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return mPreferences.isMonetBackgroundEnabled()
             || mPreferences.isMonetOverlayEnabled()
             || mPreferences.getTerminalBlurRadius() > 0
-            || mPreferences.getTerminalBackgroundOpacity() < 100;
+            || mPreferences.getTerminalBackgroundOpacity() > 0;
     }
 
     private void configureBackgroundBlur(int blurViewId, int backgroundViewId, boolean isBlurEnabled, float surfaceAlpha, int blurRadiusDp) {
