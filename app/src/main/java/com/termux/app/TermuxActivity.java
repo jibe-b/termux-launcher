@@ -13,6 +13,7 @@ import android.content.pm.LauncherApps;
 import android.content.pm.ShortcutInfo;
 import android.content.res.Configuration;
 import android.graphics.Color;
+import android.graphics.PixelFormat;
 import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
@@ -100,6 +101,7 @@ import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Consumer;
 
 /**
  * A terminal emulator activity.
@@ -331,6 +333,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean mLastImeVisible;
     @Nullable private String mPendingAccessoryRenderReason;
     @Nullable private ViewTreeObserver.OnGlobalLayoutListener mAccessoryKeyboardLayoutListener;
+    @Nullable private WindowManager mSystemWindowManager;
+    @Nullable private View mAccessorySystemBlurPlaneView;
+    @Nullable private WindowManager.LayoutParams mAccessorySystemBlurLayoutParams;
+    @Nullable private Consumer<Boolean> mCrossWindowBlurEnabledListener;
+    private boolean mCrossWindowBlurEnabled = true;
+    private final int[] mTmpViewLocation = new int[2];
     private long mLastAccessoryRenderSyncUptimeMs;
     private final Handler mAccessoryRenderHandler = new Handler(Looper.getMainLooper());
     private final Runnable mAccessoryRenderSyncRunnable = () -> {
@@ -372,6 +380,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mIsInvalidState = true;
             return;
         }
+        registerCrossWindowBlurListenerIfSupported();
         mPreferences.migrateTerminalMarginAdjustmentDefaultIfNeeded();
         mLauncherTransitionController = new LauncherTransitionController(this, mPreferences);
         setMargins();
@@ -658,6 +667,113 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         applyAccessoryRenderState(buildAccessoryRenderState());
     }
 
+    private void registerCrossWindowBlurListenerIfSupported() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            return;
+        }
+        mSystemWindowManager = getSystemService(WindowManager.class);
+        if (mSystemWindowManager == null) {
+            return;
+        }
+        mCrossWindowBlurEnabled = mSystemWindowManager.isCrossWindowBlurEnabled();
+        mCrossWindowBlurEnabledListener = enabled -> {
+            if (mCrossWindowBlurEnabled == enabled) {
+                return;
+            }
+            mCrossWindowBlurEnabled = enabled;
+            scheduleAccessoryRenderSync("crossWindowBlur:" + enabled);
+        };
+        mSystemWindowManager.addCrossWindowBlurEnabledListener(getMainExecutor(), mCrossWindowBlurEnabledListener);
+    }
+
+    private boolean shouldUseAccessorySystemBlur(@NonNull AccessoryRenderState state) {
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+            && shouldUseWallpaperPassthroughMode()
+            && state.toolbarShown
+            && state.blurEnabled
+            && mCrossWindowBlurEnabled
+            && getWindow() != null
+            && getWindow().getDecorView().getWindowToken() != null;
+    }
+
+    private void ensureAccessorySystemBlurPlane() {
+        if (mAccessorySystemBlurPlaneView != null) {
+            return;
+        }
+        mAccessorySystemBlurPlaneView = new View(this);
+    }
+
+    private void removeAccessorySystemBlurPlane() {
+        if (mAccessorySystemBlurPlaneView == null || mSystemWindowManager == null) {
+            return;
+        }
+        try {
+            mSystemWindowManager.removeViewImmediate(mAccessorySystemBlurPlaneView);
+        } catch (IllegalArgumentException ignored) {
+            // Already detached.
+        }
+        mAccessorySystemBlurPlaneView = null;
+        mAccessorySystemBlurLayoutParams = null;
+    }
+
+    private void updateAccessorySystemBlurPlane(@NonNull AccessoryRenderState state) {
+        if (!shouldUseAccessorySystemBlur(state)) {
+            removeAccessorySystemBlurPlane();
+            return;
+        }
+        View accessoryContainer = findViewById(R.id.accessory_stack_container);
+        if (accessoryContainer == null || accessoryContainer.getWidth() <= 0 || accessoryContainer.getHeight() <= 0) {
+            removeAccessorySystemBlurPlane();
+            return;
+        }
+        if (mSystemWindowManager == null) {
+            mSystemWindowManager = getSystemService(WindowManager.class);
+            if (mSystemWindowManager == null) {
+                return;
+            }
+        }
+
+        ensureAccessorySystemBlurPlane();
+        accessoryContainer.getLocationOnScreen(mTmpViewLocation);
+
+        int blurRadiusPx = Math.round(ViewUtils.dpToPx(this, Math.max(0, state.blurRadiusDp)));
+        WindowManager.LayoutParams layoutParams = mAccessorySystemBlurLayoutParams;
+        if (layoutParams == null) {
+            layoutParams = new WindowManager.LayoutParams(
+                accessoryContainer.getWidth(),
+                accessoryContainer.getHeight(),
+                WindowManager.LayoutParams.TYPE_APPLICATION_MEDIA,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                    | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                    | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                    | WindowManager.LayoutParams.FLAG_BLUR_BEHIND,
+                PixelFormat.TRANSLUCENT
+            );
+            layoutParams.gravity = Gravity.TOP | Gravity.START;
+            layoutParams.token = getWindow().getDecorView().getWindowToken();
+            layoutParams.setTitle("termux_accessory_blur_plane");
+            mAccessorySystemBlurLayoutParams = layoutParams;
+        }
+
+        layoutParams.width = accessoryContainer.getWidth();
+        layoutParams.height = accessoryContainer.getHeight();
+        layoutParams.x = mTmpViewLocation[0];
+        layoutParams.y = mTmpViewLocation[1];
+        layoutParams.setBlurBehindRadius(blurRadiusPx);
+        mAccessorySystemBlurPlaneView.setBackgroundColor(resolveAccessorySurfaceColor(state.barAlpha));
+
+        try {
+            if (mAccessorySystemBlurPlaneView.getParent() == null) {
+                mSystemWindowManager.addView(mAccessorySystemBlurPlaneView, layoutParams);
+            } else {
+                mSystemWindowManager.updateViewLayout(mAccessorySystemBlurPlaneView, layoutParams);
+            }
+        } catch (RuntimeException e) {
+            Logger.logStackTraceWithMessage(LOG_TAG, "Failed to update accessory system blur plane", e);
+            removeAccessorySystemBlurPlane();
+        }
+    }
+
     private void applyAccessoryRenderState(@NonNull AccessoryRenderState state) {
         View accessoryContainer = findViewById(R.id.accessory_stack_container);
         View terminalToolbarViewPager = findViewById(R.id.terminal_toolbar_view_pager);
@@ -669,8 +785,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View azRow = findViewById(R.id.apps_bar_az_row);
         View azFxUnderlay = findViewById(R.id.apps_bar_az_fx_underlay);
         View azFxOverlay = findViewById(R.id.apps_bar_az_fx_overlay);
+        boolean useSystemBlur = shouldUseAccessorySystemBlur(state);
 
-        if (extraKeysBackgroundBlur != null) {
+        if (extraKeysBackgroundBlur != null && !useSystemBlur) {
             applyRealtimeBlurRadius(extraKeysBackgroundBlur, state.blurRadiusDp);
             applyRealtimeBlurDownsampleFactor(extraKeysBackgroundBlur, ACCESSORY_BLUR_DOWNSAMPLE_FACTOR);
             applyRealtimeBlurOverlayColor(
@@ -715,6 +832,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (azFxUnderlay != null) {
                 azFxUnderlay.setVisibility(View.GONE);
             }
+            removeAccessorySystemBlurPlane();
             resetAzOverflowAffordanceState();
             return;
         }
@@ -739,7 +857,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         if (extraKeysBackground != null) {
-            extraKeysBackground.setVisibility(state.blurEnabled ? View.GONE : View.VISIBLE);
+            extraKeysBackground.setVisibility((state.blurEnabled || useSystemBlur) ? View.GONE : View.VISIBLE);
             extraKeysBackground.setAlpha(state.barAlpha);
         }
         if (bottomSpaceBackground != null) {
@@ -747,8 +865,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         if (extraKeysBackgroundBlur != null) {
-            extraKeysBackgroundBlur.setVisibility(state.blurEnabled ? View.VISIBLE : View.GONE);
+            extraKeysBackgroundBlur.setVisibility(state.blurEnabled && !useSystemBlur ? View.VISIBLE : View.GONE);
         }
+        updateAccessorySystemBlurPlane(state);
         updateAzOverflowAffordance();
     }
 
@@ -919,6 +1038,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mAccessoryRenderHandler.removeCallbacks(mAccessoryRenderSyncRunnable);
         mAccessoryRenderSyncPending = false;
         mPendingAccessoryRenderReason = null;
+        removeAccessorySystemBlurPlane();
         mAzGestureHandler.removeCallbacks(mPackageRefreshRunnable);
         getDrawer().closeDrawers();
     }
@@ -929,6 +1049,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         Logger.logDebug(LOG_TAG, "onDestroy");
         if (mIsInvalidState)
             return;
+        removeAccessorySystemBlurPlane();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+            && mSystemWindowManager != null
+            && mCrossWindowBlurEnabledListener != null) {
+            mSystemWindowManager.removeCrossWindowBlurEnabledListener(mCrossWindowBlurEnabledListener);
+            mCrossWindowBlurEnabledListener = null;
+        }
         if (mSuggestionBarView != null) {
             mSuggestionBarView.releaseResources();
         }
