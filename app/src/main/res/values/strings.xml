@@ -329,8 +329,8 @@
         <string name="action_report_issue">Report issue</string>
         <string name="action_style_terminal">Style</string>
         <string name="action_toggle_keep_screen_on">Keep screen on</string>
-        <string name="error_background_image_loading_failed">Couldn&#39;t load the background image.</string>
-        <string name="error_background_image_loading_from_gallery_failed">Couldn&#39;t load the selected image.</string>
+        <string name="error_background_image_loading_failed">Failed to load the background image.</string>
+        <string name="error_background_image_loading_from_gallery_failed">Failed to load the selected image.</string>
         <string name="termux_background_image_enabled_title">Display background image</string>
         <string name="termux_background_image_enabled_off">Background images are disabled.</string>
         <string name="termux_background_image_enabled_on">Background images are enabled.</string>
