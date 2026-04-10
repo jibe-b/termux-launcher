@@ -2538,16 +2538,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             getWindow().getDecorView().setBackgroundColor(Color.TRANSPARENT);
             return;
         }
-        TerminalSession session = getCurrentSession();
-        if (session != null && session.getEmulator() != null) {
-            getWindow().getDecorView().setBackgroundColor(
-                session.getEmulator().mColors.mCurrentColors[TextStyle.COLOR_INDEX_BACKGROUND]
-            );
-        } else {
-            getWindow().getDecorView().setBackgroundColor(
-                getTermuxThemeColor(com.termux.shared.R.attr.termuxColorSurfaceBase, R.color.termux_surface_base)
-            );
-        }
+        getWindow().getDecorView().setBackgroundColor(
+            getTermuxThemeColor(com.termux.shared.R.attr.termuxColorSurfaceBase, R.color.termux_surface_base)
+        );
     }
 
     @Override
