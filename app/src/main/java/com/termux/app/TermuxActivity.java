@@ -13,6 +13,7 @@ import android.content.pm.LauncherApps;
 import android.content.pm.ShortcutInfo;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Rect;
@@ -49,9 +50,17 @@ import android.widget.ListView;
 import android.widget.RelativeLayout;
 import android.widget.Toast;
 import android.widget.ArrayAdapter;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.PickVisualMediaRequest;
+import androidx.activity.result.contract.ActivityResultContracts;
 import com.github.mmin18.widget.RealtimeBlurView;
 import com.google.android.material.color.MaterialColors;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.canhub.cropper.CropImage;
+import com.canhub.cropper.CropImageContract;
+import com.canhub.cropper.CropImageContractOptions;
+import com.canhub.cropper.CropImageOptions;
+import com.canhub.cropper.CropImageView;
 import com.termux.R;
 import com.termux.app.api.file.FileReceiverActivity;
 import com.termux.app.launcher.animation.LauncherTransitionController;
@@ -108,6 +117,9 @@ import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.InputStream;
 
 /**
  * A terminal emulator activity.
@@ -346,6 +358,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private String mPendingAccessoryRenderReason;
     @Nullable private ViewTreeObserver.OnGlobalLayoutListener mAccessoryKeyboardLayoutListener;
     @Nullable private View.OnLayoutChangeListener mAccessoryLayoutChangeListener;
+    @Nullable private ActivityResultLauncher<PickVisualMediaRequest> mWallpaperPickerLauncher;
+    @Nullable private ActivityResultLauncher<CropImageContractOptions> mWallpaperCropLauncher;
     private final int[] mTmpParentLocation = new int[2];
     private final int[] mTmpViewLocation = new int[2];
     private long mLastAccessoryRenderSyncUptimeMs;
@@ -414,6 +428,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         // Must be done every time activity is created in order to registerForActivityResult,
         // Even if the logic of launching is based on user input.
+        registerWallpaperActivityResultLaunchers();
         setTermuxTerminalViewAndClients();
         setTerminalToolbarView(savedInstanceState);
         setSettingsButtonView();
@@ -814,8 +829,65 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         backdrop.setVisibility(View.GONE);
     }
 
+    private boolean shouldUseManagedWallpaperBlurSource() {
+        if (mPreferences == null) {
+            return false;
+        }
+        int storedWallpaperId = mPreferences.getManagedWallpaperSystemId();
+        if (storedWallpaperId <= 0 || storedWallpaperId != getCurrentSystemWallpaperId()) {
+            return false;
+        }
+        return getManagedWallpaperExactFile().isFile();
+    }
+
+    @Nullable
+    private Bitmap createManagedWallpaperBackdropBitmapForView(@NonNull View target, @NonNull View wallpaperFrame) {
+        File sourceFile = getManagedWallpaperExactFile();
+        Bitmap sourceBitmap = BitmapFactory.decodeFile(sourceFile.getAbsolutePath());
+        if (sourceBitmap == null) {
+            return null;
+        }
+
+        try {
+            Rect frameRect = getVisibleWallpaperFrameRect(wallpaperFrame);
+            Rect targetRect = new Rect();
+            int targetWidth = Math.max(1, target.getWidth());
+            int targetHeight = Math.max(1, target.getHeight());
+            if (!target.getGlobalVisibleRect(targetRect) || targetRect.width() <= 0 || targetRect.height() <= 0) {
+                target.getLocationOnScreen(mTmpViewLocation);
+                targetRect.set(
+                    mTmpViewLocation[0],
+                    mTmpViewLocation[1],
+                    mTmpViewLocation[0] + targetWidth,
+                    mTmpViewLocation[1] + targetHeight
+                );
+            }
+
+            Bitmap bitmap = Bitmap.createBitmap(targetWidth, targetHeight, Bitmap.Config.ARGB_8888);
+            Canvas canvas = new Canvas(bitmap);
+            Rect srcRect = new Rect(0, 0, sourceBitmap.getWidth(), sourceBitmap.getHeight());
+            Rect dstRect = new Rect(
+                frameRect.left - targetRect.left,
+                frameRect.top - targetRect.top,
+                frameRect.left - targetRect.left + frameRect.width(),
+                frameRect.top - targetRect.top + frameRect.height()
+            );
+            canvas.drawBitmap(sourceBitmap, srcRect, dstRect, null);
+            return bitmap;
+        } finally {
+            sourceBitmap.recycle();
+        }
+    }
+
     @Nullable
     private Bitmap createWallpaperBackdropBitmapForView(@NonNull View target, @NonNull View wallpaperFrame) {
+        if (shouldUseManagedWallpaperBlurSource()) {
+            Bitmap managedBackdrop = createManagedWallpaperBackdropBitmapForView(target, wallpaperFrame);
+            if (managedBackdrop != null) {
+                return managedBackdrop;
+            }
+        }
+
         WallpaperManager wallpaperManager = WallpaperManager.getInstance(this);
         Drawable wallpaper = wallpaperManager.getDrawable();
         if (wallpaper == null) {
@@ -824,44 +896,31 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         int targetWidth = Math.max(1, target.getWidth());
         int targetHeight = Math.max(1, target.getHeight());
-        Rect frameRect = new Rect();
-        if (!wallpaperFrame.getGlobalVisibleRect(frameRect) || frameRect.width() <= 0 || frameRect.height() <= 0) {
-            wallpaperFrame.getLocationOnScreen(mTmpParentLocation);
-            frameRect.set(
-                mTmpParentLocation[0],
-                mTmpParentLocation[1],
-                mTmpParentLocation[0] + Math.max(1, wallpaperFrame.getWidth()),
-                mTmpParentLocation[1] + Math.max(1, wallpaperFrame.getHeight())
-            );
-        }
-        if (frameRect.width() <= 1 || frameRect.height() <= 1) {
+        int frameWidth = Math.max(1, wallpaperFrame.getWidth());
+        int frameHeight = Math.max(1, wallpaperFrame.getHeight());
+
+        if (frameWidth <= 1 || frameHeight <= 1) {
             DisplayMetrics realMetrics = new DisplayMetrics();
             getWindowManager().getDefaultDisplay().getRealMetrics(realMetrics);
-            frameRect.set(0, 0, Math.max(1, realMetrics.widthPixels), Math.max(1, realMetrics.heightPixels));
+            frameWidth = Math.max(1, realMetrics.widthPixels);
+            frameHeight = Math.max(1, realMetrics.heightPixels);
         }
 
-        Rect targetRect = new Rect();
-        if (!target.getGlobalVisibleRect(targetRect) || targetRect.width() <= 0 || targetRect.height() <= 0) {
-            target.getLocationOnScreen(mTmpViewLocation);
-            targetRect.set(
-                mTmpViewLocation[0],
-                mTmpViewLocation[1],
-                mTmpViewLocation[0] + targetWidth,
-                mTmpViewLocation[1] + targetHeight
-            );
-        }
+        int intrinsicWidth = wallpaper.getIntrinsicWidth() > 0 ? wallpaper.getIntrinsicWidth() : frameWidth;
+        int intrinsicHeight = wallpaper.getIntrinsicHeight() > 0 ? wallpaper.getIntrinsicHeight() : frameHeight;
+        float scale = Math.max((float) frameWidth / intrinsicWidth, (float) frameHeight / intrinsicHeight);
+        int drawWidth = Math.max(frameWidth, Math.round(intrinsicWidth * scale));
+        int drawHeight = Math.max(frameHeight, Math.round(intrinsicHeight * scale));
 
-        int intrinsicWidth = wallpaper.getIntrinsicWidth() > 0 ? wallpaper.getIntrinsicWidth() : frameRect.width();
-        int intrinsicHeight = wallpaper.getIntrinsicHeight() > 0 ? wallpaper.getIntrinsicHeight() : frameRect.height();
-        int desiredWidth = wallpaperManager.getDesiredMinimumWidth();
-        int desiredHeight = wallpaperManager.getDesiredMinimumHeight();
-        int sourceWidth = Math.max(frameRect.width(), Math.max(intrinsicWidth, Math.max(0, desiredWidth)));
-        int sourceHeight = Math.max(frameRect.height(), Math.max(intrinsicHeight, Math.max(0, desiredHeight)));
-        float scale = Math.max((float) frameRect.width() / sourceWidth, (float) frameRect.height() / sourceHeight);
-        int drawWidth = Math.max(frameRect.width(), Math.round(sourceWidth * scale));
-        int drawHeight = Math.max(frameRect.height(), Math.round(sourceHeight * scale));
-        int drawLeft = frameRect.left + Math.round((frameRect.width() - drawWidth) / 2f);
-        int drawTop = frameRect.top + Math.round((frameRect.height() - drawHeight) / 2f);
+        wallpaperFrame.getLocationOnScreen(mTmpParentLocation);
+        int frameScreenX = mTmpParentLocation[0];
+        int frameScreenY = mTmpParentLocation[1];
+        int offsetLeft = frameScreenX + Math.round((frameWidth - drawWidth) / 2f);
+        int offsetTop = frameScreenY + Math.round((frameHeight - drawHeight) / 2f);
+
+        target.getLocationOnScreen(mTmpViewLocation);
+        int targetScreenX = mTmpViewLocation[0];
+        int targetScreenY = mTmpViewLocation[1];
 
         Bitmap bitmap = Bitmap.createBitmap(targetWidth, targetHeight, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(bitmap);
@@ -869,10 +928,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             ? wallpaper.getConstantState().newDrawable().mutate()
             : wallpaper.mutate();
         drawable.setBounds(
-            drawLeft - targetRect.left,
-            drawTop - targetRect.top,
-            drawLeft - targetRect.left + drawWidth,
-            drawTop - targetRect.top + drawHeight
+            offsetLeft - targetScreenX,
+            offsetTop - targetScreenY,
+            offsetLeft - targetScreenX + drawWidth,
+            offsetTop - targetScreenY + drawHeight
         );
         drawable.draw(canvas);
         return bitmap;
@@ -882,7 +941,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         ImageView backdrop = findViewById(R.id.accessory_blur_backdrop);
         View surfaceHost = findViewById(R.id.accessory_surface_host);
         View accessoryContainer = findViewById(R.id.accessory_stack_container);
-        View wallpaperFrame = findViewById(R.id.activity_termux_root_view);
+        View wallpaperFrame = shouldUseManagedWallpaperBlurSource()
+            ? findViewById(R.id.activity_termux_root_view)
+            : findViewById(R.id.terminal_root_container);
         applyAccessoryLayerBounds(R.id.accessory_surface_host, null);
         if (backdrop == null || surfaceHost == null || accessoryContainer == null || wallpaperFrame == null ||
             accessoryContainer.getWidth() <= 0 || accessoryContainer.getHeight() <= 0) {
@@ -2261,14 +2322,179 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         });
     }
 
-    private void launchSystemWallpaperPicker() {
-        try {
-            startActivity(new Intent(Intent.ACTION_SET_WALLPAPER));
-            setWallpaperModeEnabled(this, true);
-        } catch (ActivityNotFoundException e) {
-            Logger.logStackTraceWithMessage(LOG_TAG, "No system wallpaper picker available", e);
+    private void registerWallpaperActivityResultLaunchers() {
+        mWallpaperPickerLauncher = registerForActivityResult(
+            new ActivityResultContracts.PickVisualMedia(),
+            uri -> {
+                if (uri != null) {
+                    launchWallpaperCrop(uri);
+                }
+            }
+        );
+        mWallpaperCropLauncher = registerForActivityResult(
+            new CropImageContract(),
+            result -> {
+                if (result instanceof CropImage.CancelledResult) {
+                    return;
+                }
+                handleWallpaperCropResult(result);
+            }
+        );
+    }
+
+    private void launchManagedWallpaperPicker() {
+        if (mWallpaperPickerLauncher == null) {
             showToast(getString(R.string.error_wallpaper_set_failed), true);
+            return;
         }
+        mWallpaperPickerLauncher.launch(
+            new PickVisualMediaRequest.Builder()
+                .setMediaType(ActivityResultContracts.PickVisualMedia.ImageOnly.INSTANCE)
+                .build()
+        );
+    }
+
+    private void launchWallpaperCrop(@NonNull Uri sourceUri) {
+        if (mWallpaperCropLauncher == null) {
+            showToast(getString(R.string.error_wallpaper_set_failed), true);
+            return;
+        }
+
+        Rect wallpaperFrameRect = getVisibleWallpaperFrameRect(findViewById(R.id.activity_termux_root_view));
+        CropImageOptions cropOptions = new CropImageOptions();
+        cropOptions.fixAspectRatio = true;
+        cropOptions.aspectRatioX = Math.max(1, wallpaperFrameRect.width());
+        cropOptions.aspectRatioY = Math.max(1, wallpaperFrameRect.height());
+        cropOptions.outputRequestWidth = Math.max(1, wallpaperFrameRect.width());
+        cropOptions.outputRequestHeight = Math.max(1, wallpaperFrameRect.height());
+        File tempCropFile = getManagedWallpaperTempFile();
+        if (tempCropFile.exists()) {
+            tempCropFile.delete();
+        }
+        cropOptions.customOutputUri = Uri.fromFile(tempCropFile);
+        cropOptions.outputCompressFormat = Bitmap.CompressFormat.PNG;
+        cropOptions.outputCompressQuality = 100;
+        cropOptions.activityTitle = getString(R.string.action_set_background_image);
+        cropOptions.cropMenuCropButtonTitle = getString(R.string.action_set_background_image);
+        cropOptions.activityBackgroundColor = getTermuxThemeColor(com.termux.shared.R.attr.termuxColorSurfaceBase, R.color.termux_surface_base);
+        cropOptions.backgroundColor = withAlphaComponent(Color.BLACK, 176);
+        cropOptions.guidelinesColor = withAlphaComponent(Color.WHITE, 190);
+        cropOptions.toolbarColor = getTermuxThemeColor(com.termux.shared.R.attr.termuxColorSurfacePanelHigh, R.color.termux_surface_panel_high);
+        cropOptions.toolbarTitleColor = getTermuxThemeColor(com.termux.shared.R.attr.termuxColorOnSurface, R.color.termux_on_surface);
+        cropOptions.toolbarBackButtonColor = getTermuxThemeColor(com.termux.shared.R.attr.termuxColorOnSurface, R.color.termux_on_surface);
+        cropOptions.toolbarTintColor = getTermuxThemeColor(com.termux.shared.R.attr.termuxColorOnSurface, R.color.termux_on_surface);
+        cropOptions.activityMenuIconColor = getTermuxThemeColor(com.termux.shared.R.attr.termuxColorOnSurface, R.color.termux_on_surface);
+        cropOptions.activityMenuTextColor = getTermuxThemeColor(com.termux.shared.R.attr.termuxColorOnSurface, R.color.termux_on_surface);
+
+        mWallpaperCropLauncher.launch(new CropImageContractOptions(sourceUri, cropOptions));
+    }
+
+    private void handleWallpaperCropResult(@NonNull CropImageView.CropResult result) {
+        if (!result.isSuccessful()) {
+            Logger.logError(LOG_TAG, "Wallpaper crop failed");
+            if (result.getError() != null) {
+                Logger.logStackTraceWithMessage(LOG_TAG, "Wallpaper crop failed", result.getError());
+            }
+            showToast(getString(R.string.error_wallpaper_set_failed), true);
+            return;
+        }
+
+        Uri croppedUri = result.getUriContent();
+        if (croppedUri == null) {
+            showToast(getString(R.string.error_wallpaper_set_failed), true);
+            return;
+        }
+
+        if (!applyManagedWallpaper(croppedUri)) {
+            showToast(getString(R.string.error_wallpaper_set_failed), true);
+            return;
+        }
+
+        setWallpaperModeEnabled(this, true);
+        scheduleAccessoryRenderSync("wallpaper-crop-applied");
+    }
+
+    private boolean applyManagedWallpaper(@NonNull Uri croppedUri) {
+        try (InputStream inputStream = openWallpaperInputStream(croppedUri)) {
+            if (inputStream == null) {
+                return false;
+            }
+            WallpaperManager.getInstance(this).setStream(inputStream, null, true, WallpaperManager.FLAG_SYSTEM);
+            promoteManagedWallpaperTempFile();
+            int wallpaperId = getCurrentSystemWallpaperId();
+            if (mPreferences != null) {
+                mPreferences.setManagedWallpaperSystemId(wallpaperId);
+            }
+            return true;
+        } catch (Exception e) {
+            Logger.logStackTraceWithMessage(LOG_TAG, "Failed to apply managed wallpaper", e);
+            return false;
+        }
+    }
+
+    @Nullable
+    private InputStream openWallpaperInputStream(@NonNull Uri uri) {
+        try {
+            if ("file".equals(uri.getScheme())) {
+                return new FileInputStream(new File(uri.getPath()));
+            }
+            return getContentResolver().openInputStream(uri);
+        } catch (Exception e) {
+            Logger.logStackTraceWithMessage(LOG_TAG, "Failed to open wallpaper stream", e);
+            return null;
+        }
+    }
+
+    private int getCurrentSystemWallpaperId() {
+        try {
+            return WallpaperManager.getInstance(this).getWallpaperId(WallpaperManager.FLAG_SYSTEM);
+        } catch (Exception e) {
+            Logger.logStackTraceWithMessage(LOG_TAG, "Failed to resolve current system wallpaper id", e);
+            return -1;
+        }
+    }
+
+    @NonNull
+    private File getManagedWallpaperExactFile() {
+        File directory = new File(getFilesDir(), "managed-wallpaper");
+        if (!directory.exists()) {
+            directory.mkdirs();
+        }
+        return new File(directory, "system-wallpaper-exact.png");
+    }
+
+    @NonNull
+    private File getManagedWallpaperTempFile() {
+        File directory = new File(getFilesDir(), "managed-wallpaper");
+        if (!directory.exists()) {
+            directory.mkdirs();
+        }
+        return new File(directory, "system-wallpaper-pending.png");
+    }
+
+    private void promoteManagedWallpaperTempFile() {
+        File tempFile = getManagedWallpaperTempFile();
+        if (!tempFile.isFile()) {
+            return;
+        }
+        File exactFile = getManagedWallpaperExactFile();
+        if (exactFile.exists()) {
+            exactFile.delete();
+        }
+        if (!tempFile.renameTo(exactFile)) {
+            Logger.logError(LOG_TAG, "Failed to promote managed wallpaper temp file");
+        }
+    }
+
+    @NonNull
+    private Rect getVisibleWallpaperFrameRect(@Nullable View wallpaperFrame) {
+        Rect frameRect = new Rect();
+        if (wallpaperFrame != null && wallpaperFrame.getGlobalVisibleRect(frameRect) && frameRect.width() > 0 && frameRect.height() > 0) {
+            return frameRect;
+        }
+        DisplayMetrics realMetrics = new DisplayMetrics();
+        getWindowManager().getDefaultDisplay().getRealMetrics(realMetrics);
+        return new Rect(0, 0, Math.max(1, realMetrics.widthPixels), Math.max(1, realMetrics.heightPixels));
     }
 
     public static void setWallpaperModeEnabled(@NonNull Context context, boolean enabled) {
@@ -2320,7 +2546,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mTermuxTerminalViewClient.shareSessionTranscript();
                 return true;
             case CONTEXT_MENU_SET_WALLPAPER_ID:
-                launchSystemWallpaperPicker();
+                launchManagedWallpaperPicker();
                 return true;
             case CONTEXT_MENU_REMOVE_WALLPAPER_ID:
                 setWallpaperModeEnabled(this, !shouldUseWallpaperPassthroughMode());

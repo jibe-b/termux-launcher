@@ -346,6 +346,15 @@ public final class TermuxPreferenceConstants {
             "wallpaper_enabled_app_bar_opacity";
 
         public static final int DEFAULT_VALUE_WALLPAPER_ENABLED_APP_BAR_OPACITY = 50;
+
+        /**
+         * Stores the system wallpaper id for the last wallpaper set through the in-app picker, so
+         * exact dock blur can be used only while that wallpaper is still active.
+         */
+        public static final String KEY_MANAGED_WALLPAPER_SYSTEM_ID =
+            "managed_wallpaper_system_id";
+
+        public static final int DEFAULT_VALUE_MANAGED_WALLPAPER_SYSTEM_ID = -1;
         
         /**
          * Defines the key for whether extrakeys blur is enabled or not.

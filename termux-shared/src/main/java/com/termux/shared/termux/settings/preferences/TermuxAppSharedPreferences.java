@@ -511,6 +511,23 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             false
         );
     }
+
+    public int getManagedWallpaperSystemId() {
+        return SharedPreferenceUtils.getInt(
+            mSharedPreferences,
+            TERMUX_APP.KEY_MANAGED_WALLPAPER_SYSTEM_ID,
+            TERMUX_APP.DEFAULT_VALUE_MANAGED_WALLPAPER_SYSTEM_ID
+        );
+    }
+
+    public void setManagedWallpaperSystemId(int value) {
+        SharedPreferenceUtils.setInt(
+            mSharedPreferences,
+            TERMUX_APP.KEY_MANAGED_WALLPAPER_SYSTEM_ID,
+            value,
+            false
+        );
+    }
     
     public boolean isExtraKeysBlurEnabled() {
         return getExtraKeysBlurRadius() > 0;
