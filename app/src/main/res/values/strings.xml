@@ -296,8 +296,8 @@
                 <string name="termux_app_launcher_bw_icons_summary">Render app icons in grayscale.</string>
                 <string name="termux_app_launcher_az_row_enabled_title">Alphabets row</string>
                 <string name="termux_app_launcher_az_row_enabled_summary">Shows an alphabet strip between apps bar and extra keys for quick launch scrubbing.</string>
-                <string name="termux_app_launcher_az_double_tap_lock_title">Double tap alphabets row to turn off screen</string>
-                <string name="termux_app_launcher_az_double_tap_lock_summary">Uses Shizuku.</string>
+                <string name="termux_app_launcher_az_double_tap_lock_title">Quick lock</string>
+                <string name="termux_app_launcher_az_double_tap_lock_summary">Double tap the alphabets row to lock screen, uses Shizuku.</string>
                 <string name="termux_app_launcher_reset_usage_ranking_title">Reset App Order</string>
                 <string name="termux_app_launcher_reset_usage_ranking_summary">Apps are ordered based on how often you use them. Tap to reset this order.</string>
                 <string name="termux_app_launcher_bar_height_title">App icons bar height</string>

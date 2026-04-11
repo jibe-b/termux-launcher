@@ -94,21 +94,35 @@ public class TermuxStylePreferencesFragment extends PreferenceFragmentCompat {
     private void configureDockPreferencePresentation() {
         SeekBarPreference iconScalePreference = findPreference("app_launcher_icon_scale_percent");
         if (iconScalePreference != null) {
-            iconScalePreference.setSummaryProvider(preference -> {
-                int value = ((SeekBarPreference) preference).getValue();
-                return value == 0
-                    ? getString(R.string.termux_app_launcher_icon_scale_auto)
-                    : Integer.toString(value);
+            updateIconScaleSummary(iconScalePreference, iconScalePreference.getValue());
+            iconScalePreference.setOnPreferenceChangeListener((preference, newValue) -> {
+                if (newValue instanceof Integer) {
+                    updateIconScaleSummary(iconScalePreference, (Integer) newValue);
+                }
+                return true;
             });
         }
 
         SeekBarPreference barHeightPreference = findPreference("app_launcher_bar_height_percent");
         if (barHeightPreference != null) {
-            barHeightPreference.setSummaryProvider(preference -> {
-                int value = ((SeekBarPreference) preference).getValue();
-                return String.format(java.util.Locale.US, "%.1f", value / 100f);
+            updateBarHeightSummary(barHeightPreference, barHeightPreference.getValue());
+            barHeightPreference.setOnPreferenceChangeListener((preference, newValue) -> {
+                if (newValue instanceof Integer) {
+                    updateBarHeightSummary(barHeightPreference, (Integer) newValue);
+                }
+                return true;
             });
         }
+    }
+
+    private void updateIconScaleSummary(@NonNull SeekBarPreference preference, int value) {
+        preference.setSummary(value == 0
+            ? getString(R.string.termux_app_launcher_icon_scale_auto)
+            : Integer.toString(value));
+    }
+
+    private void updateBarHeightSummary(@NonNull SeekBarPreference preference, int value) {
+        preference.setSummary(String.format(java.util.Locale.US, "%.1f", value / 100f));
     }
 }
 
@@ -167,6 +181,7 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 break;
             case "app_launcher_bw_icons":
                 mPreferences.setAppLauncherBwIconsEnabled(value);
+                TermuxActivity.updateTermuxActivityStyling(mContext, false);
                 break;
             case "app_launcher_az_row_enabled":
                 mPreferences.setAppLauncherAzRowEnabled(value);
@@ -232,12 +247,15 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 break;
             case "app_launcher_button_count":
                 mPreferences.setAppLauncherButtonCount(value);
+                TermuxActivity.updateTermuxActivityStyling(mContext, false);
                 break;
             case "app_launcher_icon_scale_percent":
                 mPreferences.setAppLauncherIconScale((DataUtils.clamp(value, 0, 80) + 100) / 100f);
+                TermuxActivity.updateTermuxActivityStyling(mContext, false);
                 break;
             case "app_launcher_bar_height_percent":
                 mPreferences.setAppLauncherBarHeightScale((140f + (DataUtils.clamp(value, 0, 200) * 0.4f)) / 100f);
+                TermuxActivity.updateTermuxActivityStyling(mContext, false);
                 break;
             default:
                 break;
