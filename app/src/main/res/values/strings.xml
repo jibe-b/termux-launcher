@@ -289,21 +289,22 @@
                 <string name="termux_app_launcher_search_mode_balanced">Balanced</string>
                 <string name="termux_app_launcher_search_mode_loose">Loose</string>
                 <string name="termux_app_launcher_input_char_title">Input split character</string>
-                <string name="termux_app_launcher_input_char_summary">Character used to split the prompt and input when detecting search text.</string>
+                <string name="termux_app_launcher_input_char_summary">Character used to start app search when typing in the terminal. Default: %</string>
                 <string name="termux_app_launcher_default_buttons_title">Default apps</string>
                 <string name="termux_app_launcher_default_buttons_summary">Comma-separated list of default apps to pin (for example: phone, telegram, spotify).</string>
                 <string name="termux_app_launcher_bw_icons_title">Black and white icons</string>
                 <string name="termux_app_launcher_bw_icons_summary">Render app icons in grayscale.</string>
-                <string name="termux_app_launcher_az_row_enabled_title">Enable A-Z scrub row</string>
+                <string name="termux_app_launcher_az_row_enabled_title">Alphabets row</string>
                 <string name="termux_app_launcher_az_row_enabled_summary">Shows an alphabet strip between apps bar and extra keys for quick launch scrubbing.</string>
-                <string name="termux_app_launcher_az_double_tap_lock_title">Double-tap A-Z row to lock screen</string>
-                <string name="termux_app_launcher_az_double_tap_lock_summary">Uses Shizuku privileged lock endpoint when you double-tap the alphabet row.</string>
-                <string name="termux_app_launcher_reset_usage_ranking_title">Reset adaptive AZ ranking</string>
-                <string name="termux_app_launcher_reset_usage_ranking_summary">Clears usage-based ordering for A-Z swipe launch suggestions.</string>
-                <string name="termux_app_launcher_bar_height_title">Bar height</string>
+                <string name="termux_app_launcher_az_double_tap_lock_title">Double tap alphabets row to turn off screen</string>
+                <string name="termux_app_launcher_az_double_tap_lock_summary">Uses Shizuku.</string>
+                <string name="termux_app_launcher_reset_usage_ranking_title">Reset App Order</string>
+                <string name="termux_app_launcher_reset_usage_ranking_summary">Apps are ordered based on how often you use them. Tap to reset this order.</string>
+                <string name="termux_app_launcher_bar_height_title">App icons bar height</string>
                 <string name="termux_app_launcher_bar_height_summary">Height multiplier for the app launcher bar (1.0 = default).</string>
                 <string name="termux_app_launcher_icon_scale_title">Icon scaling</string>
                 <string name="termux_app_launcher_icon_scale_summary">Icon size multiplier (1.0 = default). Scales with bar height.</string>
+                <string name="termux_app_launcher_icon_scale_auto">Auto</string>
                 <string name="termux_app_launcher_reset_usage_ranking_confirm_title">Reset ranking?</string>
                 <string name="termux_app_launcher_reset_usage_ranking_confirm_message">This will clear app usage ranking for A-Z launch suggestions.</string>
                 <string name="termux_app_launcher_reset_usage_ranking_done">Adaptive A-Z ranking reset</string>

@@ -46,6 +46,7 @@ public class TermuxStylePreferencesFragment extends PreferenceFragmentCompat {
         PreferenceManager preferenceManager = getPreferenceManager();
         preferenceManager.setPreferenceDataStore(TermuxStylePreferencesDataStore.getInstance(context));
         setPreferencesFromResource(R.xml.termux_style_preferences, rootKey);
+        configureDockPreferencePresentation();
         updateDockBlurAvailability();
     }
 
@@ -61,13 +62,10 @@ public class TermuxStylePreferencesFragment extends PreferenceFragmentCompat {
 
         boolean liveWallpaperActive = isLiveWallpaperActive(context);
         SeekBarPreference dockBlurPreference = findPreference("extrakeys_blur_radius");
-        Preference blurNotePreference = findPreference("extrakeys_blur_live_wallpaper_note");
 
         if (dockBlurPreference != null) {
             dockBlurPreference.setEnabled(!liveWallpaperActive);
-        }
-        if (blurNotePreference != null) {
-            blurNotePreference.setSummary(
+            dockBlurPreference.setSummary(
                 liveWallpaperActive
                     ? R.string.termux_extrakeys_blur_live_wallpaper_active_note
                     : R.string.termux_extrakeys_blur_live_wallpaper_note
@@ -90,6 +88,26 @@ public class TermuxStylePreferencesFragment extends PreferenceFragmentCompat {
         } catch (Exception e) {
             Logger.logStackTraceWithMessage("TermuxStylePreferences", "Failed to detect live wallpaper state", e);
             return false;
+        }
+    }
+
+    private void configureDockPreferencePresentation() {
+        SeekBarPreference iconScalePreference = findPreference("app_launcher_icon_scale_percent");
+        if (iconScalePreference != null) {
+            iconScalePreference.setSummaryProvider(preference -> {
+                int value = ((SeekBarPreference) preference).getValue();
+                return value == 0
+                    ? getString(R.string.termux_app_launcher_icon_scale_auto)
+                    : Integer.toString(value);
+            });
+        }
+
+        SeekBarPreference barHeightPreference = findPreference("app_launcher_bar_height_percent");
+        if (barHeightPreference != null) {
+            barHeightPreference.setSummaryProvider(preference -> {
+                int value = ((SeekBarPreference) preference).getValue();
+                return String.format(java.util.Locale.US, "%.1f", value / 100f);
+            });
         }
     }
 }
@@ -216,10 +234,10 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 mPreferences.setAppLauncherButtonCount(value);
                 break;
             case "app_launcher_icon_scale_percent":
-                mPreferences.setAppLauncherIconScale(DataUtils.clamp(value, 100, 180) / 100f);
+                mPreferences.setAppLauncherIconScale((DataUtils.clamp(value, 0, 80) + 100) / 100f);
                 break;
             case "app_launcher_bar_height_percent":
-                mPreferences.setAppLauncherBarHeightScale(value / 100f);
+                mPreferences.setAppLauncherBarHeightScale((140f + (DataUtils.clamp(value, 0, 200) * 0.4f)) / 100f);
                 break;
             default:
                 break;
@@ -244,9 +262,9 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
             case "app_launcher_button_count":
                 return mPreferences.getAppLauncherButtonCount();
             case "app_launcher_icon_scale_percent":
-                return Math.round(mPreferences.getAppLauncherIconScale() * 100f);
+                return DataUtils.clamp(Math.round(mPreferences.getAppLauncherIconScale() * 100f) - 100, 0, 80);
             case "app_launcher_bar_height_percent":
-                return Math.round(mPreferences.getAppLauncherBarHeightScale() * 100f);
+                return DataUtils.clamp(Math.round(((mPreferences.getAppLauncherBarHeightScale() * 100f) - 140f) / 0.4f), 0, 200);
             default:
                 return defValue;
         }

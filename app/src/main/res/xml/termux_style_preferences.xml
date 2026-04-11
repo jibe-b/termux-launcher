@@ -44,16 +44,11 @@
         <androidx.preference.SeekBarPreference
             app:key="extrakeys_blur_radius"
             app:title="@string/termux_extrakeys_blur_radius_title"
+            app:summary="@string/termux_extrakeys_blur_live_wallpaper_note"
             android:min="0"
             android:max="30"
             android:defaultValue="10"
             app:showSeekBarValue="true" />
-
-        <Preference
-            app:key="extrakeys_blur_live_wallpaper_note"
-            app:summary="@string/termux_extrakeys_blur_live_wallpaper_note"
-            app:selectable="false"
-            app:iconSpaceReserved="false" />
 
         <androidx.preference.SeekBarPreference
             app:key="app_bar_opacity"
@@ -66,6 +61,35 @@
         <SwitchPreferenceCompat
             app:key="accessory_material_tint_enabled"
             app:title="@string/termux_accessory_material_tint_enabled_title" />
+
+        <androidx.preference.SeekBarPreference
+            app:key="app_launcher_button_count"
+            app:title="@string/termux_app_launcher_button_count_title"
+            app:min="1"
+            android:max="20"
+            android:defaultValue="7"
+            app:showSeekBarValue="true" />
+
+        <androidx.preference.SeekBarPreference
+            app:key="app_launcher_icon_scale_percent"
+            app:title="@string/termux_app_launcher_icon_scale_title"
+            app:min="0"
+            android:max="80"
+            android:defaultValue="0"
+            app:showSeekBarValue="false" />
+
+        <androidx.preference.SeekBarPreference
+            app:key="app_launcher_bar_height_percent"
+            app:title="@string/termux_app_launcher_bar_height_title"
+            app:min="0"
+            android:max="200"
+            android:defaultValue="90"
+            app:showSeekBarValue="false" />
+
+        <SwitchPreferenceCompat
+            app:key="app_launcher_bw_icons"
+            app:title="@string/termux_app_launcher_bw_icons_title"
+            android:defaultValue="false" />
     </PreferenceCategory>
 
     <PreferenceCategory
