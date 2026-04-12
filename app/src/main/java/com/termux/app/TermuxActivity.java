@@ -506,6 +506,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         applySeamlessStatusBackgroundModeIfNeeded();
         applyTerminalSurfaceAppearance();
         configureBackgroundBlur(R.id.sessions_backgroundblur, R.id.sessions_background, false, mPreferences.getSessionsOpacity() / 100f, 0);
+        updateAppLauncherBarHeight();
+        setTerminalToolbarHeight();
         configureExtraKeysBackground();
         scheduleAccessoryRenderSync("onStart");
     
@@ -538,6 +540,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         applyTerminalSurfaceAppearance();
         applyWallpaperOffsetFixIfNeeded();
         configureBackgroundBlur(R.id.sessions_backgroundblur, R.id.sessions_background, false, mPreferences.getSessionsOpacity() / 100f, 0);
+        updateAppLauncherBarHeight();
+        setTerminalToolbarHeight();
         configureExtraKeysBackground();
         scheduleAccessoryRenderSync("onResume");
         if (mSuggestionBarView != null) {

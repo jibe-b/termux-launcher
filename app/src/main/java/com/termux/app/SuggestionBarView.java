@@ -150,6 +150,7 @@ public final class SuggestionBarView extends GridLayout {
     private float swipeDownY = 0f;
     private VelocityTracker swipeVelocityTracker;
     private boolean pageSwitchAnimating = false;
+    private boolean pendingDeferredRender = false;
     private boolean suppressContextLongPressForSwipe = false;
     private int folderDragHoverIndex = -1;
     @Nullable private LongPressPickupState activeLongPressPickupState;
@@ -1079,6 +1080,23 @@ public final class SuggestionBarView extends GridLayout {
     }
 
     private void renderButtons(@NonNull List<LauncherAppEntry> entries, boolean azPreview) {
+        if (!isLaidOut() || getWidth() <= 0 || getHeight() <= 0) {
+            if (pendingDeferredRender) {
+                return;
+            }
+            pendingDeferredRender = true;
+            final List<LauncherAppEntry> deferredEntries = new ArrayList<>(entries);
+            final boolean deferredAzPreview = azPreview;
+            post(() -> {
+                pendingDeferredRender = false;
+                if (!isAttachedToWindow()) {
+                    return;
+                }
+                renderButtons(deferredEntries, deferredAzPreview);
+            });
+            return;
+        }
+        pendingDeferredRender = false;
         folderDragHoverIndex = -1;
         setTranslationX(0f);
         setAlpha(1f);
