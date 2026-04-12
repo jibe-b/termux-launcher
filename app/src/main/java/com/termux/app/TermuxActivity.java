@@ -543,6 +543,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         updateAppLauncherBarHeight();
         setTerminalToolbarHeight();
         configureExtraKeysBackground();
+        if (mSuggestionBarView != null) {
+            mSuggestionBarView.resetTransientVisualState();
+        }
         scheduleAccessoryRenderSync("onResume");
         if (mSuggestionBarView != null) {
             mSuggestionBarView.post(this::updateAzOverflowAffordance);

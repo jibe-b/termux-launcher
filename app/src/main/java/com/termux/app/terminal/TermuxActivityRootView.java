@@ -15,6 +15,7 @@ import android.os.SystemClock;
 
 import androidx.annotation.Nullable;
 import androidx.annotation.NonNull;
+import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
 import com.termux.app.TermuxActivity;
@@ -138,6 +139,15 @@ public class TermuxActivityRootView extends LinearLayout implements ViewTreeObse
             Logger.logVerbose(LOG_TAG, ":\nonGlobalLayout:");
 
         FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) getLayoutParams();
+
+        if (!isImeVisible()) {
+            if (params.bottomMargin != 0) {
+                commitBottomMargin(params, 0);
+            }
+            marginBottom = 0;
+            lastMarginBottom = 0;
+            return;
+        }
 
         // Get the position Rects of the bottom space view and the main window holding it
         Rect[] windowAndViewRects = ViewUtils.getWindowAndViewRects(bottomSpaceView, mStatusBarHeight);
@@ -280,6 +290,11 @@ public class TermuxActivityRootView extends LinearLayout implements ViewTreeObse
                     Logger.logVerbose(LOG_TAG, "Bottom margin already equals " + pxHidden);
             }
         }
+    }
+
+    private boolean isImeVisible() {
+        WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(this);
+        return insets != null && insets.isVisible(WindowInsetsCompat.Type.ime());
     }
 
     private int clampBottomMargin(int value) {

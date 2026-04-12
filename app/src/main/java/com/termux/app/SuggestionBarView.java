@@ -245,6 +245,7 @@ public final class SuggestionBarView extends GridLayout {
         super.onAttachedToWindow();
         setClipChildren(false);
         setClipToPadding(false);
+        resetTransientVisualState();
         ViewParent parent = getParent();
         if (parent instanceof ViewGroup) {
             ViewGroup parentGroup = (ViewGroup) parent;
@@ -256,6 +257,14 @@ public final class SuggestionBarView extends GridLayout {
                 grandParentGroup.setClipChildren(false);
                 grandParentGroup.setClipToPadding(false);
             }
+        }
+    }
+
+    @Override
+    protected void onWindowVisibilityChanged(int visibility) {
+        super.onWindowVisibilityChanged(visibility);
+        if (visibility == VISIBLE) {
+            resetTransientVisualState();
         }
     }
 
@@ -1080,7 +1089,9 @@ public final class SuggestionBarView extends GridLayout {
     }
 
     private void renderButtons(@NonNull List<LauncherAppEntry> entries, boolean azPreview) {
-        if (!isLaidOut() || getWidth() <= 0 || getHeight() <= 0) {
+        int minStableWidth = Math.max(1, dp(120));
+        int minStableHeight = Math.max(1, dp(24));
+        if (!isLaidOut() || getWidth() < minStableWidth || getHeight() < minStableHeight) {
             if (pendingDeferredRender) {
                 return;
             }
@@ -1097,6 +1108,7 @@ public final class SuggestionBarView extends GridLayout {
             return;
         }
         pendingDeferredRender = false;
+        resetTransientVisualState();
         folderDragHoverIndex = -1;
         setTranslationX(0f);
         setAlpha(1f);
@@ -4330,6 +4342,47 @@ public final class SuggestionBarView extends GridLayout {
         ValueAnimator animator = launchTouchAnimators.remove(sourceView);
         if (animator != null) {
             animator.cancel();
+        }
+    }
+
+    public void resetTransientVisualState() {
+        animate().cancel();
+        setTranslationX(0f);
+        setTranslationY(0f);
+        setScaleX(1f);
+        setScaleY(1f);
+        setAlpha(1f);
+        pageSwitchAnimating = false;
+        clearAzFocusedEntry();
+        List<View> animatedViews = new ArrayList<>(launchTouchAnimators.keySet());
+        for (View view : animatedViews) {
+            if (view == null) continue;
+            cancelLaunchTouchAnimator(view);
+            view.animate().cancel();
+            view.setTranslationX(0f);
+            view.setTranslationY(0f);
+            view.setScaleX(1f);
+            view.setScaleY(1f);
+            view.setAlpha(1f);
+        }
+        for (int i = 0; i < getChildCount(); i++) {
+            View child = getChildAt(i);
+            if (child == null) continue;
+            child.animate().cancel();
+            child.setTranslationX(0f);
+            child.setTranslationY(0f);
+            child.setScaleX(1f);
+            child.setScaleY(1f);
+            child.setAlpha(1f);
+            View pressTarget = resolvePrimaryPressTarget(child);
+            if (pressTarget != child) {
+                pressTarget.animate().cancel();
+                pressTarget.setTranslationX(0f);
+                pressTarget.setTranslationY(0f);
+                pressTarget.setScaleX(1f);
+                pressTarget.setScaleY(1f);
+                pressTarget.setAlpha(1f);
+            }
         }
     }
 
