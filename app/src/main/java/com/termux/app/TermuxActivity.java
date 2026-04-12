@@ -14,8 +14,11 @@ import android.content.pm.ShortcutInfo;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.BitmapShader;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Matrix;
+import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.RenderEffect;
 import android.graphics.RectF;
@@ -931,14 +934,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
             Bitmap bitmap = Bitmap.createBitmap(targetWidth, targetHeight, Bitmap.Config.ARGB_8888);
             Canvas canvas = new Canvas(bitmap);
-            Rect srcRect = new Rect(0, 0, sourceBitmap.getWidth(), sourceBitmap.getHeight());
-            Rect dstRect = new Rect(
-                frameRect.left - targetRect.left,
-                frameRect.top - targetRect.top,
-                frameRect.left - targetRect.left + frameRect.width(),
-                frameRect.top - targetRect.top + frameRect.height()
-            );
-            canvas.drawBitmap(sourceBitmap, srcRect, dstRect, null);
+            float scaleX = (float) Math.max(1, frameRect.width()) / Math.max(1, sourceBitmap.getWidth());
+            float scaleY = (float) Math.max(1, frameRect.height()) / Math.max(1, sourceBitmap.getHeight());
+            float translateX = frameRect.left - targetRect.left;
+            float translateY = frameRect.top - targetRect.top;
+
+            Matrix shaderMatrix = new Matrix();
+            shaderMatrix.setScale(scaleX, scaleY);
+            shaderMatrix.postTranslate(translateX, translateY);
+
+            BitmapShader shader = new BitmapShader(sourceBitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
+            shader.setLocalMatrix(shaderMatrix);
+            Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+            paint.setShader(shader);
+            canvas.drawRect(0f, 0f, targetWidth, targetHeight, paint);
             return bitmap;
         } finally {
             sourceBitmap.recycle();
