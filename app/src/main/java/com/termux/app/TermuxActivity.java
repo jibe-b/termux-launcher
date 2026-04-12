@@ -2439,7 +2439,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         cropOptions.outputCompressFormat = Bitmap.CompressFormat.PNG;
         cropOptions.outputCompressQuality = 100;
         cropOptions.activityTitle = "";
-        cropOptions.cropMenuCropButtonTitle = null;
+        cropOptions.cropMenuCropButtonTitle = getString(R.string.action_apply);
         cropOptions.activityBackgroundColor = getTermuxThemeColor(com.termux.shared.R.attr.termuxColorSurfaceBase, R.color.termux_surface_base);
         cropOptions.backgroundColor = withAlphaComponent(Color.BLACK, 176);
         cropOptions.guidelinesColor = withAlphaComponent(Color.WHITE, 190);
@@ -2483,8 +2483,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             WallpaperManager.FLAG_LOCK,
             WallpaperManager.FLAG_SYSTEM | WallpaperManager.FLAG_LOCK
         };
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, targets);
         new MaterialAlertDialogBuilder(this)
-            .setItems(targets, (dialogInterface, which) -> {
+            .setTitle(R.string.wallpaper_target_dialog_title)
+            .setAdapter(adapter, (dialogInterface, which) -> {
                 int selectedFlags = flags[which];
                 if (!applyManagedWallpaper(croppedUri, selectedFlags)) {
                     showToast(getString(R.string.error_wallpaper_set_failed), true);
