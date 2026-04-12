@@ -369,6 +369,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private final int[] mTmpParentLocation = new int[2];
     private final int[] mTmpViewLocation = new int[2];
     private long mLastAccessoryRenderSyncUptimeMs;
+    private long mLastAccessoryGeometryApplyUptimeMs;
     private final Handler mAccessoryRenderHandler = new Handler(Looper.getMainLooper());
     private final Runnable mAccessoryRenderSyncRunnable = () -> {
         mAccessoryRenderSyncPending = false;
@@ -476,8 +477,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (mSuggestionBarView != null) {
                 mSuggestionBarView.resetTransientVisualState();
             }
-            updateAppLauncherBarHeight();
-            setTerminalToolbarHeight();
+            applyAccessoryGeometryIfNeeded(false, "onNewIntent:home");
             scheduleAccessoryRenderSync("onNewIntent:home");
         }
     }
@@ -518,9 +518,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mSuggestionBarView != null) {
             mSuggestionBarView.resetTransientVisualState();
         }
-        updateAppLauncherBarHeight();
-        setTerminalToolbarHeight();
-        configureExtraKeysBackground();
+        applyAccessoryGeometryIfNeeded(true, "onStart");
         scheduleAccessoryRenderSync("onStart");
     
         registerTermuxActivityBroadcastReceiver();
@@ -555,9 +553,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mSuggestionBarView != null) {
             mSuggestionBarView.resetTransientVisualState();
         }
-        updateAppLauncherBarHeight();
-        setTerminalToolbarHeight();
-        configureExtraKeysBackground();
+        applyAccessoryGeometryIfNeeded(false, "onResume");
         scheduleAccessoryRenderSync("onResume");
         if (mSuggestionBarView != null) {
             mSuggestionBarView.post(this::updateAzOverflowAffordance);
@@ -1554,6 +1550,39 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         String trimmed = inputChar.trim();
         return trimmed.isEmpty() ? ' ' : trimmed.charAt(0);
+    }
+
+    public boolean shouldProcessSuggestionBarKeyEvent(int keyCode) {
+        if (mSuggestionBarView == null) {
+            return false;
+        }
+        if (keyCode == android.view.KeyEvent.KEYCODE_DEL || keyCode == android.view.KeyEvent.KEYCODE_ENTER) {
+            return mSuggestionBarExplicitSearchActive || mSuggestionBarView.isSearchSurfaceActive();
+        }
+        return false;
+    }
+
+    public boolean shouldProcessSuggestionBarCodePoint(int codePoint, boolean ctrlDown) {
+        if (ctrlDown || mSuggestionBarView == null) {
+            return false;
+        }
+        if (mSuggestionBarExplicitSearchActive || mSuggestionBarView.isSearchSurfaceActive()) {
+            return true;
+        }
+        char[] chars = Character.toChars(codePoint);
+        return chars.length == 1 && chars[0] == getSuggestionBarSplitChar();
+    }
+
+    private void applyAccessoryGeometryIfNeeded(boolean force, @NonNull String reason) {
+        long now = SystemClock.uptimeMillis();
+        if (!force && (now - mLastAccessoryGeometryApplyUptimeMs) < 120L) {
+            scheduleAccessoryRenderSync(reason + ":skip");
+            return;
+        }
+        mLastAccessoryGeometryApplyUptimeMs = now;
+        updateAppLauncherBarHeight();
+        setTerminalToolbarHeight();
+        configureExtraKeysBackground();
     }
 
     static int calculateSuggestionBarMaxButtons(DisplayMetrics displayMetrics) {
@@ -3299,7 +3328,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
         mAccessoryLayoutChangeListener = (v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
-            if (left == oldLeft && top == oldTop && right == oldRight && bottom == oldBottom) {
+            int width = right - left;
+            int oldWidth = oldRight - oldLeft;
+            int height = bottom - top;
+            int oldHeight = oldBottom - oldTop;
+            if (width == oldWidth && height == oldHeight) {
                 return;
             }
             scheduleAccessoryRenderSync("accessory:layout");
@@ -3356,6 +3389,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mSuggestionBarView != null) {
             mSuggestionBarView.resetTransientVisualState();
         }
+        applyAccessoryGeometryIfNeeded(true, visible ? "ime:open" : "ime:close");
         scheduleAccessoryRenderSync(visible ? "ime:open" : "ime:close");
     }
 
@@ -3508,9 +3542,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mSuggestionBarView.resetTransientVisualState();
         }
         applySuggestionBarInputChar();
-        setTerminalToolbarHeight();
+        applyAccessoryGeometryIfNeeded(true, "reloadActivityStyling");
         applySeamlessStatusBackgroundModeIfNeeded();
-        configureExtraKeysBackground();
         applyTerminalSurfaceAppearance();
         syncTerminalWallpaperRenderingMode();
         updateWindowBackgroundForCurrentSession();

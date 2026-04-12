@@ -230,7 +230,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     @SuppressLint("RtlHardcoded")
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent e, TerminalSession currentSession) {
-        if (mSuggestionBarCallback != null) {
+        if (mSuggestionBarCallback != null && mActivity.shouldProcessSuggestionBarKeyEvent(keyCode)) {
             mSuggestionBarCallback.reloadSuggestionBar(keyCode == KeyEvent.KEYCODE_DEL, keyCode == KeyEvent.KEYCODE_ENTER);
         }
         if (handleVirtualKeys(keyCode, e, true))
@@ -484,7 +484,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
                 }
             }
         }
-        if (mSuggestionBarCallback != null && !ctrlDown) {
+        if (mSuggestionBarCallback != null && mActivity.shouldProcessSuggestionBarCodePoint(codePoint, ctrlDown)) {
             char[] chars = Character.toChars(codePoint);
             if (chars.length == 1) {
                 mSuggestionBarCallback.reloadSuggestionBar(chars[0]);
