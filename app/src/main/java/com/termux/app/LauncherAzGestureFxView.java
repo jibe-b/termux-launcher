@@ -546,7 +546,7 @@ public final class LauncherAzGestureFxView extends View {
         float gapTop = rowBottom + dp(2f);
         float gapBottom = azTop - dp(2f);
         return gapTop <= gapBottom
-            ? clamp(gapTop + ((gapBottom - gapTop) * 0.5f), rowBottom + dp(2f), gapBottom)
+            ? clamp(gapTop + ((gapBottom - gapTop) * 0.38f), rowBottom + dp(2f), gapBottom)
             : rowBottom + dp(2.2f);
     }
 

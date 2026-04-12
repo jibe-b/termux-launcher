@@ -129,6 +129,7 @@ public class TermuxActivityRootView extends LinearLayout implements ViewTreeObse
     @Override
     public void onGlobalLayout() {
         if (mActivity == null || !mActivity.isVisible()) return;
+        if (mActivity.shouldDelayRootMarginAdjustments()) return;
 
         View bottomSpaceView = mActivity.getTermuxActivityBottomSpaceView();
         if (bottomSpaceView == null) return;

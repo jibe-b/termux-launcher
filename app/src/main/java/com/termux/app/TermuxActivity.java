@@ -370,6 +370,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private final int[] mTmpViewLocation = new int[2];
     private long mLastAccessoryRenderSyncUptimeMs;
     private long mLastAccessoryGeometryApplyUptimeMs;
+    private long mLastForegroundEntryUptimeMs;
     private final Handler mAccessoryRenderHandler = new Handler(Looper.getMainLooper());
     private final Runnable mAccessoryRenderSyncRunnable = () -> {
         mAccessoryRenderSyncPending = false;
@@ -490,6 +491,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mIsInvalidState) return;
     
         mIsVisible = true;
+        mLastForegroundEntryUptimeMs = SystemClock.uptimeMillis();
 
         if (mPendingBootstrapOnStart && mTermuxService != null && mTermuxService.isTermuxSessionsEmpty()) {
             mPendingBootstrapOnStart = false;
@@ -534,6 +536,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         Logger.logVerbose(LOG_TAG, "onResume");
         if (mIsInvalidState)
             return;
+        mLastForegroundEntryUptimeMs = SystemClock.uptimeMillis();
         if (consumePendingStyleReloadOnNextResume()) {
             reloadActivityStyling(true);
             return;
@@ -1571,6 +1574,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         char[] chars = Character.toChars(codePoint);
         return chars.length == 1 && chars[0] == getSuggestionBarSplitChar();
+    }
+
+    public boolean shouldDelayRootMarginAdjustments() {
+        return !isImeVisible() && (SystemClock.uptimeMillis() - mLastForegroundEntryUptimeMs) < 180L;
     }
 
     private void applyAccessoryGeometryIfNeeded(boolean force, @NonNull String reason) {
