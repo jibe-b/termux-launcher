@@ -4175,32 +4175,74 @@ public final class SuggestionBarView extends GridLayout {
     ) {
         animate().cancel();
         setListenerSafe(null);
-        if (updateContent != null) updateContent.run();
-        setTranslationX(direction * travel);
         setRotationY(0f);
         setScaleX(1f);
         setScaleY(1f);
-        setAlpha(0.90f);
+        setTranslationX(0f);
+        setAlpha(1f);
+
+        final long outgoingDuration = Math.max(70L, duration / 2L);
+        final long incomingDuration = Math.max(90L, duration - outgoingDuration);
+
         animate()
-            .translationX(0f)
-            .alpha(1f)
-            .setDuration(duration)
+            .translationX(-direction * (travel * 0.55f))
+            .alpha(0f)
+            .setDuration(outgoingDuration)
             .setInterpolator(new DecelerateInterpolator())
             .setListener(new AnimatorListenerAdapter() {
-                @Override
-                public void onAnimationEnd(Animator animation) {
-                    setListenerSafe(null);
-                    pageSwitchAnimating = false;
-                    setRotationY(0f);
-                    setScaleX(1f);
-                    setScaleY(1f);
-                    setTranslationX(0f);
-                    setAlpha(1f);
-                    if (onCompleted != null) onCompleted.run();
-                }
+                private boolean completed;
 
                 @Override
                 public void onAnimationCancel(Animator animation) {
+                    finish(false);
+                }
+
+                @Override
+                public void onAnimationEnd(Animator animation) {
+                    if (completed) {
+                        return;
+                    }
+                    completed = true;
+                    if (updateContent != null) updateContent.run();
+                    setTranslationX(direction * travel);
+                    setAlpha(0f);
+                    animate()
+                        .translationX(0f)
+                        .alpha(1f)
+                        .setDuration(incomingDuration)
+                        .setInterpolator(new DecelerateInterpolator())
+                        .setListener(new AnimatorListenerAdapter() {
+                            private boolean incomingCompleted;
+
+                            @Override
+                            public void onAnimationCancel(Animator animation) {
+                                finish(false);
+                            }
+
+                            @Override
+                            public void onAnimationEnd(Animator animation) {
+                                if (incomingCompleted) {
+                                    return;
+                                }
+                                incomingCompleted = true;
+                                finish(true);
+                            }
+
+                            private void finish(boolean callCompleted) {
+                                setListenerSafe(null);
+                                pageSwitchAnimating = false;
+                                setRotationY(0f);
+                                setScaleX(1f);
+                                setScaleY(1f);
+                                setTranslationX(0f);
+                                setAlpha(1f);
+                                if (callCompleted && onCompleted != null) onCompleted.run();
+                            }
+                        })
+                        .start();
+                }
+
+                private void finish(boolean callCompleted) {
                     setListenerSafe(null);
                     pageSwitchAnimating = false;
                     setRotationY(0f);
@@ -4208,6 +4250,7 @@ public final class SuggestionBarView extends GridLayout {
                     setScaleY(1f);
                     setTranslationX(0f);
                     setAlpha(1f);
+                    if (callCompleted && onCompleted != null) onCompleted.run();
                 }
             })
             .start();
