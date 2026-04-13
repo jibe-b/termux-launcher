@@ -677,14 +677,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             boolean showSurface = shouldShowTerminalOverlaySurface();
             int terminalSurfaceColor = showSurface ? resolveTerminalSurfaceColor() : Color.TRANSPARENT;
             terminalSurfaceHost.setBackgroundColor(Color.TRANSPARENT);
-            terminalBodySurface.setBackgroundColor(terminalSurfaceColor);
-            terminalBodySurface.setVisibility(showSurface && Color.alpha(terminalSurfaceColor) > 0 ? View.VISIBLE : View.GONE);
+            terminalBodySurface.setBackgroundColor(Color.TRANSPARENT);
+            terminalBodySurface.setVisibility(View.GONE);
             terminalStatusSurface.setBackgroundColor(terminalSurfaceColor);
             terminalStatusSurface.setVisibility(shouldShowTerminalStatusBarSurface(showSurface, terminalSurfaceColor) ? View.VISIBLE : View.GONE);
             if (terminalView != null) {
                 terminalView.setBackgroundColor(Color.TRANSPARENT);
                 if (terminalView instanceof TerminalView) {
-                    ((TerminalView) terminalView).setTransparentFrameOverlayColor(Color.TRANSPARENT);
+                    ((TerminalView) terminalView).setTransparentFrameOverlayColor(terminalSurfaceColor);
                 }
             }
             applyTerminalStatusBarSurfaceColor(showSurface, terminalSurfaceColor);
