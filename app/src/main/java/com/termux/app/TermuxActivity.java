@@ -708,7 +708,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private void applyTerminalStatusBarSurfaceColor(boolean showSurface, int terminalSurfaceColor) {
-        int targetColor = shouldEnableSeamlessStatusBackground() ? Color.TRANSPARENT
+        int targetColor = shouldEnableSeamlessStatusBackground() ? terminalSurfaceColor
             : (!shouldUseWallpaperPassthroughMode()
                 ? getTermuxThemeColor(com.termux.shared.R.attr.termuxColorSurfaceBase, R.color.termux_surface_base)
                 : Color.TRANSPARENT);

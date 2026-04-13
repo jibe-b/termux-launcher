@@ -156,6 +156,7 @@ public final class SuggestionBarView extends GridLayout {
     private boolean suppressDrawUntilStableLayout = true;
     private boolean stableLayoutRerenderPosted = false;
     private boolean childLayoutPending = true;
+    private long stableLayoutSuppressedSinceUptimeMs = 0L;
     private int lastSurfaceRenderSignature = 0;
     private boolean suppressContextLongPressForSwipe = false;
     private int folderDragHoverIndex = -1;
@@ -166,6 +167,7 @@ public final class SuggestionBarView extends GridLayout {
     private final List<MenuActionRow> shortcutsRows = new ArrayList<>();
     @Nullable private MenuActionRow activeMenuHighlight;
     private int activeMenuTintBase = 0;
+    private static final long STABLE_LAYOUT_MAX_SUPPRESS_MS = 180L;
     @Nullable private TextView shortcutsMainRowView;
     private final Runnable azResetRunnable = this::clearAzPreviewWithFade;
     private static final long AZ_LAUNCH_CLEAR_DELAY_MS = 1000L;
@@ -346,6 +348,7 @@ public final class SuggestionBarView extends GridLayout {
         suppressDrawUntilStableLayout = true;
         stableLayoutRerenderPosted = false;
         childLayoutPending = true;
+        stableLayoutSuppressedSinceUptimeMs = SystemClock.uptimeMillis();
         invalidate();
         scheduleStableDrawReleaseIfPossible();
     }
@@ -1145,6 +1148,9 @@ public final class SuggestionBarView extends GridLayout {
         if (!hasStableRenderBounds()) {
             suppressDrawUntilStableLayout = true;
             childLayoutPending = true;
+            if (stableLayoutSuppressedSinceUptimeMs == 0L) {
+                stableLayoutSuppressedSinceUptimeMs = SystemClock.uptimeMillis();
+            }
             if (pendingDeferredRender) {
                 return;
             }
@@ -1204,9 +1210,13 @@ public final class SuggestionBarView extends GridLayout {
         if (!keepCurrentFrameVisible) {
             suppressDrawUntilStableLayout = true;
             childLayoutPending = true;
+            if (stableLayoutSuppressedSinceUptimeMs == 0L) {
+                stableLayoutSuppressedSinceUptimeMs = SystemClock.uptimeMillis();
+            }
         } else {
             suppressDrawUntilStableLayout = false;
             childLayoutPending = false;
+            stableLayoutSuppressedSinceUptimeMs = 0L;
         }
         if (surfaceRenderSignature != 0 && surfaceRenderSignature == lastSurfaceRenderSignature && getChildCount() > 0) {
             pendingDeferredRender = false;
@@ -4581,6 +4591,16 @@ public final class SuggestionBarView extends GridLayout {
                 return;
             }
             if (!hasStableChildLayout()) {
+                long suppressedForMs = stableLayoutSuppressedSinceUptimeMs == 0L
+                    ? 0L
+                    : SystemClock.uptimeMillis() - stableLayoutSuppressedSinceUptimeMs;
+                if (suppressedForMs >= STABLE_LAYOUT_MAX_SUPPRESS_MS) {
+                    suppressDrawUntilStableLayout = false;
+                    childLayoutPending = false;
+                    stableLayoutSuppressedSinceUptimeMs = 0L;
+                    invalidate();
+                    return;
+                }
                 if (suppressDrawUntilStableLayout) {
                     postDelayed(this::scheduleStableDrawReleaseIfPossible, 16L);
                 }
@@ -4589,6 +4609,7 @@ public final class SuggestionBarView extends GridLayout {
             resetTransientVisualState();
             suppressDrawUntilStableLayout = false;
             childLayoutPending = false;
+            stableLayoutSuppressedSinceUptimeMs = 0L;
             invalidate();
         });
     }
