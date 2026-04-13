@@ -563,7 +563,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (mSuggestionBarView != null) {
                 mSuggestionBarView.resetTransientVisualState();
             }
-            applyAccessoryGeometryIfNeeded(false, "onNewIntent:home");
             scheduleAccessoryRenderSync("onNewIntent:home");
         }
     }
@@ -576,6 +575,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mIsInvalidState) return;
     
         mIsVisible = true;
+        if (!mIsOnResumeAfterOnCreate && !mIsActivityRecreated) {
+            mDelayRootMarginAdjustmentsUntilUptimeMs = SystemClock.uptimeMillis() + 220L;
+        }
         if (mPendingBootstrapOnStart && mTermuxService != null && mTermuxService.isTermuxSessionsEmpty()) {
             mPendingBootstrapOnStart = false;
             Intent pendingIntent = mPendingLaunchIntent;
@@ -616,6 +618,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (consumePendingStyleReloadOnNextResume()) {
             reloadActivityStyling(true);
             return;
+        }
+        if (!mIsOnResumeAfterOnCreate && !mIsActivityRecreated) {
+            mDelayRootMarginAdjustmentsUntilUptimeMs = SystemClock.uptimeMillis() + 220L;
         }
         if (mTermuxTerminalSessionActivityClient != null)
             mTermuxTerminalSessionActivityClient.onResume();

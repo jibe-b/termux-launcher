@@ -209,8 +209,6 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     }
 
     private boolean shouldDeferForegroundScreenRefresh() {
-        if (!mActivity.isUsingCustomSoftKeyboardBehavior())
-            return false;
         if (mActivity.isOnResumeAfterOnCreate() || mActivity.isActivityRecreated())
             return false;
         if (mActivity.isImeVisibleForLayout())
