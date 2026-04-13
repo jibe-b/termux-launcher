@@ -375,6 +375,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private long mLastAccessoryGeometryApplyUptimeMs;
     private int mSmoothImeTargetBottomInsetPx;
     private long mDelayRootMarginAdjustmentsUntilUptimeMs;
+    private boolean mAccessoryBackdropDirty = true;
+    private int mLastAccessoryBackdropBlurRadiusDp = -1;
+    private boolean mLastAccessoryBackdropManagedSource;
+    @NonNull private final Rect mLastAccessoryBackdropTargetRect = new Rect();
     @Nullable private Boolean mPendingImeGeometryVisible;
     private final Handler mAccessoryRenderHandler = new Handler(Looper.getMainLooper());
     private final Runnable mDeferredImeGeometryRunnable = () -> {
@@ -395,6 +399,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (!state.toolbarShown || !state.blurEnabled) {
                 return;
             }
+            mAccessoryBackdropDirty = true;
             scheduleAccessoryRenderSync("blur:backstop");
             mAccessoryRenderHandler.postDelayed(this, ACCESSORY_BLUR_BACKSTOP_MS);
         }
@@ -664,12 +669,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             boolean showSurface = shouldShowTerminalOverlaySurface();
             int terminalSurfaceColor = showSurface ? resolveTerminalSurfaceColor() : Color.TRANSPARENT;
             terminalSurfaceHost.setBackgroundColor(Color.TRANSPARENT);
-            terminalBodySurface.setBackgroundColor(Color.TRANSPARENT);
-            terminalBodySurface.setVisibility(View.GONE);
+            terminalBodySurface.setBackgroundColor(terminalSurfaceColor);
+            terminalBodySurface.setVisibility(showSurface && Color.alpha(terminalSurfaceColor) > 0 ? View.VISIBLE : View.GONE);
             if (terminalView != null) {
                 terminalView.setBackgroundColor(Color.TRANSPARENT);
                 if (terminalView instanceof TerminalView) {
-                    ((TerminalView) terminalView).setTransparentFrameOverlayColor(terminalSurfaceColor);
+                    ((TerminalView) terminalView).setTransparentFrameOverlayColor(Color.TRANSPARENT);
                 }
             }
             applyTerminalStatusBarSurfaceColor(showSurface, terminalSurfaceColor);
@@ -684,7 +689,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (terminalView != null) {
             terminalView.setBackgroundColor(Color.TRANSPARENT);
             if (terminalView instanceof TerminalView) {
-                ((TerminalView) terminalView).setTransparentFrameOverlayColor(terminalSurfaceColor);
+                ((TerminalView) terminalView).setTransparentFrameOverlayColor(Color.TRANSPARENT);
             }
         }
         applyTerminalStatusBarSurfaceColor(showSurface, terminalSurfaceColor);
@@ -976,6 +981,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         backdrop.setRenderEffect(null);
         backdrop.setImageDrawable(null);
         backdrop.setVisibility(View.GONE);
+        mAccessoryBackdropDirty = true;
+        mLastAccessoryBackdropBlurRadiusDp = -1;
+        mLastAccessoryBackdropManagedSource = false;
+        mLastAccessoryBackdropTargetRect.setEmpty();
     }
 
     private void restartAccessoryBlurHeartbeat() {
@@ -1130,7 +1139,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         ImageView backdrop = findViewById(R.id.accessory_blur_backdrop);
         View surfaceHost = findViewById(R.id.accessory_surface_host);
         View accessoryContainer = findViewById(R.id.accessory_stack_container);
-        View wallpaperFrame = shouldUseManagedWallpaperBlurSource()
+        boolean usingManagedWallpaperSource = shouldUseManagedWallpaperBlurSource();
+        View wallpaperFrame = usingManagedWallpaperSource
             ? findViewById(R.id.activity_termux_root_view)
             : findViewById(R.id.terminal_root_container);
         applyAccessoryLayerBounds(R.id.accessory_surface_host, null);
@@ -1147,6 +1157,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int horizontalOverscanPx = computeAccessoryBackdropHorizontalOverscanPx(state.blurRadiusDp);
         applyAccessoryBackdropOverscan(backdrop, surfaceHost, horizontalOverscanPx);
         Rect backdropTargetRect = buildAccessoryBackdropTargetRect(surfaceHost, horizontalOverscanPx);
+        if (!mAccessoryBackdropDirty &&
+            mLastAccessoryBackdropBlurRadiusDp == state.blurRadiusDp &&
+            mLastAccessoryBackdropManagedSource == usingManagedWallpaperSource &&
+            mLastAccessoryBackdropTargetRect.equals(backdropTargetRect) &&
+            backdrop.getDrawable() != null) {
+            backdrop.setVisibility(View.VISIBLE);
+            return;
+        }
         Bitmap wallpaperBackdrop = createWallpaperBackdropBitmapForRect(backdropTargetRect, wallpaperFrame);
         if (wallpaperBackdrop == null) {
             clearAccessoryRenderEffectBackdrop();
@@ -1157,6 +1175,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         backdrop.setImageBitmap(wallpaperBackdrop);
         backdrop.setRenderEffect(RenderEffect.createBlurEffect(blurRadiusPx, blurRadiusPx, Shader.TileMode.CLAMP));
         backdrop.setVisibility(View.VISIBLE);
+        mAccessoryBackdropDirty = false;
+        mLastAccessoryBackdropBlurRadiusDp = state.blurRadiusDp;
+        mLastAccessoryBackdropManagedSource = usingManagedWallpaperSource;
+        mLastAccessoryBackdropTargetRect.set(backdropTargetRect);
     }
 
     private void applyAccessoryRenderState(@NonNull AccessoryRenderState state) {
@@ -1303,7 +1325,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mTerminalView == null) {
             return;
         }
-        mTerminalView.setUseTransparentFrameClear(shouldUseWallpaperPassthroughMode() || shouldShowTerminalOverlaySurface());
+        mTerminalView.setUseTransparentFrameClear(shouldUseWallpaperPassthroughMode());
     }
 
     private boolean shouldEnableSeamlessStatusBackground() {
@@ -3206,6 +3228,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!hasFocus || mIsInvalidState) {
             return;
         }
+        mAccessoryBackdropDirty = true;
         scheduleAccessoryRenderSync("window:focus");
         restartAccessoryBlurHeartbeat();
     }
@@ -3548,6 +3571,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private void scheduleAccessoryRenderSync(@NonNull String reason) {
+        if (reason.contains("wallpaper") || reason.contains("style") || reason.contains("blur")) {
+            mAccessoryBackdropDirty = true;
+        }
         mPendingAccessoryRenderReason = reason;
         if (mAccessoryRenderSyncPending) {
             return;
