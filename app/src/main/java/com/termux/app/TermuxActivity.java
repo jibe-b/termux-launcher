@@ -361,6 +361,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private static final boolean ACCESSORY_RENDER_TRACE = true;
 
     private boolean mSeamlessStatusBackgroundActive;
+    private int mLastStatusBarInsetTop;
     private long mLastEmptySessionRecoveryElapsedMs;
     private boolean mAccessoryRenderSyncPending;
     private boolean mLastImeVisible;
@@ -503,6 +504,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         content.setOnApplyWindowInsetsListener((v, insets) -> {
             WindowInsetsCompat insetsCompat = WindowInsetsCompat.toWindowInsetsCompat(insets, v);
             mNavBarHeight = insetsCompat.getInsets(Type.systemBars()).bottom;
+            applyTerminalOverlayInsets(insetsCompat);
             return insetsCompat.toWindowInsets();
         });
         applySeamlessStatusBackgroundModeIfNeeded();
@@ -658,8 +660,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         View terminalSurfaceHost = findViewById(R.id.terminal_surface_host);
         View terminalBodySurface = findViewById(R.id.terminal_background);
+        View terminalStatusSurface = findViewById(R.id.terminal_status_bar_background);
         View terminalView = findViewById(R.id.terminal_view);
-        if (terminalSurfaceHost == null || terminalBodySurface == null) {
+        if (terminalSurfaceHost == null || terminalBodySurface == null || terminalStatusSurface == null) {
             return;
         }
         boolean wallpaperMode = shouldUseWallpaperPassthroughMode();
@@ -676,6 +679,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             terminalSurfaceHost.setBackgroundColor(Color.TRANSPARENT);
             terminalBodySurface.setBackgroundColor(terminalSurfaceColor);
             terminalBodySurface.setVisibility(showSurface && Color.alpha(terminalSurfaceColor) > 0 ? View.VISIBLE : View.GONE);
+            terminalStatusSurface.setBackgroundColor(terminalSurfaceColor);
+            terminalStatusSurface.setVisibility(shouldShowTerminalStatusBarSurface(showSurface, terminalSurfaceColor) ? View.VISIBLE : View.GONE);
             if (terminalView != null) {
                 terminalView.setBackgroundColor(Color.TRANSPARENT);
                 if (terminalView instanceof TerminalView) {
@@ -691,6 +696,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         terminalSurfaceHost.setBackgroundColor(Color.TRANSPARENT);
         terminalBodySurface.setBackgroundColor(terminalSurfaceColor);
         terminalBodySurface.setVisibility(showSurface && Color.alpha(terminalSurfaceColor) > 0 ? View.VISIBLE : View.GONE);
+        terminalStatusSurface.setBackgroundColor(terminalSurfaceColor);
+        terminalStatusSurface.setVisibility(shouldShowTerminalStatusBarSurface(showSurface, terminalSurfaceColor) ? View.VISIBLE : View.GONE);
         if (terminalView != null) {
             terminalView.setBackgroundColor(Color.TRANSPARENT);
             if (terminalView instanceof TerminalView) {
@@ -701,12 +708,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private void applyTerminalStatusBarSurfaceColor(boolean showSurface, int terminalSurfaceColor) {
-        int targetColor;
-        if (!shouldUseWallpaperPassthroughMode()) {
-            targetColor = getTermuxThemeColor(com.termux.shared.R.attr.termuxColorSurfaceBase, R.color.termux_surface_base);
-        } else {
-            targetColor = Color.TRANSPARENT;
-        }
+        int targetColor = shouldEnableSeamlessStatusBackground() ? Color.TRANSPARENT
+            : (!shouldUseWallpaperPassthroughMode()
+                ? getTermuxThemeColor(com.termux.shared.R.attr.termuxColorSurfaceBase, R.color.termux_surface_base)
+                : Color.TRANSPARENT);
         if (getWindow() != null) {
             getWindow().setStatusBarColor(targetColor);
         }
@@ -761,13 +766,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private int resolveTerminalOverlayBaseColor() {
-        if (mPreferences != null && mPreferences.isTerminalMaterialTintEnabled()) {
-            return getTermuxThemeColor(com.termux.shared.R.attr.termuxColorSurfaceBase, R.color.termux_surface_base);
-        }
-        int overlayColor = mProperties != null
-            ? mProperties.getBackgroundOverlayColor()
-            : getTermuxThemeColor(com.termux.shared.R.attr.termuxColorSurfacePanelHigh, R.color.termux_surface_panel_high);
-        return 0xFF000000 | (overlayColor & 0x00FFFFFF);
+        return getTermuxThemeColor(com.termux.shared.R.attr.termuxColorSurfaceBase, R.color.termux_surface_base);
     }
 
     private int resolveTerminalSurfaceColor() {
@@ -1334,7 +1333,44 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private boolean shouldEnableSeamlessStatusBackground() {
-        return false;
+        return mProperties != null
+            && !mProperties.isUsingFullScreen();
+    }
+
+    private boolean shouldShowTerminalStatusBarSurface(boolean showSurface, int terminalSurfaceColor) {
+        return shouldEnableSeamlessStatusBackground()
+            && showSurface
+            && Color.alpha(terminalSurfaceColor) > 0
+            && mLastStatusBarInsetTop > 0;
+    }
+
+    private void applyTerminalOverlayInsets(@NonNull WindowInsetsCompat insetsCompat) {
+        int statusBarInsetTop = insetsCompat.getInsets(Type.statusBars()).top;
+        mLastStatusBarInsetTop = statusBarInsetTop;
+
+        View statusBarSurface = findViewById(R.id.terminal_status_bar_background);
+        if (statusBarSurface != null) {
+            ViewGroup.LayoutParams layoutParams = statusBarSurface.getLayoutParams();
+            if (layoutParams != null && layoutParams.height != statusBarInsetTop) {
+                layoutParams.height = statusBarInsetTop;
+                statusBarSurface.setLayoutParams(layoutParams);
+            }
+        }
+
+        View contentLayout = findViewById(R.id.activity_termux_root_relative_layout);
+        if (contentLayout != null) {
+            int targetPaddingTop = shouldEnableSeamlessStatusBackground() ? statusBarInsetTop : 0;
+            if (contentLayout.getPaddingTop() != targetPaddingTop) {
+                contentLayout.setPadding(
+                    contentLayout.getPaddingLeft(),
+                    targetPaddingTop,
+                    contentLayout.getPaddingRight(),
+                    contentLayout.getPaddingBottom()
+                );
+            }
+        }
+
+        applyTerminalSurfaceAppearance();
     }
 
     private void applySmoothDockImeOffset(int translationYPx) {

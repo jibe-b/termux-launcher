@@ -14,6 +14,14 @@
             android:layout_height="0dp"
             android:layout_weight="1">
 
+        <View
+            android:id="@+id/terminal_status_bar_background"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_gravity="top"
+            android:visibility="gone"
+            android:background="?attr/termuxColorSurfaceBase" />
+
         <RelativeLayout
             android:id="@+id/activity_termux_root_relative_layout"
             android:layout_width="match_parent"
