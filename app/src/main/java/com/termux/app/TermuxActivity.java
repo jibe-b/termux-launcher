@@ -1281,7 +1281,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (extraKeysBackgroundBlur != null) {
             extraKeysBackgroundBlur.setVisibility(state.blurEnabled && !useRenderEffectBlur ? View.VISIBLE : View.GONE);
         }
-        updateBottomGestureSurface(state);
+        if (bottomSpaceBackground != null) {
+            bottomSpaceBackground.setVisibility(View.GONE);
+        }
+        if (bottomSpaceBlur != null) {
+            bottomSpaceBlur.setVisibility(View.GONE);
+        }
         configureAccessoryTopEdgeFx(true, state.barAlpha);
         updateAccessoryRenderEffectBackdrop(state);
         updateAzOverflowAffordance();
@@ -1704,7 +1709,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         mLastAccessoryGeometryApplyUptimeMs = now;
         updateAppLauncherBarHeight();
-        setTerminalToolbarHeight();
+        setTerminalToolbarHeight(!isUsingCustomSoftKeyboardBehavior());
         configureExtraKeysBackground();
     }
 
@@ -2432,6 +2437,27 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     public void setTerminalToolbarHeight() {
+        setTerminalToolbarHeight(true);
+    }
+
+    private int resolveAccessoryBottomInsetPx() {
+        if (isImeVisible()) {
+            return 0;
+        }
+        View content = findViewById(android.R.id.content);
+        if (content == null) {
+            return 0;
+        }
+        WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(content);
+        if (insets == null) {
+            return 0;
+        }
+        Insets navInsets = insets.getInsets(Type.navigationBars());
+        Insets gestureInsets = insets.getInsets(Type.systemGestures());
+        return Math.max(0, Math.max(navInsets.bottom, gestureInsets.bottom));
+    }
+
+    private void setTerminalToolbarHeight(boolean requestTerminalResize) {
         final ViewPager terminalToolbarViewPager = getTerminalToolbarViewPager();
         View accessoryStackContainer = findViewById(R.id.accessory_stack_container);
         if (terminalToolbarViewPager == null || accessoryStackContainer == null)
@@ -2449,9 +2475,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         DockLayoutMetrics dockMetrics = buildDockLayoutMetrics(0);
         applyDockLayoutMetrics(dockMetrics);
-        int combinedHeight = dockMetrics.combinedHeight(toolbarHeightPx);
+        int combinedHeight = dockMetrics.combinedHeight(toolbarHeightPx) + resolveAccessoryBottomInsetPx();
         updateAccessoryStackContainerHeight(accessoryStackContainer, combinedHeight);
-        if (mTerminalView != null) {
+        if (requestTerminalResize && mTerminalView != null) {
             mTerminalView.post(mTerminalView::updateSize);
         }
         scheduleAccessoryRenderSync("setTerminalToolbarHeight");
@@ -3539,54 +3565,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return insets != null && insets.isVisible(Type.ime());
     }
 
-    private int resolveBottomGestureInsetPx() {
-        View content = findViewById(android.R.id.content);
-        if (content == null) {
-            return 0;
-        }
-        WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(content);
-        if (insets == null) {
-            return 0;
-        }
-        Insets navInsets = insets.getInsets(Type.navigationBars());
-        Insets gestureInsets = insets.getInsets(Type.systemGestures());
-        return Math.max(0, Math.max(navInsets.bottom, gestureInsets.bottom));
-    }
-
-    private void updateBottomGestureSurface(@NonNull AccessoryRenderState state) {
-        View bottomSpaceView = findViewById(R.id.activity_termux_bottom_space_view);
-        View bottomSpaceBackground = findViewById(R.id.activity_termux_bottom_space_background);
-        View bottomSpaceBlur = findViewById(R.id.activity_termux_bottom_space_blur);
-        if (bottomSpaceView == null || bottomSpaceBackground == null || bottomSpaceBlur == null) {
-            return;
-        }
-
-        boolean showGestureSurface = state.toolbarShown && !isImeVisible();
-        int gestureInsetPx = showGestureSurface ? resolveBottomGestureInsetPx() : 0;
-
-        ViewGroup.LayoutParams layoutParams = bottomSpaceView.getLayoutParams();
-        if (layoutParams != null && layoutParams.height != gestureInsetPx) {
-            layoutParams.height = gestureInsetPx;
-            bottomSpaceView.setLayoutParams(layoutParams);
-        }
-
-        if (!showGestureSurface || gestureInsetPx <= 0) {
-            bottomSpaceBackground.setVisibility(View.GONE);
-            bottomSpaceBlur.setVisibility(View.GONE);
-            return;
-        }
-
-        bottomSpaceBackground.setAlpha(state.barAlpha);
-        bottomSpaceBackground.setVisibility(View.VISIBLE);
-        applyRealtimeBlurRadius(bottomSpaceBlur, state.blurRadiusDp);
-        applyRealtimeBlurDownsampleFactor(bottomSpaceBlur, ACCESSORY_BLUR_DOWNSAMPLE_FACTOR);
-        applyRealtimeBlurOverlayColor(
-            bottomSpaceBlur,
-            state.blurEnabled ? resolveAccessorySurfaceColor(state.barAlpha) : Color.TRANSPARENT
-        );
-        bottomSpaceBlur.setVisibility(state.blurEnabled ? View.VISIBLE : View.GONE);
-    }
-
     private void onImeVisibilityChanged(boolean visible) {
         if (!visible && !mAzGestureActive) {
             mSuggestionBarInteractionActive = false;
@@ -3601,6 +3579,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mDelayRootMarginAdjustmentsUntilUptimeMs = SystemClock.uptimeMillis() + (visible ? 260L : 220L);
             mPendingImeGeometryVisible = null;
             mAccessoryRenderHandler.removeCallbacks(mDeferredImeGeometryRunnable);
+            setTerminalToolbarHeight(false);
+            configureExtraKeysBackground();
         } else {
             applyAccessoryGeometryIfNeeded(true, visible ? "ime:open" : "ime:close");
         }
