@@ -371,8 +371,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private final int[] mTmpViewLocation = new int[2];
     private long mLastAccessoryRenderSyncUptimeMs;
     private long mLastAccessoryGeometryApplyUptimeMs;
-    private long mLastForegroundEntryUptimeMs;
-    private boolean mPendingForegroundGeometryRefresh;
     private final Handler mAccessoryRenderHandler = new Handler(Looper.getMainLooper());
     private final Runnable mAccessoryRenderSyncRunnable = () -> {
         mAccessoryRenderSyncPending = false;
@@ -493,9 +491,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mIsInvalidState) return;
     
         mIsVisible = true;
-        mLastForegroundEntryUptimeMs = SystemClock.uptimeMillis();
-        mPendingForegroundGeometryRefresh = false;
-
         if (mPendingBootstrapOnStart && mTermuxService != null && mTermuxService.isTermuxSessionsEmpty()) {
             mPendingBootstrapOnStart = false;
             Intent pendingIntent = mPendingLaunchIntent;
@@ -520,12 +515,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         applySeamlessStatusBackgroundModeIfNeeded();
         applyTerminalSurfaceAppearance();
         configureBackgroundBlur(R.id.sessions_backgroundblur, R.id.sessions_background, false, mPreferences.getSessionsOpacity() / 100f, 0);
-        if (mSuggestionBarView != null) {
-            mSuggestionBarView.resetTransientVisualState();
-        }
-        mPendingForegroundGeometryRefresh = shouldRefreshAccessoryGeometryOnForeground();
-        scheduleAccessoryRenderSync("onStart");
-    
         registerTermuxActivityBroadcastReceiver();
         registerPackageChangeReceiver();
         registerLauncherAppsCallback();
@@ -539,8 +528,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         Logger.logVerbose(LOG_TAG, "onResume");
         if (mIsInvalidState)
             return;
-        mLastForegroundEntryUptimeMs = SystemClock.uptimeMillis();
-        mPendingForegroundGeometryRefresh = false;
         if (consumePendingStyleReloadOnNextResume()) {
             reloadActivityStyling(true);
             return;
@@ -558,11 +545,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         applyWallpaperOffsetFixIfNeeded();
         configureBackgroundBlur(R.id.sessions_backgroundblur, R.id.sessions_background, false, mPreferences.getSessionsOpacity() / 100f, 0);
         if (mSuggestionBarView != null) {
-            mSuggestionBarView.resetTransientVisualState();
-        }
-        mPendingForegroundGeometryRefresh = mPendingForegroundGeometryRefresh || shouldRefreshAccessoryGeometryOnForeground();
-        scheduleAccessoryRenderSync("onResume");
-        if (mSuggestionBarView != null) {
             mSuggestionBarView.post(this::updateAzOverflowAffordance);
         }
 
@@ -575,33 +557,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void configureViewVisibility(int viewId, boolean isVisible) {
         View view = findViewById(viewId);
         view.setVisibility(isVisible ? View.VISIBLE : View.GONE);
-    }
-
-    @Override
-    public void onWindowFocusChanged(boolean hasFocus) {
-        super.onWindowFocusChanged(hasFocus);
-        if (!hasFocus || mIsInvalidState) {
-            return;
-        }
-        if (!mPendingForegroundGeometryRefresh) {
-            return;
-        }
-        View decorView = getWindow() == null ? null : getWindow().getDecorView();
-        if (decorView == null) {
-            applyAccessoryGeometryIfNeeded(false, "windowFocus");
-            mPendingForegroundGeometryRefresh = false;
-            return;
-        }
-        decorView.post(() -> {
-            if (mIsInvalidState || !mIsVisible || isFinishing()) {
-                return;
-            }
-            if (!mPendingForegroundGeometryRefresh) {
-                return;
-            }
-            applyAccessoryGeometryIfNeeded(false, "windowFocus");
-            mPendingForegroundGeometryRefresh = false;
-        });
     }
 
     private void applyTerminalSurfaceAppearance() {
@@ -1617,42 +1572,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     public boolean shouldDelayRootMarginAdjustments() {
-        return false;
-    }
-
-    private boolean shouldRefreshAccessoryGeometryOnForeground() {
-        if (mPreferences == null || !mPreferences.shouldShowTerminalToolbar()) {
-            return false;
-        }
-        View accessoryContainer = findViewById(R.id.accessory_stack_container);
-        View appsBar = findViewById(R.id.apps_bar_viewpager);
-        View indicatorBand = findViewById(R.id.apps_bar_indicator_band);
-        View azRow = findViewById(R.id.apps_bar_az_row);
-        ViewPager toolbar = getTerminalToolbarViewPager();
-        if (accessoryContainer == null || appsBar == null || toolbar == null) {
-            return true;
-        }
-        int matrix = 0;
-        if (mTermuxTerminalExtraKeys != null && mTermuxTerminalExtraKeys.getExtraKeysInfo() != null) {
-            matrix = mTermuxTerminalExtraKeys.getExtraKeysInfo().getMatrix().length;
-        }
-        int expectedToolbarHeight = Math.round(mTerminalToolbarDefaultHeight * matrix * mProperties.getTerminalToolbarHeightScaleFactor());
-        DockLayoutMetrics metrics = buildDockLayoutMetrics(0);
-        if (toolbar.getHeight() <= 0 || appsBar.getHeight() <= 0 || accessoryContainer.getHeight() <= 0) {
-            return true;
-        }
-        if (Math.abs(toolbar.getHeight() - expectedToolbarHeight) > 1) {
-            return true;
-        }
-        if (Math.abs(appsBar.getHeight() - metrics.appsBarHeightPx) > 1) {
-            return true;
-        }
-        if (indicatorBand != null && Math.abs(indicatorBand.getHeight() - metrics.indicatorBandHeightPx) > 1) {
-            return true;
-        }
-        if (mPreferences.isAppLauncherAzRowEnabled() && azRow != null && Math.abs(azRow.getHeight() - metrics.azRowHeightPx) > 1) {
-            return true;
-        }
         return false;
     }
 
@@ -3472,9 +3391,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (mSuggestionBarView != null) {
                 mSuggestionBarView.clearAzPreview();
             }
-        }
-        if (mSuggestionBarView != null) {
-            mSuggestionBarView.resetTransientVisualState();
         }
         applyAccessoryGeometryIfNeeded(true, visible ? "ime:open" : "ime:close");
         scheduleAccessoryRenderSync(visible ? "ime:open" : "ime:close");
