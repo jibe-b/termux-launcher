@@ -719,7 +719,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private int resolveAccessoryGlassBaseColor() {
-        return getTermuxThemeColor(com.termux.shared.R.attr.termuxColorSurfaceBase, R.color.termux_surface_base);
+        if (isNightThemeActive()) {
+            return getTermuxThemeColor(com.termux.shared.R.attr.termuxColorSurfaceBase, R.color.termux_surface_base);
+        }
+        return getTermuxThemeColor(com.termux.shared.R.attr.termuxColorSurfacePanelHigh, R.color.termux_surface_panel_high);
     }
 
     private int resolveAccessoryOutlineColor() {
@@ -739,7 +742,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private int resolveTerminalOverlayBaseColor() {
-        return getTermuxThemeColor(com.termux.shared.R.attr.termuxColorSurfaceBase, R.color.termux_surface_base);
+        if (isNightThemeActive()) {
+            return getTermuxThemeColor(com.termux.shared.R.attr.termuxColorSurfaceBase, R.color.termux_surface_base);
+        }
+        return ContextCompat.getColor(this, R.color.termux_terminal_overlay_surface);
     }
 
     private int resolveTerminalSurfaceColor() {
@@ -762,6 +768,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private int getTermuxThemeColor(int attr, int fallbackRes) {
         return ThemeUtils.getSystemAttrColor(this, attr, ContextCompat.getColor(this, fallbackRes));
+    }
+
+    private boolean isNightThemeActive() {
+        return (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK)
+            == Configuration.UI_MODE_NIGHT_YES;
     }
 
     private static int withAlphaComponent(int color, int alpha) {

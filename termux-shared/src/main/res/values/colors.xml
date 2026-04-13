@@ -30,6 +30,7 @@
     <color name="termux_surface_panel">#EAEFF7</color>
     <color name="termux_surface_panel_high">#E1E7F2</color>
     <color name="termux_surface_panel_highest">#D7DFEC</color>
+    <color name="termux_terminal_overlay_surface">#1C1B1F</color>
     <color name="termux_on_surface">#171C24</color>
     <color name="termux_on_surface_variant">#586171</color>
     <color name="termux_outline_variant">#C1C9D6</color>
