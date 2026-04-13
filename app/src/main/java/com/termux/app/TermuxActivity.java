@@ -575,7 +575,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mIsInvalidState) return;
     
         mIsVisible = true;
-        if (!mIsOnResumeAfterOnCreate && !mIsActivityRecreated) {
+        if (isUsingCustomSoftKeyboardBehavior() && !mIsOnResumeAfterOnCreate && !mIsActivityRecreated) {
             mDelayRootMarginAdjustmentsUntilUptimeMs = SystemClock.uptimeMillis() + 220L;
         }
         if (mPendingBootstrapOnStart && mTermuxService != null && mTermuxService.isTermuxSessionsEmpty()) {
@@ -619,7 +619,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             reloadActivityStyling(true);
             return;
         }
-        if (!mIsOnResumeAfterOnCreate && !mIsActivityRecreated) {
+        if (isUsingCustomSoftKeyboardBehavior() && !mIsOnResumeAfterOnCreate && !mIsActivityRecreated) {
             mDelayRootMarginAdjustmentsUntilUptimeMs = SystemClock.uptimeMillis() + 220L;
         }
         if (mTermuxTerminalSessionActivityClient != null)
@@ -1186,6 +1186,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private void applyAccessoryRenderState(@NonNull AccessoryRenderState state) {
         View accessoryContainer = findViewById(R.id.accessory_stack_container);
+        View accessoryContentHost = findViewById(R.id.accessory_content_host);
         View accessorySurfaceHost = findViewById(R.id.accessory_surface_host);
         View terminalToolbarViewPager = findViewById(R.id.terminal_toolbar_view_pager);
         View appsBarViewPager = findViewById(R.id.apps_bar_viewpager);
@@ -1219,6 +1220,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
             if (accessorySurfaceHost != null) {
                 accessorySurfaceHost.setVisibility(View.GONE);
+            }
+            if (accessoryContentHost != null) {
+                accessoryContentHost.setVisibility(View.GONE);
             }
             if (bottomSpaceBackground != null) {
                 bottomSpaceBackground.setVisibility(View.GONE);
@@ -1255,6 +1259,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (accessorySurfaceHost != null) {
             accessorySurfaceHost.setVisibility(View.VISIBLE);
+        }
+        if (accessoryContentHost != null) {
+            accessoryContentHost.setVisibility(View.VISIBLE);
         }
         if (appsBarViewPager != null) {
             appsBarViewPager.setVisibility(View.VISIBLE);
@@ -2465,7 +2472,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void setTerminalToolbarHeight(boolean requestTerminalResize) {
         final ViewPager terminalToolbarViewPager = getTerminalToolbarViewPager();
         View accessoryStackContainer = findViewById(R.id.accessory_stack_container);
-        if (terminalToolbarViewPager == null || accessoryStackContainer == null)
+        View accessoryContentHost = findViewById(R.id.accessory_content_host);
+        if (terminalToolbarViewPager == null || accessoryStackContainer == null || accessoryContentHost == null)
             return;
         ViewGroup.LayoutParams toolbarLayoutParams = terminalToolbarViewPager.getLayoutParams();
 
@@ -2480,7 +2488,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         DockLayoutMetrics dockMetrics = buildDockLayoutMetrics(0);
         applyDockLayoutMetrics(dockMetrics);
-        int combinedHeight = dockMetrics.combinedHeight(toolbarHeightPx) + resolveAccessoryBottomInsetPx();
+        int contentHeight = dockMetrics.combinedHeight(toolbarHeightPx);
+        int combinedHeight = contentHeight + resolveAccessoryBottomInsetPx();
+        updateAccessoryStackContainerHeight(accessoryContentHost, contentHeight);
         updateAccessoryStackContainerHeight(accessoryStackContainer, combinedHeight);
         if (requestTerminalResize && mTerminalView != null) {
             mTerminalView.post(mTerminalView::updateSize);
@@ -3191,14 +3201,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return mIsActivityRecreated;
     }
 
+    @NonNull
+    public String getSoftKeyboardBehaviorMode() {
+        if (mPreferences == null) {
+            return "stock";
+        }
+        return mPreferences.getAppLauncherSoftKeyboardBehavior();
+    }
+
     public boolean isUsingCustomSoftKeyboardBehavior() {
-        return mPreferences != null
-            && !"stock".equals(mPreferences.getAppLauncherSoftKeyboardBehavior());
+        return !"stock".equals(getSoftKeyboardBehaviorMode());
+    }
+
+    public boolean isUsingSimpleSoftKeyboardBehavior() {
+        return "simple".equals(getSoftKeyboardBehaviorMode());
     }
 
     public boolean isUsingSmoothSoftKeyboardBehavior() {
-        return mPreferences != null
-            && "smooth".equals(mPreferences.getAppLauncherSoftKeyboardBehavior());
+        return "smooth".equals(getSoftKeyboardBehaviorMode());
     }
 
     public TermuxService getTermuxService() {
