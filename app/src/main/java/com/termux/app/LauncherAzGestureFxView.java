@@ -540,14 +540,14 @@ public final class LauncherAzGestureFxView extends View {
     private float resolvePageIndicatorCenterY() {
         float rowBottom = appsRowRawBounds.bottom - locationOnScreen[1];
         if (azRowRawBounds.isEmpty()) {
-            return rowBottom + dp(2.2f);
+            return rowBottom + dp(4.5f);
         }
         float azTop = azRowRawBounds.top - locationOnScreen[1];
-        float gapTop = rowBottom + dp(2f);
-        float gapBottom = azTop - dp(2f);
+        float gapTop = rowBottom + dp(4f);
+        float gapBottom = azTop - dp(8f);
         return gapTop <= gapBottom
-            ? clamp(gapTop + ((gapBottom - gapTop) * 0.38f), rowBottom + dp(2f), gapBottom)
-            : rowBottom + dp(2.2f);
+            ? clamp((gapTop + gapBottom) * 0.5f, gapTop, gapBottom)
+            : rowBottom + dp(4.5f);
     }
 
     private void drawLaunchGlassBloom(Canvas canvas) {

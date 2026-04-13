@@ -371,6 +371,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private long mLastAccessoryRenderSyncUptimeMs;
     private long mLastAccessoryGeometryApplyUptimeMs;
     private long mLastForegroundEntryUptimeMs;
+    private boolean mPendingForegroundGeometryRefresh;
     private final Handler mAccessoryRenderHandler = new Handler(Looper.getMainLooper());
     private final Runnable mAccessoryRenderSyncRunnable = () -> {
         mAccessoryRenderSyncPending = false;
@@ -492,6 +493,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     
         mIsVisible = true;
         mLastForegroundEntryUptimeMs = SystemClock.uptimeMillis();
+        mPendingForegroundGeometryRefresh = false;
 
         if (mPendingBootstrapOnStart && mTermuxService != null && mTermuxService.isTermuxSessionsEmpty()) {
             mPendingBootstrapOnStart = false;
@@ -520,9 +522,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mSuggestionBarView != null) {
             mSuggestionBarView.resetTransientVisualState();
         }
-        if (shouldRefreshAccessoryGeometryOnForeground()) {
-            applyAccessoryGeometryIfNeeded(true, "onStart");
-        }
+        mPendingForegroundGeometryRefresh = shouldRefreshAccessoryGeometryOnForeground();
         scheduleAccessoryRenderSync("onStart");
     
         registerTermuxActivityBroadcastReceiver();
@@ -539,6 +539,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mIsInvalidState)
             return;
         mLastForegroundEntryUptimeMs = SystemClock.uptimeMillis();
+        mPendingForegroundGeometryRefresh = false;
         if (consumePendingStyleReloadOnNextResume()) {
             reloadActivityStyling(true);
             return;
@@ -558,9 +559,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mSuggestionBarView != null) {
             mSuggestionBarView.resetTransientVisualState();
         }
-        if (shouldRefreshAccessoryGeometryOnForeground()) {
-            applyAccessoryGeometryIfNeeded(false, "onResume");
-        }
+        mPendingForegroundGeometryRefresh = mPendingForegroundGeometryRefresh || shouldRefreshAccessoryGeometryOnForeground();
         scheduleAccessoryRenderSync("onResume");
         if (mSuggestionBarView != null) {
             mSuggestionBarView.post(this::updateAzOverflowAffordance);
@@ -575,6 +574,33 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void configureViewVisibility(int viewId, boolean isVisible) {
         View view = findViewById(viewId);
         view.setVisibility(isVisible ? View.VISIBLE : View.GONE);
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (!hasFocus || mIsInvalidState) {
+            return;
+        }
+        if (!mPendingForegroundGeometryRefresh) {
+            return;
+        }
+        View decorView = getWindow() == null ? null : getWindow().getDecorView();
+        if (decorView == null) {
+            applyAccessoryGeometryIfNeeded(false, "windowFocus");
+            mPendingForegroundGeometryRefresh = false;
+            return;
+        }
+        decorView.post(() -> {
+            if (mIsInvalidState || !mIsVisible || isFinishing()) {
+                return;
+            }
+            if (!mPendingForegroundGeometryRefresh) {
+                return;
+            }
+            applyAccessoryGeometryIfNeeded(false, "windowFocus");
+            mPendingForegroundGeometryRefresh = false;
+        });
     }
 
     private void applyTerminalSurfaceAppearance() {
@@ -1581,7 +1607,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     public boolean shouldDelayRootMarginAdjustments() {
-        return !isImeVisible() && (SystemClock.uptimeMillis() - mLastForegroundEntryUptimeMs) < 180L;
+        return false;
     }
 
     private boolean shouldRefreshAccessoryGeometryOnForeground() {
@@ -2451,7 +2477,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         float barHeightScale = mPreferences.getAppLauncherBarHeightScale();
         float normalized = Math.max(0f, Math.min(1f, (barHeightScale - 1.45f) / (2.18f - 1.45f)));
-        return 1.22f + (normalized * 0.52f);
+        return 1.34f + (normalized * 0.64f);
     }
 
     private void applyDockLayoutMetrics(@NonNull DockLayoutMetrics metrics) {
