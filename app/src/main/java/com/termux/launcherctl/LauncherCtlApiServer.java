@@ -18,6 +18,9 @@ import android.os.StatFs;
 import android.os.SystemClock;
 
 import com.jakewharton.processphoenix.ProcessPhoenix;
+import com.termux.app.launcher.LauncherAppLauncher;
+import com.termux.app.launcher.data.LauncherAppDataProvider;
+import com.termux.app.launcher.model.LauncherAppEntry;
 import com.termux.privileged.PrivilegedBackend;
 import com.termux.privileged.PrivilegedBackendManager;
 import com.termux.privileged.PrivilegedPolicyStore;
@@ -47,9 +50,12 @@ import java.security.SecureRandom;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.RejectedExecutionException;
@@ -242,6 +248,8 @@ public class LauncherCtlApiServer {
                 return jsonResponse(buildNowPlayingArt());
             } else if ("GET".equals(request.method) && "/v1/notifications".equals(request.path)) {
                 return jsonResponse(buildNotifications());
+            } else if ("POST".equals(request.method) && "/v1/apps/launch".equals(request.path)) {
+                return jsonResponse(runAppLaunch(context, request.body));
             } else if ("POST".equals(request.method) && "/v1/exec".equals(request.path)) {
                 return jsonResponse(runExec(context, request.body));
             } else if ("POST".equals(request.method) && "/v1/app/restart".equals(request.path)) {
@@ -463,6 +471,47 @@ public class LauncherCtlApiServer {
         JSONObject snapshot = LauncherCtlNotificationListener.getNotificationsSnapshot();
         snapshot.put("ok", true);
         return snapshot;
+    }
+
+    private JSONObject runAppLaunch(Context context, String body) throws JSONException {
+        JSONObject request = body != null && !body.isEmpty() ? new JSONObject(body) : new JSONObject();
+        String query = request.optString("query", "").trim();
+        if (query.isEmpty()) {
+            JSONObject error = jsonError("bad_request", "Missing app query");
+            error.put("_statusCode", 400);
+            return error;
+        }
+
+        List<LauncherAppEntry> apps = LauncherAppDataProvider.getInstance(context).getAllAppsBlocking();
+        AppLaunchMatch match = resolveLaunchMatch(apps, query);
+        if (match.entry == null) {
+            JSONObject error = jsonError(match.errorCode, match.message);
+            error.put("_statusCode", match.statusCode);
+            error.put("query", query);
+            if (match.candidates.length() > 0) {
+                error.put("candidates", match.candidates);
+            }
+            return error;
+        }
+
+        boolean launched = LauncherAppLauncher.launchEntry(context, match.entry);
+        if (!launched) {
+            JSONObject error = jsonError("launch_failed", "Failed to start matched app");
+            error.put("_statusCode", 500);
+            error.put("query", query);
+            error.put("label", match.entry.label);
+            error.put("packageName", match.entry.appRef.packageName);
+            error.put("activityName", match.entry.appRef.activityName);
+            return error;
+        }
+
+        JSONObject data = new JSONObject();
+        data.put("ok", true);
+        data.put("query", query);
+        data.put("label", match.entry.label);
+        data.put("packageName", match.entry.appRef.packageName);
+        data.put("activityName", match.entry.appRef.activityName);
+        return data;
     }
 
     private JSONObject runExec(Context context, String body) throws JSONException {
@@ -744,6 +793,7 @@ public class LauncherCtlApiServer {
     private String statusMessage(int code) {
         switch (code) {
             case 200: return "OK";
+            case 409: return "Conflict";
             case 400: return "Bad Request";
             case 401: return "Unauthorized";
             case 403: return "Forbidden";
@@ -784,6 +834,7 @@ public class LauncherCtlApiServer {
         rateLimiters.put("GET:/v1/media/now-playing", new SimpleRateLimiter(120, 60_000));
         rateLimiters.put("GET:/v1/media/art", new SimpleRateLimiter(60, 60_000));
         rateLimiters.put("GET:/v1/notifications", new SimpleRateLimiter(120, 60_000));
+        rateLimiters.put("POST:/v1/apps/launch", new SimpleRateLimiter(30, 60_000));
         rateLimiters.put("POST:/v1/exec", new SimpleRateLimiter(30, 60_000));
         rateLimiters.put("POST:/v1/app/restart", new SimpleRateLimiter(5, 60_000));
         rateLimiters.put("POST:/v1/auth/rotate", new SimpleRateLimiter(5, 60_000));
@@ -872,6 +923,12 @@ public class LauncherCtlApiServer {
             "  apps)\n" +
             "    curl $CURL_COMMON -H \"Authorization: Bearer $TOKEN\" \"$BASE/v1/apps\"\n" +
             "    ;;\n" +
+            "  launch)\n" +
+            "    [ \"$#\" -gt 0 ] || { echo \"usage: launcherctl launch <app name or package>\" >&2; exit 2; }\n" +
+            "    CMD_ESCAPED=$(json_escape \"$*\")\n" +
+            "    curl $CURL_COMMON -X POST -H \"Authorization: Bearer $TOKEN\" -H \"Content-Type: application/json\" \\\n" +
+            "      --data \"{\\\"query\\\":\\\"$CMD_ESCAPED\\\"}\" \"$BASE/v1/apps/launch\"\n" +
+            "    ;;\n" +
             "  resources)\n" +
             "    curl $CURL_COMMON -H \"Authorization: Bearer $TOKEN\" \"$BASE/v1/system/resources\"\n" +
             "    ;;\n" +
@@ -907,7 +964,7 @@ public class LauncherCtlApiServer {
             "    curl $CURL_COMMON -X POST -H \"Authorization: Bearer $TOKEN\" \"$BASE/v1/auth/rotate\"\n" +
             "    ;;\n" +
             "  *)\n" +
-            "    echo \"usage: launcherctl {status|apps|resources|media|art|notifications|exec|restart|tty-exec|tty-doctor|token rotate}\" >&2\n" +
+            "    echo \"usage: launcherctl {status|apps|launch|resources|media|art|notifications|exec|restart|tty-exec|tty-doctor|token rotate}\" >&2\n" +
             "    exit 2\n" +
             "    ;;\n" +
             "esac\n";
@@ -1575,6 +1632,117 @@ public class LauncherCtlApiServer {
         return true;
     }
 
+    private AppLaunchMatch resolveLaunchMatch(List<LauncherAppEntry> apps, String query) throws JSONException {
+        String trimmed = query == null ? "" : query.trim();
+        String lowerQuery = trimmed.toLowerCase(Locale.US);
+        String normalizedQuery = normalizeLookupValue(trimmed);
+        if (lowerQuery.isEmpty()) {
+            return AppLaunchMatch.error(400, "bad_request", "Missing app query");
+        }
+
+        List<AppSearchCandidate> matches = new ArrayList<>();
+        for (LauncherAppEntry entry : apps) {
+            int tier = matchTier(entry, lowerQuery, normalizedQuery);
+            if (tier >= 0) {
+                matches.add(new AppSearchCandidate(entry, tier));
+            }
+        }
+
+        if (matches.isEmpty()) {
+            return AppLaunchMatch.error(404, "not_found", "No launcher app matched query");
+        }
+
+        Collections.sort(matches, new Comparator<AppSearchCandidate>() {
+            @Override
+            public int compare(AppSearchCandidate a, AppSearchCandidate b) {
+                if (a.tier != b.tier) return Integer.compare(a.tier, b.tier);
+                int labelCompare = a.entry.label.compareToIgnoreCase(b.entry.label);
+                if (labelCompare != 0) return labelCompare;
+                return a.entry.appRef.packageName.compareToIgnoreCase(b.entry.appRef.packageName);
+            }
+        });
+
+        AppSearchCandidate best = matches.get(0);
+        List<AppSearchCandidate> bestTierMatches = new ArrayList<>();
+        for (AppSearchCandidate candidate : matches) {
+            if (candidate.tier != best.tier) break;
+            bestTierMatches.add(candidate);
+        }
+
+        if (bestTierMatches.size() == 1) {
+            return AppLaunchMatch.success(best.entry);
+        }
+
+        JSONArray candidates = new JSONArray();
+        for (int i = 0; i < bestTierMatches.size() && i < 8; i++) {
+            LauncherAppEntry entry = bestTierMatches.get(i).entry;
+            JSONObject item = new JSONObject();
+            item.put("label", entry.label);
+            item.put("packageName", entry.appRef.packageName);
+            item.put("activityName", entry.appRef.activityName);
+            candidates.put(item);
+        }
+        return AppLaunchMatch.error(409, "ambiguous", "Multiple launcher apps matched query", candidates);
+    }
+
+    private int matchTier(LauncherAppEntry entry, String lowerQuery, String normalizedQuery) {
+        String label = entry.label == null ? "" : entry.label;
+        String labelLower = label.toLowerCase(Locale.US);
+        String labelNormalized = normalizeLookupValue(label);
+        String packageName = entry.appRef.packageName.toLowerCase(Locale.US);
+        String activityName = entry.appRef.activityName.toLowerCase(Locale.US);
+        String stableId = entry.appRef.stableId().toLowerCase(Locale.US);
+
+        if (packageName.equals(lowerQuery) || activityName.equals(lowerQuery) || stableId.equals(lowerQuery)) {
+            return 0;
+        }
+        if (labelLower.equals(lowerQuery) || (!normalizedQuery.isEmpty() && labelNormalized.equals(normalizedQuery))) {
+            return 1;
+        }
+        if (packageName.startsWith(lowerQuery) || activityName.startsWith(lowerQuery)) {
+            return 2;
+        }
+        if (labelLower.startsWith(lowerQuery) || (!normalizedQuery.isEmpty() && labelNormalized.startsWith(normalizedQuery))) {
+            return 3;
+        }
+        if (!normalizedQuery.isEmpty()) {
+            String[] words = labelNormalized.split(" ");
+            for (String word : words) {
+                if (word.startsWith(normalizedQuery)) {
+                    return 4;
+                }
+            }
+        }
+        if (packageName.contains(lowerQuery) || activityName.contains(lowerQuery)) {
+            return 5;
+        }
+        if (labelLower.contains(lowerQuery) || (!normalizedQuery.isEmpty() && labelNormalized.contains(normalizedQuery))) {
+            return 6;
+        }
+        return -1;
+    }
+
+    private String normalizeLookupValue(String value) {
+        if (value == null || value.isEmpty()) return "";
+        StringBuilder normalized = new StringBuilder(value.length());
+        boolean previousWasSpace = true;
+        for (int i = 0; i < value.length(); i++) {
+            char c = Character.toLowerCase(value.charAt(i));
+            if (Character.isLetterOrDigit(c)) {
+                normalized.append(c);
+                previousWasSpace = false;
+            } else if (!previousWasSpace) {
+                normalized.append(' ');
+                previousWasSpace = true;
+            }
+        }
+        int length = normalized.length();
+        if (length > 0 && normalized.charAt(length - 1) == ' ') {
+            normalized.setLength(length - 1);
+        }
+        return normalized.toString();
+    }
+
     private void cleanupSocket() {
         if (serverSocket != null) {
             try {
@@ -1652,5 +1820,43 @@ public class LauncherCtlApiServer {
     private static class ExecPolicy {
         boolean execEnabled;
         List<String> allowedCommandPrefixes;
+    }
+
+    private static class AppSearchCandidate {
+        final LauncherAppEntry entry;
+        final int tier;
+
+        AppSearchCandidate(LauncherAppEntry entry, int tier) {
+            this.entry = entry;
+            this.tier = tier;
+        }
+    }
+
+    private static class AppLaunchMatch {
+        final int statusCode;
+        final String errorCode;
+        final String message;
+        final LauncherAppEntry entry;
+        final JSONArray candidates;
+
+        AppLaunchMatch(int statusCode, String errorCode, String message, LauncherAppEntry entry, JSONArray candidates) {
+            this.statusCode = statusCode;
+            this.errorCode = errorCode;
+            this.message = message;
+            this.entry = entry;
+            this.candidates = candidates != null ? candidates : new JSONArray();
+        }
+
+        static AppLaunchMatch success(LauncherAppEntry entry) {
+            return new AppLaunchMatch(200, null, null, entry, null);
+        }
+
+        static AppLaunchMatch error(int statusCode, String errorCode, String message) {
+            return new AppLaunchMatch(statusCode, errorCode, message, null, null);
+        }
+
+        static AppLaunchMatch error(int statusCode, String errorCode, String message, JSONArray candidates) {
+            return new AppLaunchMatch(statusCode, errorCode, message, null, candidates);
+        }
     }
 }

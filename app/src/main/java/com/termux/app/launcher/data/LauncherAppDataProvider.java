@@ -130,6 +130,34 @@ public final class LauncherAppDataProvider {
         return withCachedIcons(cachedApps);
     }
 
+    @NonNull
+    public List<LauncherAppEntry> getAllAppsBlocking() {
+        synchronized (this) {
+            if (loaded) {
+                return withCachedIcons(cachedApps);
+            }
+        }
+
+        Snapshot snapshot = loadSnapshot();
+        synchronized (this) {
+            cachedApps.clear();
+            cachedApps.addAll(snapshot.apps);
+            cachedById.clear();
+            cachedById.putAll(snapshot.byId);
+            letterBuckets.clear();
+            letterBuckets.putAll(snapshot.letterBuckets);
+            iconCache.evictAll();
+            for (Map.Entry<String, Drawable> iconEntry : snapshot.iconById.entrySet()) {
+                if (iconEntry.getValue() != null) {
+                    iconCache.put(iconEntry.getKey(), iconEntry.getValue());
+                }
+            }
+            loaded = true;
+            loading = false;
+            return withCachedIcons(cachedApps);
+        }
+    }
+
     @Nullable
     public synchronized LauncherAppEntry findByRef(@NonNull AppRef ref) {
         LauncherAppEntry entry = cachedById.get(ref.stableId());
