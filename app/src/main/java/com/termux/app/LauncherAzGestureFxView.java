@@ -295,7 +295,7 @@ public final class LauncherAzGestureFxView extends View {
             if (renderLayer == RenderLayer.UNDERLAY && !interactionUseSubtlePageIndicators) {
                 drawEdgeGlowAmbient(canvas);
             }
-            if (renderLayer == RenderLayer.OVERLAY && interactionUseSubtlePageIndicators) {
+            if (renderLayer == RenderLayer.OVERLAY) {
                 drawInteractionPageIndicators(canvas);
             }
         }
@@ -494,50 +494,75 @@ public final class LauncherAzGestureFxView extends View {
         if (!filteredOverflowActive || pageCount <= 1 || appsRowRawBounds.isEmpty() || azRowRawBounds.isEmpty()) {
             return;
         }
-        float cy = resolvePageIndicatorCenterY();
-        float lineHeight = dp(2f);
-        float segmentGap = dp(5f);
-        float totalWidth = clamp(getWidth() * 0.34f, dp(120f), dp(220f));
-        float segmentWidth = (totalWidth - (segmentGap * Math.max(0, pageCount - 1))) / Math.max(1, pageCount);
-        float left = (getWidth() - totalWidth) * 0.5f;
-        int backgroundLineColor = withAlpha(boostColor(glassTintColor, 0.94f, 0.72f), 118);
-        int activeLineColor = withAlpha(boostColor(edgeTintColor, 0.92f, 0.82f), 198);
-        for (int i = 0; i < pageCount; i++) {
-            float radius = lineHeight * 0.5f;
-            tmpRect.set(left, cy - (lineHeight * 0.5f), left + segmentWidth, cy + (lineHeight * 0.5f));
-            pageIndicatorPaint.setColor(backgroundLineColor);
-            canvas.drawRoundRect(tmpRect, radius, radius, pageIndicatorPaint);
-            if (i == currentPageIndex) {
-                RectF active = new RectF(tmpRect);
-                float activeInset = dp(0.12f);
-                active.inset(activeInset, activeInset);
-                pageIndicatorPaint.setColor(activeLineColor);
-                canvas.drawRoundRect(active, radius, radius, pageIndicatorPaint);
-            }
-            left += segmentWidth + segmentGap;
-        }
+        drawPageIndicatorStrip(
+            canvas,
+            currentPageIndex,
+            pageCount,
+            clamp(getWidth() * 0.34f, dp(120f), dp(220f)),
+            dp(2f),
+            dp(5f),
+            withAlpha(boostColor(glassTintColor, 0.94f, 0.72f), 118),
+            withAlpha(boostColor(edgeTintColor, 0.92f, 0.82f), 198),
+            true
+        );
     }
 
     private void drawInteractionPageIndicators(Canvas canvas) {
         if (!interactionOverflowActive || interactionPageCount <= 1 || appsRowRawBounds.isEmpty()) {
             return;
         }
+        boolean subtle = interactionUseSubtlePageIndicators;
+        drawPageIndicatorStrip(
+            canvas,
+            interactionCurrentPageIndex,
+            interactionPageCount,
+            subtle
+                ? clamp(getWidth() * 0.22f, dp(62f), dp(118f))
+                : clamp(getWidth() * 0.34f, dp(120f), dp(220f)),
+            subtle ? dp(1.35f) : dp(2f),
+            subtle ? dp(3f) : dp(5f),
+            subtle
+                ? withAlpha(boostColor(glassTintColor, 0.88f, 0.68f), 68)
+                : withAlpha(boostColor(glassTintColor, 0.94f, 0.72f), 118),
+            subtle
+                ? withAlpha(boostColor(edgeTintColor, 0.90f, 0.76f), 136)
+                : withAlpha(boostColor(edgeTintColor, 0.92f, 0.82f), 198),
+            !subtle
+        );
+    }
+
+    private void drawPageIndicatorStrip(
+        Canvas canvas,
+        int activePageIndex,
+        int totalPages,
+        float totalWidth,
+        float lineHeight,
+        float segmentGap,
+        int backgroundLineColor,
+        int activeLineColor,
+        boolean insetActive
+    ) {
+        if (totalPages <= 1) {
+            return;
+        }
         float cy = resolvePageIndicatorCenterY();
-        float lineHeight = dp(1.35f);
-        float segmentGap = dp(3f);
-        float totalWidth = clamp(getWidth() * 0.22f, dp(62f), dp(118f));
-        float segmentWidth = (totalWidth - (segmentGap * Math.max(0, interactionPageCount - 1))) / Math.max(1, interactionPageCount);
+        float segmentWidth = (totalWidth - (segmentGap * Math.max(0, totalPages - 1))) / Math.max(1, totalPages);
         float left = (getWidth() - totalWidth) * 0.5f;
-        int backgroundLineColor = withAlpha(boostColor(glassTintColor, 0.88f, 0.68f), 68);
-        int activeLineColor = withAlpha(boostColor(edgeTintColor, 0.90f, 0.76f), 136);
-        for (int i = 0; i < interactionPageCount; i++) {
+        for (int i = 0; i < totalPages; i++) {
             float radius = lineHeight * 0.5f;
             tmpRect.set(left, cy - (lineHeight * 0.5f), left + segmentWidth, cy + (lineHeight * 0.5f));
             pageIndicatorPaint.setColor(backgroundLineColor);
             canvas.drawRoundRect(tmpRect, radius, radius, pageIndicatorPaint);
-            if (i == interactionCurrentPageIndex) {
+            if (i == activePageIndex) {
                 pageIndicatorPaint.setColor(activeLineColor);
-                canvas.drawRoundRect(tmpRect, radius, radius, pageIndicatorPaint);
+                if (insetActive) {
+                    RectF active = new RectF(tmpRect);
+                    float activeInset = dp(0.12f);
+                    active.inset(activeInset, activeInset);
+                    canvas.drawRoundRect(active, radius, radius, pageIndicatorPaint);
+                } else {
+                    canvas.drawRoundRect(tmpRect, radius, radius, pageIndicatorPaint);
+                }
             }
             left += segmentWidth + segmentGap;
         }

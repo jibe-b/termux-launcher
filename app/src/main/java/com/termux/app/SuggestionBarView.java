@@ -1206,6 +1206,16 @@ public final class SuggestionBarView extends GridLayout {
         }
 
         int surfaceRenderSignature = computeSurfaceRenderSignature(entries, azPreview, pinnedSurface, buttonCount);
+        if (surfaceRenderSignature != 0 && surfaceRenderSignature == lastSurfaceRenderSignature && getChildCount() > 0) {
+            pendingDeferredRender = false;
+            if (suppressDrawUntilStableLayout) {
+                scheduleStableDrawReleaseIfPossible();
+            } else {
+                invalidate();
+            }
+            return;
+        }
+
         boolean keepCurrentFrameVisible = hasStableDisplayLayout() && surfaceRenderSignature != 0 && surfaceRenderSignature != lastSurfaceRenderSignature;
         if (!keepCurrentFrameVisible) {
             suppressDrawUntilStableLayout = true;
@@ -1217,10 +1227,6 @@ public final class SuggestionBarView extends GridLayout {
             suppressDrawUntilStableLayout = false;
             childLayoutPending = false;
             stableLayoutSuppressedSinceUptimeMs = 0L;
-        }
-        if (surfaceRenderSignature != 0 && surfaceRenderSignature == lastSurfaceRenderSignature && getChildCount() > 0) {
-            pendingDeferredRender = false;
-            return;
         }
         resetTransientVisualState();
         folderDragHoverIndex = -1;
