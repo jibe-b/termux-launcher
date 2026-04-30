@@ -11,7 +11,8 @@ Usage:
 
 Commands:
   status                    Get backend/API status.
-  apps                      List installed apps.
+  apps                      List launchable app activities.
+  launch <query>            Launch an app by label, package, or activity.
   resources                 Get system resource snapshot.
   media                     Get now-playing media info.
   art                       Get current media artwork metadata.
@@ -25,6 +26,7 @@ Commands:
 Examples:
   launcherctl status
   launcherctl apps
+  launcherctl launch whatsapp
   launcherctl exec "id"
   launcherctl restart
   launcherctl tty-doctor
@@ -181,6 +183,12 @@ case "$cmd" in
     ;;
   apps)
     curl $CURL_COMMON -H "Authorization: Bearer $TOKEN" "$BASE/v1/apps"
+    ;;
+  launch)
+    [ "$#" -gt 0 ] || { echo "usage: launcherctl launch <app name or package>" >&2; exit 2; }
+    CMD_ESCAPED=$(json_escape "$*")
+    curl $CURL_COMMON -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+      --data "{\"query\":\"$CMD_ESCAPED\"}" "$BASE/v1/apps/launch"
     ;;
   resources)
     curl $CURL_COMMON -H "Authorization: Bearer $TOKEN" "$BASE/v1/system/resources"

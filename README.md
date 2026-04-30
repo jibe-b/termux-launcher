@@ -59,6 +59,8 @@ If enabled, the current privileged integrations are limited to:
 
 If you use the tmux status helpers, see [tooie](https://github.com/PickleHik3/tooie).
 
+Most of the wider Android permission surface is inherited from the upstream Termux base or kept for optional integrations. The launcher should still be treated as a normal terminal-first home launcher when Shizuku, root, or companion apps are absent.
+
 ## Setup Notes
 
 - [Shizuku](https://github.com/rikkaapps/shizuku) is optional.
@@ -76,8 +78,24 @@ launcherctl launch whatsapp
 you can also add it to tmux to launch apps using keybinds like Alt+w launches whatsapp, Example tmux binding:
 
 ```tmux
-bind -n M-w run-shell 'tmux display-message "Opening WhatsApp"\; launcherctl launch whatsapp >/dev/null 2>&1 || tmux display-message "Launch failed: WhatsApp"'
+bind -n M-w run-shell 'tmux display-message "Opening WhatsApp"; launcherctl launch whatsapp >/dev/null 2>&1 || tmux display-message "Launch failed: WhatsApp"'
 ```
+
+`launcherctl apps` returns the launcher's launchable activity catalog, so the shell bridge and on-screen launcher surface use the same app list.
+
+## Development Workflow
+
+The active development branch is `dev`. Changes should be pushed there first, then validated from the GitHub Actions debug APK artifacts because this project is not assuming a local Android SDK/NDK environment for day-to-day iteration.
+
+The current release workflow is:
+
+1. Make changes on `dev`.
+2. Push to GitHub.
+3. Run the debug APK workflow and install the artifact on-device.
+4. Validate launcher behavior on-device.
+5. Cut a single public release only after both hardening and polish work are validated.
+
+See [project-docs/dev-release-workflow.md](project-docs/dev-release-workflow.md) for the checklist.
 
 ## Troubleshooting
 

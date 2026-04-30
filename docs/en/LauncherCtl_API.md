@@ -6,7 +6,7 @@ LauncherCtl is a localhost API bridge for exposing Android/app data to shell too
 - Server: in app process, bound to `127.0.0.1` on random port.
 - Auth: bearer token from `~/.launcherctl/token`.
 - Endpoint URL: `~/.launcherctl/endpoint`.
-- CLI: `$PREFIX/bin/launcherctl` (auto-installed on app startup).
+- CLI: `$PREFIX/bin/launcherctl` (installed by the launcher app when `TermuxActivity` starts).
 
 Important behavior split:
 - `/v1/exec` is a buffered API execution path and is not suitable for full-screen interactive TUI programs.
@@ -19,7 +19,7 @@ Important behavior split:
 - Notification/media source:
   - `app/src/main/java/com/termux/launcherctl/LauncherCtlNotificationListener.java`
 - App startup wiring:
-  - `app/src/main/java/com/termux/app/TermuxApplication.java`
+  - `app/src/main/java/com/termux/app/TermuxActivity.java`
 - Manifest service entry:
   - `app/src/main/AndroidManifest.xml`
 
@@ -35,7 +35,19 @@ Runtime files under `$HOME/.launcherctl`:
 Returns backend + LauncherCtl runtime status.
 
 ### `GET /v1/apps`
-Returns installed apps (package, label, system flag).
+Returns the launcher's launchable activity catalog.
+
+Each entry includes:
+- `label`
+- `packageName`
+- `activityName`
+- `stableId`
+- `systemApp`
+- `launchable`
+
+The top-level payload also includes:
+- `count`: number of launchable activities
+- `packageCount`: number of unique packages represented by those activities
 
 ### `GET /v1/system/resources`
 Returns a system resource snapshot:
@@ -92,6 +104,7 @@ launcherctl --help
 launcherctl help exec
 launcherctl status
 launcherctl apps
+launcherctl launch whatsapp
 launcherctl resources
 launcherctl media
 launcherctl art

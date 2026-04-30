@@ -6,7 +6,6 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
-import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.graphics.Bitmap;
@@ -54,6 +53,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.Deque;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -326,25 +326,37 @@ public class LauncherCtlApiServer {
             return new JSONObject(cached.toString());
         }
         PackageManager packageManager = context.getPackageManager();
-        List<PackageInfo> packages = packageManager.getInstalledPackages(0);
-        JSONArray apps = new JSONArray();
-        for (PackageInfo info : packages) {
-            if (info.packageName == null) continue;
-            JSONObject item = new JSONObject();
-            ApplicationInfo appInfo = info.applicationInfo;
-            CharSequence label = appInfo != null ? packageManager.getApplicationLabel(appInfo) : info.packageName;
-            item.put("packageName", info.packageName);
-            item.put("label", label != null ? label.toString() : info.packageName);
-            item.put("systemApp", appInfo != null && (appInfo.flags & ApplicationInfo.FLAG_SYSTEM) != 0);
-            apps.put(item);
-        }
-        JSONObject data = new JSONObject();
-        data.put("ok", true);
-        data.put("count", apps.length());
-        data.put("apps", apps);
+        List<LauncherAppEntry> apps = LauncherAppDataProvider.getInstance(context).getAllAppsBlocking();
+        JSONObject data = buildLaunchableAppsPayload(apps, packageManager);
         synchronized (this) {
             cachedAppsResponse = new JSONObject(data.toString());
         }
+        return data;
+    }
+
+    static JSONObject buildLaunchableAppsPayload(List<LauncherAppEntry> apps, PackageManager packageManager) throws JSONException {
+        JSONArray payloadApps = new JSONArray();
+        LinkedHashSet<String> uniquePackages = new LinkedHashSet<>();
+        for (LauncherAppEntry entry : apps) {
+            if (entry == null || entry.appRef == null || entry.appRef.packageName == null || entry.appRef.packageName.isEmpty()) {
+                continue;
+            }
+            JSONObject item = new JSONObject();
+            item.put("label", entry.label == null ? entry.appRef.packageName : entry.label);
+            item.put("packageName", entry.appRef.packageName);
+            item.put("activityName", entry.appRef.activityName == null ? "" : entry.appRef.activityName);
+            item.put("stableId", entry.appRef.stableId());
+            item.put("launchable", true);
+            item.put("systemApp", isSystemApp(packageManager, entry.appRef.packageName));
+            payloadApps.put(item);
+            uniquePackages.add(entry.appRef.packageName);
+        }
+
+        JSONObject data = new JSONObject();
+        data.put("ok", true);
+        data.put("count", payloadApps.length());
+        data.put("packageCount", uniquePackages.size());
+        data.put("apps", payloadApps);
         return data;
     }
 
@@ -1632,7 +1644,7 @@ public class LauncherCtlApiServer {
         return true;
     }
 
-    private AppLaunchMatch resolveLaunchMatch(List<LauncherAppEntry> apps, String query) throws JSONException {
+    static AppLaunchMatch resolveLaunchMatch(List<LauncherAppEntry> apps, String query) throws JSONException {
         String trimmed = query == null ? "" : query.trim();
         String lowerQuery = trimmed.toLowerCase(Locale.US);
         String normalizedQuery = normalizeLookupValue(trimmed);
@@ -1685,7 +1697,7 @@ public class LauncherCtlApiServer {
         return AppLaunchMatch.error(409, "ambiguous", "Multiple launcher apps matched query", candidates);
     }
 
-    private int matchTier(LauncherAppEntry entry, String lowerQuery, String normalizedQuery) {
+    private static int matchTier(LauncherAppEntry entry, String lowerQuery, String normalizedQuery) {
         String label = entry.label == null ? "" : entry.label;
         String labelLower = label.toLowerCase(Locale.US);
         String labelNormalized = normalizeLookupValue(label);
@@ -1722,7 +1734,7 @@ public class LauncherCtlApiServer {
         return -1;
     }
 
-    private String normalizeLookupValue(String value) {
+    private static String normalizeLookupValue(String value) {
         if (value == null || value.isEmpty()) return "";
         StringBuilder normalized = new StringBuilder(value.length());
         boolean previousWasSpace = true;
@@ -1741,6 +1753,17 @@ public class LauncherCtlApiServer {
             normalized.setLength(length - 1);
         }
         return normalized.toString();
+    }
+
+    private static boolean isSystemApp(PackageManager packageManager, String packageName) {
+        if (packageManager == null || packageName == null || packageName.isEmpty()) {
+            return false;
+        }
+        try {
+            return (packageManager.getApplicationInfo(packageName, 0).flags & ApplicationInfo.FLAG_SYSTEM) != 0;
+        } catch (PackageManager.NameNotFoundException ignored) {
+            return false;
+        }
     }
 
     private void cleanupSocket() {
@@ -1832,7 +1855,7 @@ public class LauncherCtlApiServer {
         }
     }
 
-    private static class AppLaunchMatch {
+    static class AppLaunchMatch {
         final int statusCode;
         final String errorCode;
         final String message;
