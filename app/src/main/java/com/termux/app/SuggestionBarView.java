@@ -98,7 +98,9 @@ import java.util.UUID;
 import java.util.WeakHashMap;
 import java.lang.ref.WeakReference;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 public final class SuggestionBarView extends GridLayout {
 
@@ -128,6 +130,8 @@ public final class SuggestionBarView extends GridLayout {
     private final Map<String, WeakReference<View>> launchTargetViews = new HashMap<>();
     private final Map<String, WeakReference<View>> launchTargetViewsByPackage = new HashMap<>();
     private final Map<View, ValueAnimator> launchTouchAnimators = new WeakHashMap<>();
+    private final Map<String, LauncherAppEntry> resolvedRefCache = new HashMap<>();
+    private final Map<String, List<ShortcutInfo>> shortcutCache = new HashMap<>();
 
     private LauncherAppDataProvider appDataProvider;
     private LauncherConfigRepository configRepository;
@@ -187,7 +191,7 @@ public final class SuggestionBarView extends GridLayout {
     @Nullable private LauncherUsageStatsStore usageStatsStore;
     @Nullable private Runnable appCatalogChangedListener;
     @Nullable private OverflowInteractionListener overflowInteractionListener;
-    private final ExecutorService searchExecutor = Executors.newSingleThreadExecutor();
+    private final ExecutorService searchExecutor = newIdleFriendlyExecutor();
     private int searchGeneration = 0;
     private boolean rowInteractionActive = false;
     @Nullable private String azFocusedEntryKey;
@@ -242,6 +246,15 @@ public final class SuggestionBarView extends GridLayout {
         initFocusSurface();
         inheritedTintColor = resolveLauncherPanelColor();
         activeMenuTintBase = inheritedTintColor & 0x00FFFFFF;
+    }
+
+    @NonNull
+    private static ExecutorService newIdleFriendlyExecutor() {
+        ThreadPoolExecutor executor = new ThreadPoolExecutor(
+            0, 1, 15L, TimeUnit.SECONDS, new LinkedBlockingQueue<>()
+        );
+        executor.allowCoreThreadTimeOut(true);
+        return executor;
     }
 
     private void initFocusSurface() {
@@ -449,6 +462,8 @@ public final class SuggestionBarView extends GridLayout {
         invalidateAzRenderState();
         launchTargetViews.clear();
         launchTargetViewsByPackage.clear();
+        resolvedRefCache.clear();
+        shortcutCache.clear();
         cancelAzResetTimeout();
         if (appDataProvider != null) {
             appDataProvider.invalidate();
@@ -467,6 +482,8 @@ public final class SuggestionBarView extends GridLayout {
     void reloadAllApps() {
         if (injectedSuggestionButtons != null) {
             allApps = injectedToEntries(injectedSuggestionButtons);
+            resolvedRefCache.clear();
+            shortcutCache.clear();
             pruneUnavailablePinnedItems();
             if (appCatalogChangedListener != null) {
                 appCatalogChangedListener.run();
@@ -479,6 +496,8 @@ public final class SuggestionBarView extends GridLayout {
         if (!appDataProvider.hasLoadedApps()) {
             appDataProvider.warmAsync(() -> {
                 allApps = appDataProvider.getAllApps();
+                resolvedRefCache.clear();
+                shortcutCache.clear();
                 pruneUnavailablePinnedItems();
                 invalidateAzRankCache();
                 if (appCatalogChangedListener != null) {
@@ -489,6 +508,8 @@ public final class SuggestionBarView extends GridLayout {
             return;
         }
         allApps = appDataProvider.getAllApps();
+        resolvedRefCache.clear();
+        shortcutCache.clear();
         pruneUnavailablePinnedItems();
         if (appCatalogChangedListener != null) {
             appCatalogChangedListener.run();
@@ -1550,7 +1571,6 @@ public final class SuggestionBarView extends GridLayout {
         if (!TextUtils.isEmpty(activityName) && activityName.startsWith(".")) {
             activityName = entry.appRef.packageName + activityName;
         }
-        Intent pkgDefault = packageManager.getLaunchIntentForPackage(entry.appRef.packageName);
 
         Intent explicit = null;
         Intent explicitNoCategory = null;
@@ -1563,32 +1583,38 @@ public final class SuggestionBarView extends GridLayout {
             explicitNoCategory.setComponent(new ComponentName(entry.appRef.packageName, activityName));
         }
 
-        Intent resolveFallback = new Intent(Intent.ACTION_MAIN);
-        resolveFallback.addCategory(Intent.CATEGORY_LAUNCHER);
-        resolveFallback.setPackage(entry.appRef.packageName);
-        ComponentName resolved = resolveFallback.resolveActivity(packageManager);
-        if (resolved != null) {
-            resolveFallback.setComponent(resolved);
-        }
-
         LaunchAnimationContext launchAnimationContext = shouldUseTouchLaunchAnimation(launchSourceView)
             ? buildLaunchAnimationContext(launchSourceView)
             : null;
 
         boolean launched = false;
-        if (tryStartMainActivity(context, pkgDefault != null ? pkgDefault.getComponent() : null, launchAnimationContext)) {
-            launched = true;
-        } else if (tryStartMainActivity(context, explicit != null ? explicit.getComponent() : null, launchAnimationContext)) {
-            launched = true;
-        } else if (tryStartMainActivity(context, resolved, launchAnimationContext)) {
-            launched = true;
-        } else if (tryStartActivity(context, pkgDefault, launchAnimationContext)) {
+        if (tryStartMainActivity(context, explicit != null ? explicit.getComponent() : null, launchAnimationContext)) {
             launched = true;
         } else if (tryStartActivity(context, explicit, launchAnimationContext)) {
             launched = true;
-        } else if (tryStartActivity(context, explicitNoCategory, launchAnimationContext)) {
+        }
+
+        Intent pkgDefault = launched ? null : packageManager.getLaunchIntentForPackage(entry.appRef.packageName);
+        Intent resolveFallback = null;
+        ComponentName resolved = null;
+        if (!launched) {
+            resolveFallback = new Intent(Intent.ACTION_MAIN);
+            resolveFallback.addCategory(Intent.CATEGORY_LAUNCHER);
+            resolveFallback.setPackage(entry.appRef.packageName);
+            resolved = resolveFallback.resolveActivity(packageManager);
+            if (resolved != null) {
+                resolveFallback.setComponent(resolved);
+            }
+        }
+        if (!launched && tryStartMainActivity(context, pkgDefault != null ? pkgDefault.getComponent() : null, launchAnimationContext)) {
             launched = true;
-        } else if (resolved != null && tryStartActivity(context, resolveFallback, launchAnimationContext)) {
+        } else if (!launched && tryStartMainActivity(context, resolved, launchAnimationContext)) {
+            launched = true;
+        } else if (!launched && tryStartActivity(context, pkgDefault, launchAnimationContext)) {
+            launched = true;
+        } else if (!launched && tryStartActivity(context, explicitNoCategory, launchAnimationContext)) {
+            launched = true;
+        } else if (!launched && resolved != null && tryStartActivity(context, resolveFallback, launchAnimationContext)) {
             launched = true;
         }
         if (!launched) {
@@ -1678,12 +1704,27 @@ public final class SuggestionBarView extends GridLayout {
 
     @Nullable
     private LauncherAppEntry resolveRef(@NonNull AppRef ref) {
+        String cacheKey = ref.stableId();
+        LauncherAppEntry cached = resolvedRefCache.get(cacheKey);
+        if (cached != null) {
+            return cached;
+        }
         if (appDataProvider == null) {
             appDataProvider = LauncherAppDataProvider.getInstance(getContext());
         }
         if (!TextUtils.isEmpty(ref.activityName)) {
             LauncherAppEntry exact = appDataProvider.findByRef(ref);
-            if (exact != null) return exact;
+            if (exact != null) {
+                resolvedRefCache.put(cacheKey, exact);
+                return exact;
+            }
+        }
+        if (injectedSuggestionButtons == null) {
+            LauncherAppEntry resolved = appDataProvider.findDefaultByPackage(ref.packageName);
+            if (resolved != null) {
+                resolvedRefCache.put(cacheKey, resolved);
+                return resolved;
+            }
         }
         ComponentName defaultComponent = null;
         Intent pkgDefault = getContext().getPackageManager().getLaunchIntentForPackage(ref.packageName);
@@ -1695,16 +1736,22 @@ public final class SuggestionBarView extends GridLayout {
             for (LauncherAppEntry entry : allApps) {
                 if (entry.appRef.packageName.equals(ref.packageName)
                     && defaultClassName.equals(entry.appRef.activityName)) {
+                    resolvedRefCache.put(cacheKey, entry);
                     return entry;
                 }
             }
         }
         for (LauncherAppEntry entry : allApps) {
             if (entry.appRef.packageName.equals(ref.packageName)) {
+                resolvedRefCache.put(cacheKey, entry);
                 return entry;
             }
         }
-        return buildEntryFromPackageManager(ref, defaultComponent);
+        LauncherAppEntry built = buildEntryFromPackageManager(ref, defaultComponent);
+        if (built != null) {
+            resolvedRefCache.put(cacheKey, built);
+        }
+        return built;
     }
 
     @Nullable
@@ -3016,6 +3063,11 @@ public final class SuggestionBarView extends GridLayout {
     @NonNull
     private List<ShortcutInfo> queryEntryShortcuts(@NonNull LauncherAppEntry entry) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N_MR1) return new ArrayList<>();
+        String cacheKey = entry.appRef.stableId();
+        List<ShortcutInfo> cached = shortcutCache.get(cacheKey);
+        if (cached != null) {
+            return new ArrayList<>(cached);
+        }
         try {
             LauncherApps launcherApps = (LauncherApps) getContext().getSystemService(Context.LAUNCHER_APPS_SERVICE);
             if (launcherApps == null) return new ArrayList<>();
@@ -3034,10 +3086,28 @@ public final class SuggestionBarView extends GridLayout {
             query.setQueryFlags(flags);
             UserHandle user = Process.myUserHandle();
             List<ShortcutInfo> shortcuts = launcherApps.getShortcuts(query, user);
-            return shortcuts == null ? new ArrayList<>() : shortcuts;
+            List<ShortcutInfo> result = shortcuts == null ? new ArrayList<>() : new ArrayList<>(shortcuts);
+            shortcutCache.put(cacheKey, result);
+            return new ArrayList<>(result);
         } catch (Throwable throwable) {
             Log.d(LOG_TAG, "shortcut query failed for " + entry.appRef.stableId() + ": " + throwable.getMessage());
             return new ArrayList<>();
+        }
+    }
+
+    public void invalidateShortcutCache(@Nullable String packageName) {
+        if (TextUtils.isEmpty(packageName)) {
+            shortcutCache.clear();
+            return;
+        }
+        List<String> keysToRemove = new ArrayList<>();
+        for (String key : shortcutCache.keySet()) {
+            if (key.startsWith(packageName + "/")) {
+                keysToRemove.add(key);
+            }
+        }
+        for (String key : keysToRemove) {
+            shortcutCache.remove(key);
         }
     }
 

@@ -362,7 +362,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private static final int SUGGESTION_BAR_MIN_BUTTON_DP = 56;
     private static final int SUGGESTION_BAR_MAX_INPUT_CHARS = 10;
     private static final long EMPTY_SESSION_RECOVERY_DEBOUNCE_MS = 1500L;
-    private static final boolean ACCESSORY_RENDER_TRACE = true;
+    private static final long ACCESSORY_BLUR_RECOVERY_RETRY_MS = 120L;
+    private static final boolean ACCESSORY_RENDER_TRACE = false;
 
     private boolean mSeamlessStatusBackgroundActive;
     private int mLastStatusBarInsetTop;
@@ -405,10 +406,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (!state.toolbarShown || !state.blurEnabled) {
                 return;
             }
-            mAccessoryBackdropDirty = true;
-            scheduleAccessoryRenderSync("blur:backstop");
+            if (!isAccessoryBlurHealthy(state)) {
+                mAccessoryBackdropDirty = true;
+                scheduleAccessoryRenderSync("blur:backstop");
+            }
             mAccessoryRenderHandler.postDelayed(this, ACCESSORY_BLUR_BACKSTOP_MS);
         }
+    };
+    private final Runnable mAccessoryBlurRecoveryRunnable = () -> {
+        if (!mIsVisible) {
+            return;
+        }
+        AccessoryRenderState state = buildAccessoryRenderState();
+        if (!state.toolbarShown || !state.blurEnabled) {
+            return;
+        }
+        if (!isAccessoryBlurHealthy(state)) {
+            mAccessoryBackdropDirty = true;
+        }
+        scheduleAccessoryRenderSync("blur:recovery");
     };
     private final WindowInsetsAnimationCompat.Callback mDockImeAnimationCallback =
         new WindowInsetsAnimationCompat.Callback(WindowInsetsAnimationCompat.Callback.DISPATCH_MODE_CONTINUE_ON_SUBTREE) {
@@ -600,6 +616,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         syncRecentsVisibilityPolicy();
         configureBackgroundBlur(R.id.sessions_backgroundblur, R.id.sessions_background, false, mPreferences.getSessionsOpacity() / 100f, 0);
         restartAccessoryBlurHeartbeat();
+        scheduleAccessoryBlurRecovery();
         registerTermuxActivityBroadcastReceiver();
         registerPackageChangeReceiver();
         registerLauncherAppsCallback();
@@ -630,6 +647,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         applyWallpaperOffsetFixIfNeeded();
         configureBackgroundBlur(R.id.sessions_backgroundblur, R.id.sessions_background, false, mPreferences.getSessionsOpacity() / 100f, 0);
         restartAccessoryBlurHeartbeat();
+        scheduleAccessoryBlurRecovery();
         if (mSuggestionBarView != null) {
             mSuggestionBarView.post(this::updateAzOverflowAffordance);
         }
@@ -991,6 +1009,33 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mIsVisible && state.toolbarShown && state.blurEnabled) {
             mAccessoryRenderHandler.postDelayed(mAccessoryBlurHeartbeatRunnable, ACCESSORY_BLUR_BACKSTOP_MS);
         }
+    }
+
+    private void scheduleAccessoryBlurRecovery() {
+        mAccessoryRenderHandler.removeCallbacks(mAccessoryBlurRecoveryRunnable);
+        AccessoryRenderState state = buildAccessoryRenderState();
+        if (mIsVisible && state.toolbarShown && state.blurEnabled) {
+            mAccessoryRenderHandler.postDelayed(mAccessoryBlurRecoveryRunnable, ACCESSORY_BLUR_RECOVERY_RETRY_MS);
+        }
+    }
+
+    private boolean isAccessoryBlurHealthy(@NonNull AccessoryRenderState state) {
+        View accessoryContainer = findViewById(R.id.accessory_stack_container);
+        if (accessoryContainer == null || accessoryContainer.getVisibility() != View.VISIBLE) {
+            return !state.toolbarShown;
+        }
+        boolean useRenderEffectBlur = shouldUseAccessoryRenderEffectBlur(state);
+        if (useRenderEffectBlur) {
+            ImageView backdrop = findViewById(R.id.accessory_blur_backdrop);
+            if (backdrop == null || backdrop.getVisibility() != View.VISIBLE || backdrop.getDrawable() == null) {
+                return false;
+            }
+            return Build.VERSION.SDK_INT < Build.VERSION_CODES.S || backdrop.getRenderEffect() != null;
+        }
+        View realtimeBlur = findViewById(R.id.extrakeys_backgroundblur);
+        return realtimeBlur != null
+            && realtimeBlur.getVisibility() == View.VISIBLE
+            && realtimeBlur instanceof RealtimeBlurView;
     }
 
     private boolean shouldUseManagedWallpaperBlurSource() {
@@ -1437,6 +1482,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         unregisterLauncherAppsCallback();
         mAccessoryRenderHandler.removeCallbacks(mAccessoryRenderSyncRunnable);
         mAccessoryRenderHandler.removeCallbacks(mAccessoryBlurHeartbeatRunnable);
+        mAccessoryRenderHandler.removeCallbacks(mAccessoryBlurRecoveryRunnable);
         mAccessoryRenderHandler.removeCallbacks(mDeferredImeGeometryRunnable);
         mAccessoryRenderSyncPending = false;
         mPendingAccessoryRenderReason = null;
@@ -3351,6 +3397,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mAccessoryBackdropDirty = true;
         scheduleAccessoryRenderSync("window:focus");
         restartAccessoryBlurHeartbeat();
+        scheduleAccessoryBlurRecovery();
     }
 
     @Override
@@ -3540,7 +3587,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
                     @Override
                     public void onShortcutsChanged(String packageName, List<ShortcutInfo> shortcuts, UserHandle user) {
-                        // no-op: app list handled by package callbacks
+                        if (mSuggestionBarView != null) {
+                            mSuggestionBarView.invalidateShortcutCache(packageName);
+                        }
                     }
                 };
             }
@@ -3679,6 +3728,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         applyAccessoryGeometryIfNeeded(true, visible ? "ime:open" : "ime:close");
         scheduleAccessoryRenderSync(visible ? "ime:open" : "ime:close");
         restartAccessoryBlurHeartbeat();
+        scheduleAccessoryBlurRecovery();
     }
 
     private void scheduleAccessoryRenderSync(@NonNull String reason) {

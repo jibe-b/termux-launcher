@@ -60,39 +60,25 @@ public final class LauncherRankingEngine {
     }
 
     private static int computeScore(@NonNull LauncherAppEntry entry, @NonNull String input, @NonNull String normalizedInput) {
-        String label = entry.label == null ? "" : entry.label;
-        String labelLower = label.toLowerCase(Locale.US);
-        String labelNormalized = normalizeLookupValue(label);
-        String packageName = entry.appRef.packageName.toLowerCase(Locale.US);
-        String activityName = entry.appRef.activityName.toLowerCase(Locale.US);
-
-        int best = FuzzySearch.partialRatio(input, labelLower);
-        best = Math.max(best, FuzzySearch.partialRatio(input, packageName));
-        best = Math.max(best, FuzzySearch.partialRatio(input, activityName));
+        int best = FuzzySearch.partialRatio(input, entry.labelLower);
+        best = Math.max(best, FuzzySearch.partialRatio(input, entry.packageLower));
+        best = Math.max(best, FuzzySearch.partialRatio(input, entry.activityLower));
         if (!normalizedInput.isEmpty()) {
-            best = Math.max(best, FuzzySearch.partialRatio(normalizedInput, labelNormalized));
+            best = Math.max(best, FuzzySearch.partialRatio(normalizedInput, entry.labelNormalized));
         }
         return best;
     }
 
     private static int matchTier(@NonNull LauncherAppEntry entry, @NonNull String input, @NonNull String normalizedInput) {
-        String label = entry.label == null ? "" : entry.label;
-        String labelLower = label.toLowerCase(Locale.US);
-        String labelNormalized = normalizeLookupValue(label);
-        String packageName = entry.appRef.packageName.toLowerCase(Locale.US);
-        String activityName = entry.appRef.activityName.toLowerCase(Locale.US);
-        String stableId = entry.appRef.stableId().toLowerCase(Locale.US);
-
-        if (packageName.equals(input) || activityName.equals(input) || stableId.equals(input)) return 0;
-        if (labelLower.equals(input) || (!normalizedInput.isEmpty() && labelNormalized.equals(normalizedInput))) return 1;
-        if (packageName.startsWith(input) || activityName.startsWith(input)) return 2;
-        if (labelLower.startsWith(input) || (!normalizedInput.isEmpty() && labelNormalized.startsWith(normalizedInput))) return 3;
-        String[] words = labelNormalized.split("\\s+");
-        for (String word : words) {
+        if (entry.packageLower.equals(input) || entry.activityLower.equals(input) || entry.stableIdLower.equals(input)) return 0;
+        if (entry.labelLower.equals(input) || (!normalizedInput.isEmpty() && entry.labelNormalized.equals(normalizedInput))) return 1;
+        if (entry.packageLower.startsWith(input) || entry.activityLower.startsWith(input)) return 2;
+        if (entry.labelLower.startsWith(input) || (!normalizedInput.isEmpty() && entry.labelNormalized.startsWith(normalizedInput))) return 3;
+        for (String word : entry.normalizedWords) {
             if (!normalizedInput.isEmpty() && word.startsWith(normalizedInput)) return 4;
         }
-        if (packageName.contains(input) || activityName.contains(input)) return 5;
-        if (labelLower.contains(input) || (!normalizedInput.isEmpty() && labelNormalized.contains(normalizedInput))) return 6;
+        if (entry.packageLower.contains(input) || entry.activityLower.contains(input)) return 5;
+        if (entry.labelLower.contains(input) || (!normalizedInput.isEmpty() && entry.labelNormalized.contains(normalizedInput))) return 6;
         return -1;
     }
 

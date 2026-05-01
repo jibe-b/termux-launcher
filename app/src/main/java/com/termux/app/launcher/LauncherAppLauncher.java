@@ -32,7 +32,6 @@ public final class LauncherAppLauncher {
         if (!TextUtils.isEmpty(activityName) && activityName.startsWith(".")) {
             activityName = entry.appRef.packageName + activityName;
         }
-        Intent packageDefault = packageManager.getLaunchIntentForPackage(entry.appRef.packageName);
 
         Intent explicit = null;
         Intent explicitNoCategory = null;
@@ -45,6 +44,14 @@ public final class LauncherAppLauncher {
             explicitNoCategory.setComponent(new ComponentName(entry.appRef.packageName, activityName));
         }
 
+        if (tryStartMainActivity(context, explicit != null ? explicit.getComponent() : null)) {
+            return true;
+        }
+        if (tryStartActivity(context, explicit)) {
+            return true;
+        }
+
+        Intent packageDefault = packageManager.getLaunchIntentForPackage(entry.appRef.packageName);
         Intent resolveFallback = new Intent(Intent.ACTION_MAIN);
         resolveFallback.addCategory(Intent.CATEGORY_LAUNCHER);
         resolveFallback.setPackage(entry.appRef.packageName);
@@ -56,16 +63,10 @@ public final class LauncherAppLauncher {
         if (tryStartMainActivity(context, packageDefault != null ? packageDefault.getComponent() : null)) {
             return true;
         }
-        if (tryStartMainActivity(context, explicit != null ? explicit.getComponent() : null)) {
-            return true;
-        }
         if (tryStartMainActivity(context, resolved)) {
             return true;
         }
         if (tryStartActivity(context, packageDefault)) {
-            return true;
-        }
-        if (tryStartActivity(context, explicit)) {
             return true;
         }
         if (tryStartActivity(context, explicitNoCategory)) {

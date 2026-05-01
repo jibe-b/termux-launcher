@@ -25,7 +25,9 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 public final class LauncherAppDataProvider {
 
@@ -33,10 +35,12 @@ public final class LauncherAppDataProvider {
 
     private final Context context;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
-    private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    private final ExecutorService executor = newIdleFriendlyExecutor();
     private final LruCache<String, Drawable> iconCache = new LruCache<>(96);
     private final List<LauncherAppEntry> cachedApps = new ArrayList<>();
     private final Map<String, LauncherAppEntry> cachedById = new LinkedHashMap<>();
+    private final Map<String, LauncherAppEntry> cachedFirstByPackage = new HashMap<>();
+    private final Map<String, LauncherAppEntry> cachedDefaultByPackage = new HashMap<>();
     private final Map<Character, List<LauncherAppEntry>> letterBuckets = new HashMap<>();
     private final List<Runnable> pendingRefreshCallbacks = new ArrayList<>();
     private boolean loaded;
@@ -45,6 +49,15 @@ public final class LauncherAppDataProvider {
 
     private LauncherAppDataProvider(@NonNull Context context) {
         this.context = context.getApplicationContext();
+    }
+
+    @NonNull
+    private static ExecutorService newIdleFriendlyExecutor() {
+        ThreadPoolExecutor executor = new ThreadPoolExecutor(
+            0, 1, 15L, TimeUnit.SECONDS, new LinkedBlockingQueue<>()
+        );
+        executor.allowCoreThreadTimeOut(true);
+        return executor;
     }
 
     @NonNull
@@ -61,6 +74,8 @@ public final class LauncherAppDataProvider {
         loaded = false;
         cachedApps.clear();
         cachedById.clear();
+        cachedFirstByPackage.clear();
+        cachedDefaultByPackage.clear();
         letterBuckets.clear();
         pendingRefreshCallbacks.clear();
         iconCache.evictAll();
@@ -104,6 +119,10 @@ public final class LauncherAppDataProvider {
                 cachedApps.addAll(snapshot.apps);
                 cachedById.clear();
                 cachedById.putAll(snapshot.byId);
+                cachedFirstByPackage.clear();
+                cachedFirstByPackage.putAll(snapshot.firstByPackage);
+                cachedDefaultByPackage.clear();
+                cachedDefaultByPackage.putAll(snapshot.defaultByPackage);
                 letterBuckets.clear();
                 letterBuckets.putAll(snapshot.letterBuckets);
                 iconCache.evictAll();
@@ -144,6 +163,10 @@ public final class LauncherAppDataProvider {
             cachedApps.addAll(snapshot.apps);
             cachedById.clear();
             cachedById.putAll(snapshot.byId);
+            cachedFirstByPackage.clear();
+            cachedFirstByPackage.putAll(snapshot.firstByPackage);
+            cachedDefaultByPackage.clear();
+            cachedDefaultByPackage.putAll(snapshot.defaultByPackage);
             letterBuckets.clear();
             letterBuckets.putAll(snapshot.letterBuckets);
             iconCache.evictAll();
@@ -161,6 +184,21 @@ public final class LauncherAppDataProvider {
     @Nullable
     public synchronized LauncherAppEntry findByRef(@NonNull AppRef ref) {
         LauncherAppEntry entry = cachedById.get(ref.stableId());
+        return entry == null ? null : withCachedIcon(entry);
+    }
+
+    @Nullable
+    public synchronized LauncherAppEntry findDefaultByPackage(@NonNull String packageName) {
+        LauncherAppEntry entry = cachedDefaultByPackage.get(packageName);
+        if (entry == null) {
+            entry = cachedFirstByPackage.get(packageName);
+        }
+        return entry == null ? null : withCachedIcon(entry);
+    }
+
+    @Nullable
+    public synchronized LauncherAppEntry findFirstByPackage(@NonNull String packageName) {
+        LauncherAppEntry entry = cachedFirstByPackage.get(packageName);
         return entry == null ? null : withCachedIcon(entry);
     }
 
@@ -187,6 +225,7 @@ public final class LauncherAppDataProvider {
         main.addCategory(Intent.CATEGORY_LAUNCHER);
         List<ResolveInfo> launchables = packageManager.queryIntentActivities(main, 0);
         Collections.sort(launchables, new ResolveInfo.DisplayNameComparator(packageManager));
+        Map<String, ComponentName> defaultComponentsByPackage = new HashMap<>();
 
         Snapshot snapshot = new Snapshot();
         for (ResolveInfo resolveInfo : launchables) {
@@ -199,6 +238,20 @@ public final class LauncherAppDataProvider {
             LauncherAppEntry entry = new LauncherAppEntry(ref, label, icon);
             snapshot.apps.add(entry);
             snapshot.byId.put(ref.stableId(), entry);
+            if (!snapshot.firstByPackage.containsKey(ref.packageName)) {
+                snapshot.firstByPackage.put(ref.packageName, entry);
+            }
+            ComponentName defaultComponent = defaultComponentsByPackage.get(ref.packageName);
+            if (!defaultComponentsByPackage.containsKey(ref.packageName)) {
+                Intent defaultIntent = packageManager.getLaunchIntentForPackage(ref.packageName);
+                defaultComponent = defaultIntent == null ? null : defaultIntent.getComponent();
+                defaultComponentsByPackage.put(ref.packageName, defaultComponent);
+            }
+            if (defaultComponent != null
+                && ref.packageName.equals(defaultComponent.getPackageName())
+                && normalizeActivityName(ref).equals(defaultComponent.getClassName())) {
+                snapshot.defaultByPackage.put(ref.packageName, entry);
+            }
             if (icon != null) {
                 snapshot.iconById.put(ref.stableId(), icon);
             }
@@ -272,6 +325,8 @@ public final class LauncherAppDataProvider {
     private static final class Snapshot {
         final List<LauncherAppEntry> apps = new ArrayList<>();
         final Map<String, LauncherAppEntry> byId = new LinkedHashMap<>();
+        final Map<String, LauncherAppEntry> firstByPackage = new HashMap<>();
+        final Map<String, LauncherAppEntry> defaultByPackage = new HashMap<>();
         final Map<Character, List<LauncherAppEntry>> letterBuckets = new HashMap<>();
         final Map<String, Drawable> iconById = new LinkedHashMap<>();
     }
