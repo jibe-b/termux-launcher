@@ -1816,8 +1816,6 @@ public final class SuggestionBarView extends GridLayout {
 
         final List<LauncherAppEntry> source = new ArrayList<>(allApps);
         final List<PinOption> options = buildPinOptions(source, pinnedItems);
-        final List<String> labels = new ArrayList<>();
-        for (PinOption option : options) labels.add(option.label);
 
         final Set<String> selectedIds = new LinkedHashSet<>();
         final List<PinnedItem> orderedSelected = new ArrayList<>();
@@ -1895,7 +1893,8 @@ public final class SuggestionBarView extends GridLayout {
         listViewHolder[0] = listView;
         listView.setChoiceMode(ListView.CHOICE_MODE_MULTIPLE);
         final List<PinOption> filteredOptions = new ArrayList<>(options);
-        final List<String> filteredLabels = new ArrayList<>(labels);
+        final List<String> filteredLabels = new ArrayList<>();
+        for (PinOption option : options) filteredLabels.add(option.label);
         ArrayAdapter<String> adapter = new ArrayAdapter<>(getContext(), android.R.layout.simple_list_item_multiple_choice, filteredLabels);
         listView.setAdapter(adapter);
         listView.setOnTouchListener((v, event) -> {
@@ -1911,12 +1910,11 @@ public final class SuggestionBarView extends GridLayout {
 
             @Override
             public void onTextChanged(CharSequence s, int start, int before, int count) {
-                String query = stringValue(s).trim().toLowerCase(Locale.ROOT);
+                String query = stringValue(s).trim();
                 filteredOptions.clear();
                 filteredLabels.clear();
                 for (PinOption option : options) {
-                    String haystack = (option.label == null ? "" : option.label).toLowerCase(Locale.ROOT);
-                    if (query.isEmpty() || haystack.contains(query)) {
+                    if (matchesLookupQuery(query, option.searchKey)) {
                         filteredOptions.add(option);
                         filteredLabels.add(option.label);
                     }
@@ -2043,8 +2041,7 @@ public final class SuggestionBarView extends GridLayout {
                 b.label == null ? "" : b.label
             );
         });
-        final List<String> labels = new ArrayList<>();
-        for (LauncherAppEntry app : source) labels.add(app.label);
+        final List<String> labels = buildDisplayLabels(source);
 
         EditText searchInput = new EditText(getContext());
         searchInput.setHint("Search apps");
@@ -2070,16 +2067,14 @@ public final class SuggestionBarView extends GridLayout {
 
             @Override
             public void onTextChanged(CharSequence s, int start, int before, int count) {
-                String query = stringValue(s).trim().toLowerCase(Locale.ROOT);
+                String query = stringValue(s).trim();
                 filteredApps.clear();
                 filteredLabels.clear();
-                for (LauncherAppEntry app : source) {
-                    String label = app.label == null ? "" : app.label;
-                    String packageName = app.appRef.packageName == null ? "" : app.appRef.packageName;
-                    String haystack = (label + " " + packageName).toLowerCase(Locale.ROOT);
-                    if (query.isEmpty() || haystack.contains(query)) {
+                for (int i = 0; i < source.size(); i++) {
+                    LauncherAppEntry app = source.get(i);
+                    if (matchesLookupQuery(query, buildSearchableAppText(app))) {
                         filteredApps.add(app);
-                        filteredLabels.add(label);
+                        filteredLabels.add(labels.get(i));
                     }
                 }
                 adapter.notifyDataSetChanged();
@@ -2128,14 +2123,9 @@ public final class SuggestionBarView extends GridLayout {
         save.setText("Save");
         styleGhostButton(save);
         save.setOnClickListener(v -> {
-            folder.apps.clear();
-            for (LauncherAppEntry app : source) {
-                if (selectedIds.contains(app.appRef.stableId())) {
-                    folder.apps.add(resolveForSelectionRef(app.appRef));
-                }
-            }
+            List<AppRef> selectedApps = collectSelectedFolderApps(source, selectedIds);
             dialog.dismiss();
-            persistPinsAndReload();
+            applyNormalizedFolderSelection(folderIndex, folder, selectedApps);
         });
 
         buttons.addView(cancel);
@@ -2152,10 +2142,22 @@ public final class SuggestionBarView extends GridLayout {
     }
 
     private void createOrReplaceFolderAtSlot(int slotIndex, @NonNull List<AppRef> selectedOrdered) {
-        PinnedFolderItem folder = new PinnedFolderItem(UUID.randomUUID().toString(), "Folder");
-        for (AppRef ref : selectedOrdered) {
-            folder.apps.add(resolveForSelectionRef(ref));
+        List<AppRef> normalized = normalizePinnedAppRefs(selectedOrdered);
+        if (normalized.isEmpty()) {
+            return;
         }
+        if (normalized.size() == 1) {
+            PinnedAppItem appItem = new PinnedAppItem(normalized.get(0));
+            if (slotIndex >= 0 && slotIndex < pinnedItems.size()) {
+                pinnedItems.set(slotIndex, appItem);
+            } else {
+                pinnedItems.add(appItem);
+            }
+            persistPinsAndReload();
+            return;
+        }
+        PinnedFolderItem folder = new PinnedFolderItem(UUID.randomUUID().toString(), "Folder");
+        folder.apps.addAll(normalized);
         if (slotIndex >= 0 && slotIndex < pinnedItems.size()) {
             pinnedItems.set(slotIndex, folder);
         } else {
@@ -2309,7 +2311,7 @@ public final class SuggestionBarView extends GridLayout {
             .setTitle("Move to folder")
             .setItems(names, (dialog, which) -> {
                 PinnedFolderItem folder = folders.get(which);
-                folder.apps.add(resolveForSelectionRef(item.appRef));
+                addAppRefToFolderIfMissing(folder, item.appRef);
                 if (appIndex >= 0 && appIndex < pinnedItems.size()) {
                     pinnedItems.remove(appIndex);
                 }
@@ -2328,7 +2330,7 @@ public final class SuggestionBarView extends GridLayout {
                 String title = titleInput.getText() == null ? "Folder" : titleInput.getText().toString().trim();
                 if (title.isEmpty()) title = "Folder";
                 PinnedFolderItem folder = new PinnedFolderItem(UUID.randomUUID().toString(), title);
-                folder.apps.add(resolveForSelectionRef(item.appRef));
+                addAppRefToFolderIfMissing(folder, item.appRef);
 
                 if (appIndex >= 0 && appIndex < pinnedItems.size()) {
                     pinnedItems.set(appIndex, folder);
@@ -3588,11 +3590,8 @@ public final class SuggestionBarView extends GridLayout {
     }
 
     private String[] appLabels(List<LauncherAppEntry> entries) {
-        String[] labels = new String[entries.size()];
-        for (int i = 0; i < entries.size(); i++) {
-            labels[i] = entries.get(i).label;
-        }
-        return labels;
+        List<String> displayLabels = buildDisplayLabels(entries);
+        return displayLabels.toArray(new String[0]);
     }
 
     private static final class OrderedPinnedAdapter extends RecyclerView.Adapter<OrderedPinnedAdapter.RowHolder> {
@@ -3707,11 +3706,13 @@ public final class SuggestionBarView extends GridLayout {
     private static final class PinOption {
         final String id;
         final String label;
+        final String searchKey;
         final PinnedItem item;
 
-        PinOption(String id, String label, PinnedItem item) {
+        PinOption(String id, String label, String searchKey, PinnedItem item) {
             this.id = id;
             this.label = label;
+            this.searchKey = searchKey;
             this.item = item;
         }
     }
@@ -3771,11 +3772,135 @@ public final class SuggestionBarView extends GridLayout {
 
     private List<PinOption> buildPinOptions(@NonNull List<LauncherAppEntry> apps, @NonNull List<PinnedItem> currentPinned) {
         List<PinOption> out = new ArrayList<>();
-        for (LauncherAppEntry app : apps) {
+        List<String> labels = buildDisplayLabels(apps);
+        for (int i = 0; i < apps.size(); i++) {
+            LauncherAppEntry app = apps.get(i);
             AppRef ref = resolveForSelectionRef(app.appRef);
-            out.add(new PinOption(ref.stableId(), app.label, new PinnedAppItem(ref)));
+            out.add(new PinOption(ref.stableId(), labels.get(i), buildSearchableAppText(app), new PinnedAppItem(ref)));
         }
         return out;
+    }
+
+    @NonNull
+    private static List<String> buildDisplayLabels(@NonNull List<LauncherAppEntry> apps) {
+        Map<String, Integer> counts = new HashMap<>();
+        for (LauncherAppEntry app : apps) {
+            String key = normalizeLookupValue(app.label);
+            counts.put(key, counts.containsKey(key) ? counts.get(key) + 1 : 1);
+        }
+
+        List<String> labels = new ArrayList<>(apps.size());
+        for (LauncherAppEntry app : apps) {
+            String label = app.label == null ? "" : app.label.trim();
+            if (label.isEmpty()) {
+                labels.add(app.appRef.packageName);
+                continue;
+            }
+            String key = normalizeLookupValue(label);
+            if (counts.get(key) != null && counts.get(key) > 1) {
+                labels.add(label + " (" + app.appRef.packageName + ")");
+            } else {
+                labels.add(label);
+            }
+        }
+        return labels;
+    }
+
+    @NonNull
+    private static String buildSearchableAppText(@NonNull LauncherAppEntry app) {
+        String label = app.label == null ? "" : app.label;
+        String packageName = app.appRef.packageName == null ? "" : app.appRef.packageName;
+        String activityName = app.appRef.activityName == null ? "" : app.appRef.activityName;
+        return label + " " + packageName + " " + activityName;
+    }
+
+    private static boolean matchesLookupQuery(@NonNull String query, @NonNull String haystack) {
+        String trimmed = query.trim();
+        if (trimmed.isEmpty()) return true;
+        String lowerQuery = trimmed.toLowerCase(Locale.ROOT);
+        String lowerHaystack = haystack.toLowerCase(Locale.ROOT);
+        if (lowerHaystack.contains(lowerQuery)) {
+            return true;
+        }
+        String normalizedQuery = normalizeLookupValue(trimmed);
+        return !normalizedQuery.isEmpty() && normalizeLookupValue(haystack).contains(normalizedQuery);
+    }
+
+    @NonNull
+    private static String normalizeLookupValue(@Nullable String value) {
+        if (value == null || value.isEmpty()) return "";
+        StringBuilder normalized = new StringBuilder(value.length());
+        boolean previousWasSpace = true;
+        for (int i = 0; i < value.length(); i++) {
+            char c = Character.toLowerCase(value.charAt(i));
+            if (Character.isLetterOrDigit(c)) {
+                normalized.append(c);
+                previousWasSpace = false;
+            } else if (!previousWasSpace) {
+                normalized.append(' ');
+                previousWasSpace = true;
+            }
+        }
+        int length = normalized.length();
+        if (length > 0 && normalized.charAt(length - 1) == ' ') {
+            normalized.setLength(length - 1);
+        }
+        return normalized.toString();
+    }
+
+    @NonNull
+    private List<AppRef> collectSelectedFolderApps(@NonNull List<LauncherAppEntry> source, @NonNull Set<String> selectedIds) {
+        List<AppRef> selectedApps = new ArrayList<>();
+        for (LauncherAppEntry app : source) {
+            if (selectedIds.contains(app.appRef.stableId())) {
+                selectedApps.add(app.appRef);
+            }
+        }
+        return normalizePinnedAppRefs(selectedApps);
+    }
+
+    @NonNull
+    private List<AppRef> normalizePinnedAppRefs(@NonNull List<AppRef> refs) {
+        List<AppRef> normalized = new ArrayList<>();
+        LinkedHashSet<String> seen = new LinkedHashSet<>();
+        for (AppRef ref : refs) {
+            AppRef resolved = resolveForSelectionRef(ref);
+            if (TextUtils.isEmpty(resolved.packageName)) {
+                continue;
+            }
+            if (seen.add(resolved.stableId())) {
+                normalized.add(resolved);
+            }
+        }
+        return normalized;
+    }
+
+    private void applyNormalizedFolderSelection(int folderIndex, @NonNull PinnedFolderItem folder, @NonNull List<AppRef> selectedApps) {
+        int resolvedIndex = folderIndex >= 0 ? folderIndex : findPinnedFolderIndex(folder);
+        if (resolvedIndex < 0 || resolvedIndex >= pinnedItems.size()) {
+            return;
+        }
+        if (selectedApps.isEmpty()) {
+            pinnedItems.remove(resolvedIndex);
+        } else if (selectedApps.size() == 1) {
+            pinnedItems.set(resolvedIndex, new PinnedAppItem(selectedApps.get(0)));
+        } else {
+            folder.apps.clear();
+            folder.apps.addAll(selectedApps);
+            pinnedItems.set(resolvedIndex, folder);
+        }
+        persistPinsAndReload();
+    }
+
+    private boolean addAppRefToFolderIfMissing(@NonNull PinnedFolderItem folder, @NonNull AppRef ref) {
+        AppRef resolved = resolveForSelectionRef(ref);
+        for (AppRef existing : folder.apps) {
+            if (existing.stableId().equals(resolved.stableId())) {
+                return false;
+            }
+        }
+        folder.apps.add(resolved);
+        return true;
     }
 
     private static void syncListChecks(@NonNull ListView listView, @NonNull List<PinOption> options, @NonNull Set<String> selectedIds) {
@@ -3900,14 +4025,7 @@ public final class SuggestionBarView extends GridLayout {
 
         if (sourceIsApp && targetItem instanceof PinnedFolderItem) {
             PinnedFolderItem folder = (PinnedFolderItem) targetItem;
-            boolean alreadyInFolder = false;
-            for (AppRef ref : folder.apps) {
-                if (sourceRef != null && ref.stableId().equals(sourceRef.stableId())) {
-                    alreadyInFolder = true;
-                    break;
-                }
-            }
-            if (!alreadyInFolder && sourceRef != null) folder.apps.add(sourceRef);
+            if (sourceRef != null) addAppRefToFolderIfMissing(folder, sourceRef);
             pinnedItems.remove(dragState.sourceIndex);
             persistPinsAndReload();
             return true;
@@ -3942,12 +4060,47 @@ public final class SuggestionBarView extends GridLayout {
         if (targetIndex < 0) return false;
         AppRef dragged = dragState.appRef;
         if (dragged == null) return false;
+        AppRef resolvedDragged = resolveForSelectionRef(dragged);
+
+        if (targetItem instanceof PinnedFolderItem) {
+            PinnedFolderItem targetFolder = (PinnedFolderItem) targetItem;
+            if (dragState.sourceFolder != null && targetFolder.id.equals(dragState.sourceFolder.id)) {
+                return false;
+            }
+            addAppRefToFolderIfMissing(targetFolder, resolvedDragged);
+            if (dragState.sourceFolder != null) {
+                removeAppFromFolder(dragState.sourceFolder, resolvedDragged);
+            }
+            persistPinsAndReload();
+            return true;
+        }
+
+        if (targetItem instanceof PinnedAppItem && shouldCreateFolderOnDrop(dropXRatio)) {
+            AppRef targetRef = resolveForSelectionRef(((PinnedAppItem) targetItem).appRef);
+            if (targetRef.stableId().equals(resolvedDragged.stableId())) {
+                if (dragState.sourceFolder != null) {
+                    removeAppFromFolder(dragState.sourceFolder, resolvedDragged);
+                    persistPinsAndReload();
+                    return true;
+                }
+                return false;
+            }
+            PinnedFolderItem folder = new PinnedFolderItem(UUID.randomUUID().toString(), "Folder");
+            addAppRefToFolderIfMissing(folder, targetRef);
+            addAppRefToFolderIfMissing(folder, resolvedDragged);
+            pinnedItems.set(targetIndex, folder);
+            if (dragState.sourceFolder != null) {
+                removeAppFromFolder(dragState.sourceFolder, resolvedDragged);
+            }
+            persistPinsAndReload();
+            return true;
+        }
 
         int existingIndex = -1;
         for (int i = 0; i < pinnedItems.size(); i++) {
             PinnedItem item = pinnedItems.get(i);
             if (item instanceof PinnedAppItem) {
-                if (((PinnedAppItem) item).appRef.stableId().equals(dragged.stableId())) {
+                if (((PinnedAppItem) item).appRef.stableId().equals(resolvedDragged.stableId())) {
                     existingIndex = i;
                     break;
                 }
@@ -3960,10 +4113,10 @@ public final class SuggestionBarView extends GridLayout {
 
         targetIndex = computeInsertionIndex(targetIndex, targetItem, dropXRatio);
         targetIndex = clamp(targetIndex, 0, pinnedItems.size());
-        pinnedItems.add(targetIndex, new PinnedAppItem(dragged));
+        pinnedItems.add(targetIndex, new PinnedAppItem(resolvedDragged));
 
         if (dragState.sourceFolder != null) {
-            removeAppFromFolder(dragState.sourceFolder, dragged);
+            removeAppFromFolder(dragState.sourceFolder, resolvedDragged);
         }
         persistPinsAndReload();
         return true;
