@@ -61,6 +61,7 @@ import android.widget.ListView;
 import android.widget.PopupWindow;
 import android.widget.ScrollView;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -2560,7 +2561,6 @@ public final class SuggestionBarView extends GridLayout {
             configRepository.savePinnedItems(pinnedItems);
             pinnedItems = configRepository.loadPinnedItems();
         }
-        pinnedPageIndex = 0;
         reloadWithInput("", lastTerminalView);
     }
 
@@ -2618,7 +2618,19 @@ public final class SuggestionBarView extends GridLayout {
         @Nullable AppRef folderEntryRef,
         boolean allowDragPickup
     ) {
-        bindContextLongPressGesture(pressTarget, pinnedIndex, allowDragPickup, () -> {
+        bindAppContextLongPress(pressTarget, entry, pinnedIndex, sourceFolder, folderEntryRef, allowDragPickup, null);
+    }
+
+    private void bindAppContextLongPress(
+        @NonNull View pressTarget,
+        @NonNull LauncherAppEntry entry,
+        int pinnedIndex,
+        @Nullable PinnedFolderItem sourceFolder,
+        @Nullable AppRef folderEntryRef,
+        boolean allowDragPickup,
+        @Nullable Runnable startDragAction
+    ) {
+        bindContextLongPressGesture(pressTarget, pinnedIndex, allowDragPickup, startDragAction, () -> {
             dismissShortcutsPopup();
             showAppContextPopup(new AppMenuContext(entry, pressTarget, pinnedIndex, sourceFolder, folderEntryRef));
         });
@@ -2630,7 +2642,7 @@ public final class SuggestionBarView extends GridLayout {
         int pinnedIndex,
         boolean allowDragPickup
     ) {
-        bindContextLongPressGesture(pressTarget, pinnedIndex, allowDragPickup, () -> {
+        bindContextLongPressGesture(pressTarget, pinnedIndex, allowDragPickup, null, () -> {
             dismissFolderPopup();
             showFolderContextPopup(folder, pinnedIndex, pressTarget);
         });
@@ -2640,6 +2652,7 @@ public final class SuggestionBarView extends GridLayout {
         @NonNull View pressTarget,
         int pinnedIndex,
         boolean allowDragPickup,
+        @Nullable Runnable startDragAction,
         @NonNull Runnable showContextPopup
     ) {
         pressTarget.setLongClickable(true);
@@ -2691,17 +2704,21 @@ public final class SuggestionBarView extends GridLayout {
 
                     boolean withinPickupWindow = (SystemClock.uptimeMillis() - state.menuShownAtMs) <= PICKUP_DECISION_WINDOW_MS;
                     boolean shouldStartPickup = allowDragPickup
-                        && pinnedIndex >= 0
                         && withinPickupWindow
                         && !state.definitiveYMovement
-                        && absDx >= xPickupThreshold;
+                        && absDx >= xPickupThreshold
+                        && (pinnedIndex >= 0 || startDragAction != null);
 
                     if (shouldStartPickup) {
                         state.dragStarted = true;
                         clearMenuHighlight();
                         dismissAppContextPopup();
                         dismissFolderPopup();
-                        startPinnedDrag(pressTarget, pinnedIndex);
+                        if (startDragAction != null) {
+                            startDragAction.run();
+                        } else {
+                            startPinnedDrag(pressTarget, pinnedIndex);
+                        }
                         activeLongPressPickupState = null;
                         return true;
                     }
@@ -3945,6 +3962,7 @@ public final class SuggestionBarView extends GridLayout {
         }
         if (started) {
             dismissFolderPopup();
+            Toast.makeText(getContext(), "Drag to pin. Release off the bar to remove.", Toast.LENGTH_SHORT).show();
         }
         return started;
     }
@@ -4009,6 +4027,13 @@ public final class SuggestionBarView extends GridLayout {
             case DragEvent.ACTION_DRAG_ENDED:
                 targetView.setAlpha(1f);
                 clearFolderDragInsertionPreview();
+                if (folderDrag && !event.getResult()) {
+                    FolderAppDragState dragState = (FolderAppDragState) localState;
+                    if (dragState.sourceFolder != null && dragState.appRef != null) {
+                        removeAppFromFolder(dragState.sourceFolder, dragState.appRef);
+                        persistPinsAndReload();
+                    }
+                }
                 return true;
             default:
                 return false;
@@ -4065,7 +4090,7 @@ public final class SuggestionBarView extends GridLayout {
         if (targetItem instanceof PinnedFolderItem) {
             PinnedFolderItem targetFolder = (PinnedFolderItem) targetItem;
             if (dragState.sourceFolder != null && targetFolder.id.equals(dragState.sourceFolder.id)) {
-                return false;
+                return true;
             }
             addAppRefToFolderIfMissing(targetFolder, resolvedDragged);
             if (dragState.sourceFolder != null) {
@@ -4509,7 +4534,15 @@ public final class SuggestionBarView extends GridLayout {
             button.setColorFilter(new ColorMatrixColorFilter(colorMatrix));
         }
         button.setOnClickListener(v -> launchEntryFromTouch(v, entry, lastTerminalView));
-        bindAppContextLongPress(button, entry, -1, sourceFolder, resolveForSelectionRef(entry.appRef), false);
+        bindAppContextLongPress(
+            button,
+            entry,
+            -1,
+            sourceFolder,
+            resolveForSelectionRef(entry.appRef),
+            true,
+            () -> startFolderPopupDrag(button, entry, sourceFolder)
+        );
         button.setContentDescription(entry.label);
         registerLaunchTarget(entry.appRef, button);
         return button;
