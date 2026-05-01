@@ -27,6 +27,10 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class LauncherCtlNotificationListener extends NotificationListenerService {
     private static final String LOG_TAG = "LauncherCtlNotifListener";
+    private static final String NOTIFICATION_LISTENER_SETTINGS_ACTION =
+        "android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS";
+    private static final String NOTIFICATION_LISTENER_HINT =
+        "Enable notification access for Termux:Monet to populate notifications and media endpoints.";
     private static final ConcurrentHashMap<String, JSONObject> NOTIFICATIONS = new ConcurrentHashMap<>();
     private static final int MAX_ART_BYTES = 512 * 1024;
 
@@ -66,6 +70,14 @@ public class LauncherCtlNotificationListener extends NotificationListenerService
         return listenerConnected;
     }
 
+    public static String getListenerSettingsAction() {
+        return NOTIFICATION_LISTENER_SETTINGS_ACTION;
+    }
+
+    public static String getListenerHint() {
+        return NOTIFICATION_LISTENER_HINT;
+    }
+
     public static JSONObject getNotificationsSnapshot() {
         JSONObject data = new JSONObject();
         try {
@@ -76,10 +88,11 @@ public class LauncherCtlNotificationListener extends NotificationListenerService
                 notifications.put(new JSONObject(notification.toString()));
             }
             data.put("listenerConnected", listenerConnected);
+            data.put("settingsAction", getListenerSettingsAction());
             data.put("count", notifications.length());
             data.put("notifications", notifications);
             if (!listenerConnected) {
-                data.put("hint", "Enable notification access for Termux:Monet to populate notifications and media endpoints.");
+                data.put("hint", getListenerHint());
             }
         } catch (JSONException ignored) {
         }
@@ -90,13 +103,14 @@ public class LauncherCtlNotificationListener extends NotificationListenerService
         JSONObject data = new JSONObject();
         try {
             data.put("listenerConnected", listenerConnected);
+            data.put("settingsAction", getListenerSettingsAction());
             if (nowPlaying != null) {
                 data.put("nowPlaying", new JSONObject(nowPlaying.toString()));
             } else {
                 data.put("nowPlaying", JSONObject.NULL);
             }
             if (!listenerConnected) {
-                data.put("hint", "Enable notification access for Termux:Monet to populate notifications and media endpoints.");
+                data.put("hint", getListenerHint());
             }
         } catch (JSONException ignored) {
         }
@@ -107,13 +121,14 @@ public class LauncherCtlNotificationListener extends NotificationListenerService
         JSONObject data = new JSONObject();
         try {
             data.put("listenerConnected", listenerConnected);
+            data.put("settingsAction", getListenerSettingsAction());
             if (nowPlayingArt != null) {
                 data.put("art", new JSONObject(nowPlayingArt.toString()));
             } else {
                 data.put("art", JSONObject.NULL);
             }
             if (!listenerConnected) {
-                data.put("hint", "Enable notification access for Termux:Monet to populate notifications and media endpoints.");
+                data.put("hint", getListenerHint());
             }
         } catch (JSONException ignored) {
         }

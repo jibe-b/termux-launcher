@@ -91,7 +91,7 @@ public final class LauncherConfigRepository {
                             if (app == null) continue;
                             String packageName = app.optString("packageName", "");
                             String activityName = app.optString("activityName", "");
-                            if (!packageName.isEmpty() && !activityName.isEmpty()) {
+                            if (!packageName.isEmpty()) {
                                 folder.apps.add(new AppRef(packageName, activityName));
                             }
                         }

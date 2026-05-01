@@ -525,10 +525,15 @@ public final class SuggestionBarView extends GridLayout {
             if (item instanceof PinnedFolderItem) {
                 PinnedFolderItem folder = (PinnedFolderItem) clonePinnedItem(item);
                 int before = folder.apps.size();
+                LinkedHashSet<String> seenStableIds = new LinkedHashSet<>();
                 List<AppRef> normalizedApps = new ArrayList<>();
                 for (int i = folder.apps.size() - 1; i >= 0; i--) {
                     AppRef normalizedRef = resolveNormalizedPinnedRef(folder.apps.get(i));
                     if (normalizedRef == null) {
+                        changed = true;
+                        continue;
+                    }
+                    if (!seenStableIds.add(normalizedRef.stableId())) {
                         changed = true;
                         continue;
                     }
@@ -538,13 +543,18 @@ public final class SuggestionBarView extends GridLayout {
                     changed = true;
                     continue;
                 }
+                if (normalizedApps.size() == 1) {
+                    changed = true;
+                    cleaned.add(new PinnedAppItem(normalizedApps.get(0)));
+                    continue;
+                }
                 if (normalizedApps.size() != before) {
                     changed = true;
                 }
                 for (int i = 0; i < normalizedApps.size(); i++) {
-                    AppRef oldRef = folder.apps.get(i);
+                    AppRef oldRef = i < folder.apps.size() ? folder.apps.get(i) : null;
                     AppRef newRef = normalizedApps.get(i);
-                    if (!oldRef.stableId().equals(newRef.stableId())) {
+                    if (oldRef == null || !oldRef.stableId().equals(newRef.stableId())) {
                         changed = true;
                         break;
                     }
@@ -3999,6 +4009,15 @@ public final class SuggestionBarView extends GridLayout {
                         pinnedItems.remove(i);
                         break;
                     }
+                }
+            }
+        } else if (folder.apps.size() == 1) {
+            AppRef surviving = folder.apps.get(0);
+            for (int i = 0; i < pinnedItems.size(); i++) {
+                PinnedItem item = pinnedItems.get(i);
+                if (item instanceof PinnedFolderItem && ((PinnedFolderItem) item).id.equals(folder.id)) {
+                    pinnedItems.set(i, new PinnedAppItem(resolveForSelectionRef(surviving)));
+                    break;
                 }
             }
         }

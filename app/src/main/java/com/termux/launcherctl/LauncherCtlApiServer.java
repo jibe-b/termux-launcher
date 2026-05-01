@@ -315,6 +315,7 @@ public class LauncherCtlApiServer {
         data.put("statusMessage", manager.getStatusMessage());
         data.put("isPrivilegedAvailable", manager.isPrivilegedAvailable());
         data.put("notificationListenerConnected", LauncherCtlNotificationListener.isListenerConnected());
+        data.put("notificationListener", buildNotificationListenerStatus());
         data.put("execPolicy", describeExecPolicy());
         data.put("privilegedPolicy", describePrivilegedPolicy());
         return data;
@@ -483,6 +484,17 @@ public class LauncherCtlApiServer {
         JSONObject snapshot = LauncherCtlNotificationListener.getNotificationsSnapshot();
         snapshot.put("ok", true);
         return snapshot;
+    }
+
+    private JSONObject buildNotificationListenerStatus() throws JSONException {
+        JSONObject data = new JSONObject();
+        boolean connected = LauncherCtlNotificationListener.isListenerConnected();
+        data.put("connected", connected);
+        data.put("settingsAction", LauncherCtlNotificationListener.getListenerSettingsAction());
+        if (!connected) {
+            data.put("hint", LauncherCtlNotificationListener.getListenerHint());
+        }
+        return data;
     }
 
     private JSONObject runAppLaunch(Context context, String body) throws JSONException {

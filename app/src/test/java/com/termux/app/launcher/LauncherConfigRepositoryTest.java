@@ -17,6 +17,7 @@ import static org.junit.Assert.assertTrue;
 
 public class LauncherConfigRepositoryTest {
     private LauncherConfigRepository repository;
+    private FakePreferencesStore preferences;
 
     private static final class FakePreferencesStore implements LauncherConfigRepository.PreferencesStore {
         private String pinnedItemsV2 = "";
@@ -46,7 +47,7 @@ public class LauncherConfigRepositoryTest {
 
     @Before
     public void setUp() {
-        FakePreferencesStore preferences = new FakePreferencesStore();
+        preferences = new FakePreferencesStore();
         repository = new LauncherConfigRepository(preferences);
     }
 
@@ -90,5 +91,39 @@ public class LauncherConfigRepositoryTest {
         assertTrue(loadedFolder.tintOverrideEnabled);
         assertEquals(0xFF1A2B3C, loadedFolder.tintColor);
         assertEquals(2, loadedFolder.apps.size());
+    }
+
+    @Test
+    public void folderRoundTrip_preservesPackageOnlyRefs() {
+        List<PinnedItem> items = new ArrayList<>();
+        PinnedFolderItem folder = new PinnedFolderItem("folder-2", "Fallbacks");
+        folder.apps.add(new AppRef("com.example.packageonly", ""));
+        folder.apps.add(new AppRef("com.example.full", "Main"));
+        items.add(folder);
+
+        repository.savePinnedItems(items);
+        List<PinnedItem> loaded = repository.loadPinnedItems();
+
+        assertEquals(1, loaded.size());
+        PinnedFolderItem loadedFolder = (PinnedFolderItem) loaded.get(0);
+        assertEquals(2, loadedFolder.apps.size());
+        assertEquals("com.example.packageonly", loadedFolder.apps.get(0).packageName);
+        assertEquals("", loadedFolder.apps.get(0).activityName);
+    }
+
+    @Test
+    public void loadPinnedItems_acceptsPackageOnlyFolderRefsFromStoredJson() {
+        preferences.pinnedItemsV2 = "{\"schemaVersion\":1,\"items\":[{\"type\":\"folder\",\"id\":\"folder-3\",\"title\":\"Stored\",\"apps\":[{\"packageName\":\"com.example.packageonly\"},{\"packageName\":\"com.example.full\",\"activityName\":\"Main\"}]}]}";
+
+        List<PinnedItem> loaded = repository.loadPinnedItems();
+
+        assertEquals(1, loaded.size());
+        assertEquals(PinnedItem.TYPE_FOLDER, loaded.get(0).getType());
+        PinnedFolderItem loadedFolder = (PinnedFolderItem) loaded.get(0);
+        assertEquals(2, loadedFolder.apps.size());
+        assertEquals("com.example.packageonly", loadedFolder.apps.get(0).packageName);
+        assertEquals("", loadedFolder.apps.get(0).activityName);
+        assertEquals("com.example.full", loadedFolder.apps.get(1).packageName);
+        assertEquals("Main", loadedFolder.apps.get(1).activityName);
     }
 }
