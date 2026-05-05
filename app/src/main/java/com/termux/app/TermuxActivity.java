@@ -2012,12 +2012,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (mAzScrubRowView.getParent() instanceof ViewGroup) {
             ViewGroup parent = (ViewGroup) mAzScrubRowView.getParent();
-            parent.setClipChildren(true);
-            parent.setClipToPadding(true);
+            parent.setClipChildren(false);
+            parent.setClipToPadding(false);
             if (parent.getParent() instanceof ViewGroup) {
                 ViewGroup grandParent = (ViewGroup) parent.getParent();
-                grandParent.setClipChildren(true);
-                grandParent.setClipToPadding(true);
+                grandParent.setClipChildren(false);
+                grandParent.setClipToPadding(false);
             }
         }
     }
