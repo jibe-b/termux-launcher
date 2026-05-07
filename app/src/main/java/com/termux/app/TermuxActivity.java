@@ -696,8 +696,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             terminalSurfaceHost.setBackgroundColor(Color.TRANSPARENT);
             terminalBodySurface.setBackgroundColor(terminalSurfaceColor);
             terminalBodySurface.setVisibility(showSurface && Color.alpha(terminalSurfaceColor) > 0 ? View.VISIBLE : View.GONE);
-            terminalStatusSurface.setBackgroundColor(terminalSurfaceColor);
-            terminalStatusSurface.setVisibility(shouldShowTerminalStatusBarSurface(showSurface, terminalSurfaceColor) ? View.VISIBLE : View.GONE);
+            terminalStatusSurface.setBackgroundColor(Color.TRANSPARENT);
+            terminalStatusSurface.setVisibility(View.GONE);
             if (terminalView != null) {
                 terminalView.setBackgroundColor(Color.TRANSPARENT);
                 if (terminalView instanceof TerminalView) {
