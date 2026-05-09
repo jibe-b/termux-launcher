@@ -55,6 +55,7 @@ public class ShizukuBackend implements PrivilegedBackend {
     private final Shizuku.OnBinderReceivedListener binderReceivedListener = () -> {
         Log.i(TAG, "Shizuku binder received");
         binderReceived = true;
+        isAvailable = true;
         checkPermission();
         notifyBinderReceived();
     };
@@ -62,6 +63,7 @@ public class ShizukuBackend implements PrivilegedBackend {
     private final Shizuku.OnBinderDeadListener binderDeadListener = () -> {
         Log.i(TAG, "Shizuku binder dead");
         binderReceived = false;
+        isAvailable = false;
         hasPermission = false;
         notifyBinderDead();
     };
@@ -117,6 +119,18 @@ public class ShizukuBackend implements PrivilegedBackend {
     
     @Override
     public boolean isAvailable() {
+        if (isAvailable && binderReceived) {
+            try {
+                if (Shizuku.pingBinder()) {
+                    return true;
+                }
+            } catch (Exception e) {
+                Log.w(TAG, "Shizuku binder availability check failed", e);
+            }
+            isAvailable = false;
+            binderReceived = false;
+            hasPermission = false;
+        }
         return isAvailable && binderReceived;
     }
     
@@ -349,6 +363,9 @@ public class ShizukuBackend implements PrivilegedBackend {
                 Shizuku.removeRequestPermissionResultListener(permissionResultListener);
                 listenersRegistered = false;
             }
+            isAvailable = false;
+            binderReceived = false;
+            hasPermission = false;
             Log.i(TAG, "Shizuku backend cleaned up");
         } catch (Exception e) {
             Log.e(TAG, "Error during cleanup", e);

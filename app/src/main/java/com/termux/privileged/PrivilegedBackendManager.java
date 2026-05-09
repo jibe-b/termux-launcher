@@ -93,8 +93,10 @@ public class PrivilegedBackendManager {
         if (applicationContext == null) {
             return initialize(context);
         }
+        this.applicationContext = context.getApplicationContext();
         BackendState state = getBackendState();
-        if (state == BackendState.UNINITIALIZED || state == BackendState.UNAVAILABLE || state == BackendState.SERVICE_NOT_RUNNING) {
+        if (state == BackendState.UNINITIALIZED || state == BackendState.UNAVAILABLE || state == BackendState.SERVICE_NOT_RUNNING
+            || !isCurrentBackendConsistentForState(state)) {
             return reselectBackend();
         }
         return CompletableFuture.completedFuture(isPrivilegedAvailable());
@@ -264,6 +266,23 @@ public class PrivilegedBackendManager {
         Log.i(TAG, "Backend state -> " + state + ", reason -> " + reason + ", message -> " + message);
     }
 
+    private boolean isCurrentBackendConsistentForState(BackendState state) {
+        if (currentBackend == null) {
+            return false;
+        }
+
+        switch (state) {
+            case READY:
+            case FALLBACK_SHELL:
+                return currentBackend.isAvailable() && currentBackend.hasPermission();
+            case PERMISSION_DENIED:
+            case PERMISSION_REQUESTING:
+                return currentBackend.isAvailable();
+            default:
+                return true;
+        }
+    }
+
     private boolean ensureShizukuPermissionBeforeOperation(String operation) {
         if (!isMasterEnabled()) {
             updateState(BackendState.UNAVAILABLE, StatusReason.UNAVAILABLE,
@@ -319,7 +338,7 @@ public class PrivilegedBackendManager {
         }
         BackendState state = getBackendState();
         return (state == BackendState.READY || state == BackendState.FALLBACK_SHELL)
-            && currentBackend != null && currentBackend.hasPermission();
+            && currentBackend != null && currentBackend.isAvailable() && currentBackend.hasPermission();
     }
 
     public PrivilegedBackend.Type getBackendType() {

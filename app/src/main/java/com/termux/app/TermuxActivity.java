@@ -659,6 +659,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         scheduleAccessoryRenderSync("wallpaper:resume");
         restartAccessoryBlurHeartbeat();
         scheduleAccessoryBlurRecovery();
+        refreshShizukuLockBackendIfNeeded();
         if (mSuggestionBarView != null) {
             mSuggestionBarView.post(this::updateAzOverflowAffordance);
         }
@@ -2589,6 +2590,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         } else if (TermuxPreferenceConstants.TERMUX_APP.APP_LAUNCHER_AZ_LOCK_METHOD_ACCESSIBILITY.equals(method)) {
             lockScreenWithAccessibility();
         }
+    }
+
+    private void refreshShizukuLockBackendIfNeeded() {
+        if (mPreferences == null) {
+            return;
+        }
+        String method = mPreferences.getAppLauncherAzLockMethod();
+        if (!TermuxPreferenceConstants.TERMUX_APP.APP_LAUNCHER_AZ_LOCK_METHOD_SHIZUKU.equals(method)) {
+            return;
+        }
+        PrivilegedBackendManager.getInstance().initializeShizukuOnly(this)
+            .exceptionally(throwable -> {
+                Logger.logWarn(LOG_TAG, "A-Z Shizuku backend refresh failed: " + throwable.getMessage());
+                return false;
+            });
     }
 
     private void lockScreenWithShizuku() {
