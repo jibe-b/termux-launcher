@@ -20,8 +20,10 @@ import android.graphics.BitmapFactory;
 import android.graphics.BitmapShader;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.ColorFilter;
 import android.graphics.Matrix;
 import android.graphics.Paint;
+import android.graphics.PixelFormat;
 import android.graphics.Rect;
 import android.graphics.RenderEffect;
 import android.graphics.RectF;
@@ -363,7 +365,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private static final String LOG_TAG = "TermuxActivity";
     private static final int ACCESSORY_BLUR_DOWNSAMPLE_FACTOR = 4;
-    private static final float MANAGED_WALLPAPER_BLUR_ZOOM_COMPENSATION = 1.005f;
     private static final long ACCESSORY_BLUR_BACKSTOP_MS = 300_000L;
     private static volatile boolean sPendingStyleReloadOnNextResume = false;
 
@@ -395,6 +396,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private int mLastAccessoryBackdropBlurRadiusDp = -1;
     private boolean mLastAccessoryBackdropManagedSource;
     @NonNull private final Rect mLastAccessoryBackdropTargetRect = new Rect();
+    @Nullable private Drawable mManagedWallpaperWindowBackground;
+    private long mManagedWallpaperWindowBackgroundLastModified = -1L;
+    private long mManagedWallpaperWindowBackgroundLength = -1L;
     @Nullable private Boolean mPendingImeGeometryVisible;
     private final Handler mAccessoryRenderHandler = new Handler(Looper.getMainLooper());
     private final Runnable mDeferredImeGeometryRunnable = () -> {
@@ -1238,7 +1242,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             int sourceWidth = Math.max(1, sourceBitmap.getWidth());
             int sourceHeight = Math.max(1, sourceBitmap.getHeight());
             float scale = Math.max((float) frameWidth / sourceWidth, (float) frameHeight / sourceHeight);
-            scale *= MANAGED_WALLPAPER_BLUR_ZOOM_COMPENSATION;
             float drawWidth = sourceWidth * scale;
             float drawHeight = sourceHeight * scale;
             float translateX = frameRect.left + ((frameWidth - drawWidth) / 2f) - targetRect.left;
@@ -3205,6 +3208,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
                 if ((selectedFlags & WallpaperManager.FLAG_SYSTEM) != 0) {
                     setWallpaperModeEnabled(this, true);
+                    updateWindowBackgroundForCurrentSession();
                     View rootView = findViewById(R.id.activity_termux_root_view);
                     if (rootView != null) {
                         rootView.post(this::applyWallpaperOffsetFixIfNeeded);
@@ -3229,6 +3233,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             exportWallpaperCopyToTermuxBackgroundDirectory(croppedUri);
             if ((wallpaperFlags & WallpaperManager.FLAG_SYSTEM) != 0) {
                 promoteManagedWallpaperTempFile();
+                clearManagedWallpaperWindowBackgroundCache();
                 int wallpaperId = getCurrentSystemWallpaperId();
                 if (mPreferences != null) {
                     mPreferences.setManagedWallpaperSystemId(wallpaperId);
@@ -3376,6 +3381,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     @NonNull
     private Rect getWallpaperFrameRect() {
+        if (getWindow() != null && getWindow().getDecorView() != null) {
+            View decorView = getWindow().getDecorView();
+            if (decorView.getWidth() > 0 && decorView.getHeight() > 0) {
+                decorView.getLocationOnScreen(mTmpParentLocation);
+                int left = mTmpParentLocation[0];
+                int top = mTmpParentLocation[1];
+                return new Rect(left, top, left + decorView.getWidth(), top + decorView.getHeight());
+            }
+        }
         DisplayMetrics realMetrics = new DisplayMetrics();
         getWindowManager().getDefaultDisplay().getRealMetrics(realMetrics);
         return new Rect(0, 0, Math.max(1, realMetrics.widthPixels), Math.max(1, realMetrics.heightPixels));
@@ -3735,12 +3749,49 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
         if (shouldUseWallpaperPassthroughMode()) {
-            getWindow().getDecorView().setBackgroundColor(Color.TRANSPARENT);
+            Drawable managedWallpaperBackground = getManagedWallpaperWindowBackground();
+            if (managedWallpaperBackground != null) {
+                getWindow().getDecorView().setBackground(managedWallpaperBackground);
+            } else {
+                getWindow().getDecorView().setBackgroundColor(Color.TRANSPARENT);
+            }
             return;
         }
+        clearManagedWallpaperWindowBackgroundCache();
         getWindow().getDecorView().setBackgroundColor(
             getTermuxThemeColor(com.termux.shared.R.attr.termuxColorSurfaceBase, R.color.termux_surface_base)
         );
+    }
+
+    @Nullable
+    private Drawable getManagedWallpaperWindowBackground() {
+        if (!shouldUseManagedWallpaperBlurSource()) {
+            return null;
+        }
+        File sourceFile = getManagedWallpaperExactFile();
+        long lastModified = sourceFile.lastModified();
+        long length = sourceFile.length();
+        if (mManagedWallpaperWindowBackground != null &&
+            mManagedWallpaperWindowBackgroundLastModified == lastModified &&
+            mManagedWallpaperWindowBackgroundLength == length) {
+            return mManagedWallpaperWindowBackground;
+        }
+
+        Bitmap bitmap = BitmapFactory.decodeFile(sourceFile.getAbsolutePath());
+        if (bitmap == null) {
+            clearManagedWallpaperWindowBackgroundCache();
+            return null;
+        }
+        mManagedWallpaperWindowBackground = new CenterCropBitmapDrawable(bitmap);
+        mManagedWallpaperWindowBackgroundLastModified = lastModified;
+        mManagedWallpaperWindowBackgroundLength = length;
+        return mManagedWallpaperWindowBackground;
+    }
+
+    private void clearManagedWallpaperWindowBackgroundCache() {
+        mManagedWallpaperWindowBackground = null;
+        mManagedWallpaperWindowBackgroundLastModified = -1L;
+        mManagedWallpaperWindowBackgroundLength = -1L;
     }
 
     @Override
@@ -4285,6 +4336,49 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         Intent intent = new Intent(context, TermuxActivity.class);
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         return intent;
+    }
+
+    private static final class CenterCropBitmapDrawable extends Drawable {
+        @NonNull private final Bitmap mBitmap;
+        @NonNull private final Paint mPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+        @NonNull private final RectF mDestinationRect = new RectF();
+
+        CenterCropBitmapDrawable(@NonNull Bitmap bitmap) {
+            mBitmap = bitmap;
+        }
+
+        @Override
+        public void draw(@NonNull Canvas canvas) {
+            Rect bounds = getBounds();
+            int boundsWidth = Math.max(1, bounds.width());
+            int boundsHeight = Math.max(1, bounds.height());
+            int bitmapWidth = Math.max(1, mBitmap.getWidth());
+            int bitmapHeight = Math.max(1, mBitmap.getHeight());
+            float scale = Math.max((float) boundsWidth / bitmapWidth, (float) boundsHeight / bitmapHeight);
+            float drawWidth = bitmapWidth * scale;
+            float drawHeight = bitmapHeight * scale;
+            float left = bounds.left + ((boundsWidth - drawWidth) / 2f);
+            float top = bounds.top + ((boundsHeight - drawHeight) / 2f);
+            mDestinationRect.set(left, top, left + drawWidth, top + drawHeight);
+            canvas.drawBitmap(mBitmap, null, mDestinationRect, mPaint);
+        }
+
+        @Override
+        public void setAlpha(int alpha) {
+            mPaint.setAlpha(alpha);
+            invalidateSelf();
+        }
+
+        @Override
+        public void setColorFilter(@Nullable ColorFilter colorFilter) {
+            mPaint.setColorFilter(colorFilter);
+            invalidateSelf();
+        }
+
+        @Override
+        public int getOpacity() {
+            return PixelFormat.OPAQUE;
+        }
     }
 
 }
