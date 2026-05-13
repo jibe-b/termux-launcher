@@ -375,20 +375,6 @@ public final class TermuxPreferenceConstants {
             "managed_wallpaper_system_id";
 
         public static final int DEFAULT_VALUE_MANAGED_WALLPAPER_SYSTEM_ID = -1;
-
-        /**
-         * Defines pixel offsets applied only to dock blur generated from wallpapers set outside
-         * Termux Launcher.
-         */
-        public static final String KEY_SYSTEM_WALLPAPER_BLUR_OFFSET_X =
-            "system_wallpaper_blur_offset_x";
-
-        public static final int DEFAULT_VALUE_SYSTEM_WALLPAPER_BLUR_OFFSET_X = 0;
-
-        public static final String KEY_SYSTEM_WALLPAPER_BLUR_OFFSET_Y =
-            "system_wallpaper_blur_offset_y";
-
-        public static final int DEFAULT_VALUE_SYSTEM_WALLPAPER_BLUR_OFFSET_Y = 0;
         
         /**
          * Defines the key for whether extrakeys blur is enabled or not.

@@ -55,22 +55,6 @@
             app:showSeekBarValue="true" />
 
         <androidx.preference.SeekBarPreference
-            app:key="system_wallpaper_blur_offset_x"
-            app:title="@string/termux_system_wallpaper_blur_offset_x_title"
-            android:min="-200"
-            android:max="200"
-            android:defaultValue="0"
-            app:showSeekBarValue="true" />
-
-        <androidx.preference.SeekBarPreference
-            app:key="system_wallpaper_blur_offset_y"
-            app:title="@string/termux_system_wallpaper_blur_offset_y_title"
-            android:min="-200"
-            android:max="200"
-            android:defaultValue="0"
-            app:showSeekBarValue="true" />
-
-        <androidx.preference.SeekBarPreference
             app:key="app_launcher_button_count"
             app:title="@string/termux_app_launcher_button_count_title"
             app:min="1"
