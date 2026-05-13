@@ -36,7 +36,6 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
-import android.os.ParcelFileDescriptor;
 import android.os.SystemClock;
 import android.os.UserHandle;
 import android.provider.Settings;
@@ -366,7 +365,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private static final String LOG_TAG = "TermuxActivity";
     private static final int ACCESSORY_BLUR_DOWNSAMPLE_FACTOR = 4;
-    private static final int SYSTEM_WALLPAPER_FILE_BLUR_X_OFFSET_PX = 5;
     private static final long ACCESSORY_BLUR_BACKSTOP_MS = 300_000L;
     private static volatile boolean sPendingStyleReloadOnNextResume = false;
 
@@ -401,7 +399,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private Drawable mManagedWallpaperWindowBackground;
     private long mManagedWallpaperWindowBackgroundLastModified = -1L;
     private long mManagedWallpaperWindowBackgroundLength = -1L;
-    private int mUnavailableSystemWallpaperFileId = -1;
+    @Nullable private Drawable mSystemWallpaperWindowBackground;
+    private int mSystemWallpaperWindowBackgroundId = -1;
     @Nullable private Boolean mPendingImeGeometryVisible;
     private final Handler mAccessoryRenderHandler = new Handler(Looper.getMainLooper());
     private final Runnable mDeferredImeGeometryRunnable = () -> {
@@ -1275,11 +1274,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         WallpaperManager wallpaperManager = WallpaperManager.getInstance(this);
-        Bitmap wallpaperFileBackdrop = createSystemWallpaperFileBackdropBitmapForRect(wallpaperManager, targetRect);
-        if (wallpaperFileBackdrop != null) {
-            return wallpaperFileBackdrop;
-        }
-
         Drawable wallpaper = wallpaperManager.getDrawable();
         if (wallpaper == null) {
             return null;
@@ -1287,7 +1281,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         int targetWidth = Math.max(1, targetRect.width());
         int targetHeight = Math.max(1, targetRect.height());
-        Rect frameRect = getSystemWallpaperFrameRect();
+        Rect frameRect = getManagedWallpaperFrameRect();
         int frameWidth = Math.max(1, frameRect.width());
         int frameHeight = Math.max(1, frameRect.height());
 
@@ -1314,119 +1308,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             offsetTop - targetRect.top + drawHeight
         );
         drawable.draw(canvas);
-        return bitmap;
-    }
-
-    @Nullable
-    private Bitmap createSystemWallpaperFileBackdropBitmapForRect(@NonNull WallpaperManager wallpaperManager, @NonNull Rect targetRect) {
-        ParcelFileDescriptor wallpaperFile = null;
-        int currentWallpaperId = getCurrentSystemWallpaperId();
-        if (currentWallpaperId > 0 && currentWallpaperId == mUnavailableSystemWallpaperFileId) {
-            return null;
-        }
-        try {
-            wallpaperFile = wallpaperManager.getWallpaperFile(WallpaperManager.FLAG_SYSTEM);
-            if (wallpaperFile == null) {
-                if (currentWallpaperId > 0) {
-                    mUnavailableSystemWallpaperFileId = currentWallpaperId;
-                }
-                return null;
-            }
-            Bitmap sourceBitmap = BitmapFactory.decodeFileDescriptor(wallpaperFile.getFileDescriptor());
-            if (sourceBitmap == null) {
-                return null;
-            }
-            mUnavailableSystemWallpaperFileId = -1;
-            try {
-                return createSystemWallpaperFileBackdropFromSource(sourceBitmap, targetRect, getSystemWallpaperFrameRect());
-            } finally {
-                sourceBitmap.recycle();
-            }
-        } catch (Exception e) {
-            if (currentWallpaperId > 0) {
-                mUnavailableSystemWallpaperFileId = currentWallpaperId;
-            }
-            Logger.logStackTraceWithMessage(LOG_TAG, "Failed to create dock blur source from system wallpaper file", e);
-            return null;
-        } finally {
-            if (wallpaperFile != null) {
-                try {
-                    wallpaperFile.close();
-                } catch (Exception e) {
-                    Logger.logStackTraceWithMessage(LOG_TAG, "Failed to close system wallpaper file", e);
-                }
-            }
-        }
-    }
-
-    @NonNull
-    private Bitmap createSystemWallpaperFileBackdropFromSource(@NonNull Bitmap sourceBitmap, @NonNull Rect targetRect,
-                                                              @NonNull Rect frameRect) {
-        int frameWidth = Math.max(1, frameRect.width());
-        int frameHeight = Math.max(1, frameRect.height());
-        int sourceWidth = Math.max(1, sourceBitmap.getWidth());
-        int sourceHeight = Math.max(1, sourceBitmap.getHeight());
-        int tolerancePx = Math.max(2, Math.round(getResources().getDisplayMetrics().density * 4f));
-        if (Math.abs(sourceWidth - frameWidth) <= tolerancePx || Math.abs(sourceHeight - frameHeight) <= tolerancePx) {
-            return createWallpaperBitmapBackdropFromSurface(sourceBitmap, targetRect, frameRect);
-        }
-        return createWallpaperBitmapBackdropFromSource(sourceBitmap, targetRect, frameRect);
-    }
-
-    @NonNull
-    private Bitmap createWallpaperBitmapBackdropFromSurface(@NonNull Bitmap sourceBitmap, @NonNull Rect targetRect,
-                                                           @NonNull Rect frameRect) {
-        int targetWidth = Math.max(1, targetRect.width());
-        int targetHeight = Math.max(1, targetRect.height());
-        int frameWidth = Math.max(1, frameRect.width());
-        int frameHeight = Math.max(1, frameRect.height());
-        int sourceWidth = Math.max(1, sourceBitmap.getWidth());
-        int sourceHeight = Math.max(1, sourceBitmap.getHeight());
-        float scaleX = (float) frameWidth / sourceWidth;
-        float scaleY = (float) frameHeight / sourceHeight;
-        float translateX = frameRect.left - targetRect.left + SYSTEM_WALLPAPER_FILE_BLUR_X_OFFSET_PX;
-        float translateY = frameRect.top - targetRect.top;
-
-        Bitmap bitmap = Bitmap.createBitmap(targetWidth, targetHeight, Bitmap.Config.ARGB_8888);
-        Canvas canvas = new Canvas(bitmap);
-        Matrix shaderMatrix = new Matrix();
-        shaderMatrix.setScale(scaleX, scaleY);
-        shaderMatrix.postTranslate(translateX, translateY);
-
-        BitmapShader shader = new BitmapShader(sourceBitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
-        shader.setLocalMatrix(shaderMatrix);
-        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
-        paint.setShader(shader);
-        canvas.drawRect(0f, 0f, targetWidth, targetHeight, paint);
-        return bitmap;
-    }
-
-    @NonNull
-    private Bitmap createWallpaperBitmapBackdropFromSource(@NonNull Bitmap sourceBitmap, @NonNull Rect targetRect,
-                                                          @NonNull Rect frameRect) {
-        int targetWidth = Math.max(1, targetRect.width());
-        int targetHeight = Math.max(1, targetRect.height());
-        int frameWidth = Math.max(1, frameRect.width());
-        int frameHeight = Math.max(1, frameRect.height());
-        int sourceWidth = Math.max(1, sourceBitmap.getWidth());
-        int sourceHeight = Math.max(1, sourceBitmap.getHeight());
-        float scale = Math.max((float) frameWidth / sourceWidth, (float) frameHeight / sourceHeight);
-        float drawWidth = sourceWidth * scale;
-        float drawHeight = sourceHeight * scale;
-        float translateX = frameRect.left + ((frameWidth - drawWidth) / 2f) - targetRect.left;
-        float translateY = frameRect.top + ((frameHeight - drawHeight) / 2f) - targetRect.top;
-
-        Bitmap bitmap = Bitmap.createBitmap(targetWidth, targetHeight, Bitmap.Config.ARGB_8888);
-        Canvas canvas = new Canvas(bitmap);
-        Matrix shaderMatrix = new Matrix();
-        shaderMatrix.setScale(scale, scale);
-        shaderMatrix.postTranslate(translateX, translateY);
-
-        BitmapShader shader = new BitmapShader(sourceBitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
-        shader.setLocalMatrix(shaderMatrix);
-        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
-        paint.setShader(shader);
-        canvas.drawRect(0f, 0f, targetWidth, targetHeight, paint);
         return bitmap;
     }
 
@@ -3353,7 +3234,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             exportWallpaperCopyToTermuxBackgroundDirectory(croppedUri);
             if ((wallpaperFlags & WallpaperManager.FLAG_SYSTEM) != 0) {
                 promoteManagedWallpaperTempFile();
-                clearManagedWallpaperWindowBackgroundCache();
+                clearWallpaperWindowBackgroundCaches();
                 int wallpaperId = getCurrentSystemWallpaperId();
                 if (mPreferences != null) {
                     mPreferences.setManagedWallpaperSystemId(wallpaperId);
@@ -3886,12 +3767,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             Drawable managedWallpaperBackground = getManagedWallpaperWindowBackground();
             if (managedWallpaperBackground != null) {
                 getWindow().getDecorView().setBackground(managedWallpaperBackground);
+            } else if (!isLiveWallpaperActive()) {
+                Drawable systemWallpaperBackground = getSystemWallpaperWindowBackground();
+                if (systemWallpaperBackground != null) {
+                    getWindow().getDecorView().setBackground(systemWallpaperBackground);
+                } else {
+                    getWindow().getDecorView().setBackgroundColor(Color.TRANSPARENT);
+                }
             } else {
                 getWindow().getDecorView().setBackgroundColor(Color.TRANSPARENT);
             }
             return;
         }
-        clearManagedWallpaperWindowBackgroundCache();
+        clearWallpaperWindowBackgroundCaches();
         getWindow().getDecorView().setBackgroundColor(
             getTermuxThemeColor(com.termux.shared.R.attr.termuxColorSurfaceBase, R.color.termux_surface_base)
         );
@@ -3926,6 +3814,44 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mManagedWallpaperWindowBackground = null;
         mManagedWallpaperWindowBackgroundLastModified = -1L;
         mManagedWallpaperWindowBackgroundLength = -1L;
+    }
+
+    @Nullable
+    private Drawable getSystemWallpaperWindowBackground() {
+        int currentWallpaperId = getCurrentSystemWallpaperId();
+        if (currentWallpaperId > 0 &&
+            mSystemWallpaperWindowBackground != null &&
+            mSystemWallpaperWindowBackgroundId == currentWallpaperId) {
+            return mSystemWallpaperWindowBackground;
+        }
+
+        try {
+            Drawable wallpaper = WallpaperManager.getInstance(this).getDrawable();
+            if (wallpaper == null) {
+                clearSystemWallpaperWindowBackgroundCache();
+                return null;
+            }
+            Drawable source = wallpaper.getConstantState() != null
+                ? wallpaper.getConstantState().newDrawable().mutate()
+                : wallpaper.mutate();
+            mSystemWallpaperWindowBackground = new CenterCropDrawable(source);
+            mSystemWallpaperWindowBackgroundId = currentWallpaperId;
+            return mSystemWallpaperWindowBackground;
+        } catch (Exception e) {
+            clearSystemWallpaperWindowBackgroundCache();
+            Logger.logStackTraceWithMessage(LOG_TAG, "Failed to create system wallpaper window background", e);
+            return null;
+        }
+    }
+
+    private void clearSystemWallpaperWindowBackgroundCache() {
+        mSystemWallpaperWindowBackground = null;
+        mSystemWallpaperWindowBackgroundId = -1;
+    }
+
+    private void clearWallpaperWindowBackgroundCaches() {
+        clearManagedWallpaperWindowBackgroundCache();
+        clearSystemWallpaperWindowBackgroundCache();
     }
 
     @Override
@@ -4512,6 +4438,47 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override
         public int getOpacity() {
             return PixelFormat.OPAQUE;
+        }
+    }
+
+    private static final class CenterCropDrawable extends Drawable {
+        @NonNull private final Drawable mSource;
+
+        CenterCropDrawable(@NonNull Drawable source) {
+            mSource = source;
+        }
+
+        @Override
+        public void draw(@NonNull Canvas canvas) {
+            Rect bounds = getBounds();
+            int boundsWidth = Math.max(1, bounds.width());
+            int boundsHeight = Math.max(1, bounds.height());
+            int sourceWidth = mSource.getIntrinsicWidth() > 0 ? mSource.getIntrinsicWidth() : boundsWidth;
+            int sourceHeight = mSource.getIntrinsicHeight() > 0 ? mSource.getIntrinsicHeight() : boundsHeight;
+            float scale = Math.max((float) boundsWidth / sourceWidth, (float) boundsHeight / sourceHeight);
+            int drawWidth = Math.max(boundsWidth, Math.round(sourceWidth * scale));
+            int drawHeight = Math.max(boundsHeight, Math.round(sourceHeight * scale));
+            int left = bounds.left + Math.round((boundsWidth - drawWidth) / 2f);
+            int top = bounds.top + Math.round((boundsHeight - drawHeight) / 2f);
+            mSource.setBounds(left, top, left + drawWidth, top + drawHeight);
+            mSource.draw(canvas);
+        }
+
+        @Override
+        public void setAlpha(int alpha) {
+            mSource.setAlpha(alpha);
+            invalidateSelf();
+        }
+
+        @Override
+        public void setColorFilter(@Nullable ColorFilter colorFilter) {
+            mSource.setColorFilter(colorFilter);
+            invalidateSelf();
+        }
+
+        @Override
+        public int getOpacity() {
+            return mSource.getOpacity();
         }
     }
 
