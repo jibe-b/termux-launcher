@@ -366,6 +366,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private static final String LOG_TAG = "TermuxActivity";
     private static final int ACCESSORY_BLUR_DOWNSAMPLE_FACTOR = 4;
+    private static final int ACCESSORY_GLASS_EDGE_OVERLAP_DP = 20;
     private static final long ACCESSORY_BLUR_BACKSTOP_MS = 300_000L;
     private static volatile boolean sPendingStyleReloadOnNextResume = false;
 
@@ -954,9 +955,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         float alphaScale = Math.max(0.35f, barAlpha);
-        int surfaceGlow = withAlphaComponent(resolveAccessoryGlassBaseColor(), Math.round(62f * alphaScale));
-        int highlight = withAlphaComponent(Color.WHITE, Math.round(18f * alphaScale));
-        int shadow = withAlphaComponent(resolveAccessoryOutlineColor(), Math.round(34f * Math.max(0.40f, barAlpha)));
+        int surfaceGlow = withAlphaComponent(resolveAccessoryGlassBaseColor(), Math.round(46f * alphaScale));
+        int highlight = withAlphaComponent(Color.WHITE, Math.round(10f * alphaScale));
+        int shadow = withAlphaComponent(resolveAccessoryOutlineColor(), Math.round(22f * Math.max(0.40f, barAlpha)));
 
         GradientDrawable softGlassFade = new GradientDrawable(
             GradientDrawable.Orientation.TOP_BOTTOM,
@@ -976,10 +977,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             specularHighlight,
             innerShadow
         });
-        int edgeHeightPx = Math.max(1, Math.round(ViewUtils.dpToPx(this, 40)));
-        int seamInsetPx = Math.max(1, Math.round(ViewUtils.dpToPx(this, 20)));
-        int highlightHeightPx = Math.max(1, Math.round(ViewUtils.dpToPx(this, 8)));
-        int shadowTopInsetPx = Math.max(0, seamInsetPx + Math.round(ViewUtils.dpToPx(this, 5)));
+        int edgeHeightPx = Math.max(1, Math.round(ViewUtils.dpToPx(this, ACCESSORY_GLASS_EDGE_OVERLAP_DP * 2)));
+        int seamInsetPx = Math.max(1, Math.round(ViewUtils.dpToPx(this, ACCESSORY_GLASS_EDGE_OVERLAP_DP)));
+        int highlightHeightPx = Math.max(1, Math.round(ViewUtils.dpToPx(this, 12)));
+        int shadowTopInsetPx = Math.max(0, seamInsetPx + Math.round(ViewUtils.dpToPx(this, 8)));
         edge.setLayerInset(
             1,
             0,
@@ -1220,16 +1221,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return Math.max(0, Math.round((blurRadiusPx * 2f) + (density * 2f)));
     }
 
+    private int getAccessoryGlassEdgeOverlapPx() {
+        return Math.max(0, Math.round(ViewUtils.dpToPx(this, ACCESSORY_GLASS_EDGE_OVERLAP_DP)));
+    }
+
     private void applyAccessoryBackdropOverscan(@NonNull ImageView backdrop, @NonNull View surfaceHost, int horizontalOverscanPx) {
         ViewGroup.LayoutParams layoutParams = backdrop.getLayoutParams();
         if (!(layoutParams instanceof FrameLayout.LayoutParams)) {
             return;
         }
         FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) layoutParams;
+        int topOverscanPx = getAccessoryGlassEdgeOverlapPx();
         int targetWidth = Math.max(1, surfaceHost.getWidth() + (horizontalOverscanPx * 2));
-        int targetHeight = Math.max(1, surfaceHost.getHeight());
+        int targetHeight = Math.max(1, surfaceHost.getHeight() + topOverscanPx);
         int targetLeftMargin = -horizontalOverscanPx;
-        int targetTopMargin = 0;
+        int targetTopMargin = -topOverscanPx;
         if (params.width != targetWidth || params.height != targetHeight ||
             params.leftMargin != targetLeftMargin || params.topMargin != targetTopMargin) {
             params.width = targetWidth;
@@ -1246,9 +1252,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @NonNull
     private Rect buildAccessoryBackdropTargetRect(@NonNull View surfaceHost, int horizontalOverscanPx) {
         surfaceHost.getLocationOnScreen(mTmpViewLocation);
+        int topOverscanPx = getAccessoryGlassEdgeOverlapPx();
         return new Rect(
             mTmpViewLocation[0] - horizontalOverscanPx,
-            mTmpViewLocation[1],
+            mTmpViewLocation[1] - topOverscanPx,
             mTmpViewLocation[0] + Math.max(1, surfaceHost.getWidth()) + horizontalOverscanPx,
             mTmpViewLocation[1] + Math.max(1, surfaceHost.getHeight())
         );
