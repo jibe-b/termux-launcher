@@ -596,6 +596,48 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             false
         );
     }
+
+    public int getSystemWallpaperBlurOffsetX() {
+        return DataUtils.clamp(
+            SharedPreferenceUtils.getInt(
+                mSharedPreferences,
+                TERMUX_APP.KEY_SYSTEM_WALLPAPER_BLUR_OFFSET_X,
+                TERMUX_APP.DEFAULT_VALUE_SYSTEM_WALLPAPER_BLUR_OFFSET_X
+            ),
+            -200,
+            200
+        );
+    }
+
+    public void setSystemWallpaperBlurOffsetX(int value) {
+        SharedPreferenceUtils.setInt(
+            mSharedPreferences,
+            TERMUX_APP.KEY_SYSTEM_WALLPAPER_BLUR_OFFSET_X,
+            DataUtils.clamp(value, -200, 200),
+            false
+        );
+    }
+
+    public int getSystemWallpaperBlurOffsetY() {
+        return DataUtils.clamp(
+            SharedPreferenceUtils.getInt(
+                mSharedPreferences,
+                TERMUX_APP.KEY_SYSTEM_WALLPAPER_BLUR_OFFSET_Y,
+                TERMUX_APP.DEFAULT_VALUE_SYSTEM_WALLPAPER_BLUR_OFFSET_Y
+            ),
+            -200,
+            200
+        );
+    }
+
+    public void setSystemWallpaperBlurOffsetY(int value) {
+        SharedPreferenceUtils.setInt(
+            mSharedPreferences,
+            TERMUX_APP.KEY_SYSTEM_WALLPAPER_BLUR_OFFSET_Y,
+            DataUtils.clamp(value, -200, 200),
+            false
+        );
+    }
     
     public boolean isExtraKeysBlurEnabled() {
         return getExtraKeysBlurRadius() > 0;

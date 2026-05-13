@@ -278,6 +278,14 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
             case "app_bar_opacity":
                 mPreferences.setAppBarOpacity(value);
                 break;
+            case "system_wallpaper_blur_offset_x":
+                mPreferences.setSystemWallpaperBlurOffsetX(value);
+                TermuxActivity.updateTermuxActivityStyling(mContext, false);
+                break;
+            case "system_wallpaper_blur_offset_y":
+                mPreferences.setSystemWallpaperBlurOffsetY(value);
+                TermuxActivity.updateTermuxActivityStyling(mContext, false);
+                break;
             case "app_launcher_button_count":
                 mPreferences.setAppLauncherButtonCount(value);
                 TermuxActivity.requestTermuxActivityStylingOnNextResume(mContext, false);
@@ -312,6 +320,10 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.getExtraKeysBlurRadius();
             case "app_bar_opacity":
                 return mPreferences.getAppBarOpacity();
+            case "system_wallpaper_blur_offset_x":
+                return mPreferences.getSystemWallpaperBlurOffsetX();
+            case "system_wallpaper_blur_offset_y":
+                return mPreferences.getSystemWallpaperBlurOffsetY();
             case "app_launcher_button_count":
                 return mPreferences.getAppLauncherButtonCount();
             case "app_launcher_icon_scale_percent":
