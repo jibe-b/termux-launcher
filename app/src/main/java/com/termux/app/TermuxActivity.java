@@ -366,6 +366,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private static final String LOG_TAG = "TermuxActivity";
     private static final int ACCESSORY_BLUR_DOWNSAMPLE_FACTOR = 4;
+    private static final int SYSTEM_WALLPAPER_FILE_BLUR_X_OFFSET_PX = 5;
     private static final long ACCESSORY_BLUR_BACKSTOP_MS = 300_000L;
     private static volatile boolean sPendingStyleReloadOnNextResume = false;
 
@@ -1383,7 +1384,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int sourceHeight = Math.max(1, sourceBitmap.getHeight());
         float scaleX = (float) frameWidth / sourceWidth;
         float scaleY = (float) frameHeight / sourceHeight;
-        float translateX = frameRect.left - targetRect.left;
+        float translateX = frameRect.left - targetRect.left + SYSTEM_WALLPAPER_FILE_BLUR_X_OFFSET_PX;
         float translateY = frameRect.top - targetRect.top;
 
         Bitmap bitmap = Bitmap.createBitmap(targetWidth, targetHeight, Bitmap.Config.ARGB_8888);
