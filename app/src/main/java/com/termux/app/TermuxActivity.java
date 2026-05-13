@@ -954,9 +954,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         float alphaScale = Math.max(0.35f, barAlpha);
-        int surfaceGlow = withAlphaComponent(resolveAccessoryGlassBaseColor(), Math.round(58f * alphaScale));
-        int highlight = withAlphaComponent(Color.WHITE, Math.round(46f * alphaScale));
-        int shadow = withAlphaComponent(resolveAccessoryOutlineColor(), Math.round(50f * Math.max(0.40f, barAlpha)));
+        int surfaceGlow = withAlphaComponent(resolveAccessoryGlassBaseColor(), Math.round(62f * alphaScale));
+        int highlight = withAlphaComponent(Color.WHITE, Math.round(18f * alphaScale));
+        int shadow = withAlphaComponent(resolveAccessoryOutlineColor(), Math.round(34f * Math.max(0.40f, barAlpha)));
 
         GradientDrawable softGlassFade = new GradientDrawable(
             GradientDrawable.Orientation.TOP_BOTTOM,
@@ -978,8 +978,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         });
         int edgeHeightPx = Math.max(1, Math.round(ViewUtils.dpToPx(this, 40)));
         int seamInsetPx = Math.max(1, Math.round(ViewUtils.dpToPx(this, 20)));
-        int highlightHeightPx = Math.max(1, Math.round(ViewUtils.dpToPx(this, 2)));
-        int shadowTopInsetPx = Math.max(0, seamInsetPx + Math.round(ViewUtils.dpToPx(this, 2)));
+        int highlightHeightPx = Math.max(1, Math.round(ViewUtils.dpToPx(this, 8)));
+        int shadowTopInsetPx = Math.max(0, seamInsetPx + Math.round(ViewUtils.dpToPx(this, 5)));
         edge.setLayerInset(
             1,
             0,
