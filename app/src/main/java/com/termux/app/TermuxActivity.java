@@ -30,6 +30,7 @@ import android.graphics.RectF;
 import android.graphics.Shader;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.LayerDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -952,12 +953,34 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
 
-        int highlight = withAlphaComponent(Color.WHITE, Math.round(30f * Math.max(0.35f, barAlpha)));
-        int shadow = withAlphaComponent(resolveAccessoryOutlineColor(), Math.round(26f * Math.max(0.40f, barAlpha)));
-        GradientDrawable edge = new GradientDrawable(
+        float alphaScale = Math.max(0.35f, barAlpha);
+        int surfaceGlow = withAlphaComponent(resolveAccessoryGlassBaseColor(), Math.round(34f * alphaScale));
+        int highlight = withAlphaComponent(Color.WHITE, Math.round(42f * alphaScale));
+        int shadow = withAlphaComponent(resolveAccessoryOutlineColor(), Math.round(44f * Math.max(0.40f, barAlpha)));
+
+        GradientDrawable softGlassFade = new GradientDrawable(
             GradientDrawable.Orientation.TOP_BOTTOM,
-            new int[] { highlight, shadow, Color.TRANSPARENT }
+            new int[] { Color.TRANSPARENT, surfaceGlow, Color.TRANSPARENT }
         );
+        GradientDrawable specularHighlight = new GradientDrawable(
+            GradientDrawable.Orientation.TOP_BOTTOM,
+            new int[] { highlight, Color.TRANSPARENT }
+        );
+        GradientDrawable innerShadow = new GradientDrawable(
+            GradientDrawable.Orientation.TOP_BOTTOM,
+            new int[] { shadow, Color.TRANSPARENT }
+        );
+
+        LayerDrawable edge = new LayerDrawable(new Drawable[] {
+            softGlassFade,
+            specularHighlight,
+            innerShadow
+        });
+        int edgeHeightPx = Math.max(1, Math.round(ViewUtils.dpToPx(this, 28)));
+        int highlightHeightPx = Math.max(1, Math.round(ViewUtils.dpToPx(this, 2)));
+        int shadowTopInsetPx = Math.max(1, Math.round(ViewUtils.dpToPx(this, 3)));
+        edge.setLayerInset(1, 0, 0, 0, Math.max(0, edgeHeightPx - highlightHeightPx));
+        edge.setLayerInset(2, 0, shadowTopInsetPx, 0, 0);
         edgeFx.setBackground(edge);
         edgeFx.setVisibility(View.VISIBLE);
     }
