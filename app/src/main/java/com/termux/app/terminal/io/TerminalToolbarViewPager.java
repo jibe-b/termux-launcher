@@ -14,6 +14,7 @@ import com.termux.app.TermuxActivity;
 import com.termux.app.activities.SettingsActivity;
 import com.termux.shared.activity.ActivityUtils;
 import com.termux.shared.termux.extrakeys.ExtraKeysView;
+import com.termux.shared.view.KeyboardUtils;
 import com.termux.terminal.TerminalSession;
 
 public class TerminalToolbarViewPager {
@@ -70,6 +71,12 @@ public class TerminalToolbarViewPager {
                 });
 
                 final EditText editText = layout.findViewById(R.id.terminal_toolbar_text_input);
+                editText.setFocusableInTouchMode(true);
+                editText.setOnFocusChangeListener((v, hasFocus) -> {
+                    if (hasFocus) {
+                        KeyboardUtils.showSoftKeyboard(mActivity, editText);
+                    }
+                });
                 if (mSavedTextInput != null) {
                     editText.setText(mSavedTextInput);
                     mSavedTextInput = null;
@@ -117,8 +124,10 @@ public class TerminalToolbarViewPager {
                 mActivity.getTerminalView().requestFocus();
             } else {
                 final EditText editText = mTerminalToolbarViewPager.findViewById(R.id.terminal_toolbar_text_input);
-                if (editText != null)
+                if (editText != null) {
                     editText.requestFocus();
+                    editText.postDelayed(() -> KeyboardUtils.showSoftKeyboard(mActivity, editText), 120);
+                }
             }
         }
     }
