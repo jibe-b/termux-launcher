@@ -374,6 +374,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private static final long EMPTY_SESSION_RECOVERY_DEBOUNCE_MS = 1500L;
     private static final long ACCESSORY_BLUR_RECOVERY_RETRY_MS = 120L;
     private static final boolean ACCESSORY_RENDER_TRACE = false;
+    private static volatile boolean sPendingStyleReloadRecreateActivity = true;
 
     private boolean mSeamlessStatusBackgroundActive;
     private int mLastStatusBarInsetTop;
@@ -675,12 +676,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         Logger.logVerbose(LOG_TAG, "onResume");
         if (mIsInvalidState)
             return;
-        if (consumePendingStyleReloadOnNextResume()) {
-            reloadActivityStyling(true);
+        if (sPendingStyleReloadOnNextResume) {
+            boolean recreateActivity = consumePendingStyleReloadRecreateActivity();
+            reloadActivityStyling(recreateActivity);
             return;
         }
         if (mTermuxTerminalSessionActivityClient != null)
             mTermuxTerminalSessionActivityClient.onResume();
+        if (mTermuxTerminalSessionActivityClient != null)
+            mTermuxTerminalSessionActivityClient.refreshMaterialTerminalColors(true);
         if (mTermuxTerminalViewClient != null)
             mTermuxTerminalViewClient.onResume();
         maybeRecoverFromEmptySession("onResume");
@@ -806,7 +810,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     return;
                 }
                 if (mTermuxTerminalSessionActivityClient != null) {
-                    mTermuxTerminalSessionActivityClient.refreshMaterialTerminalColorsIfNeeded();
+                    mTermuxTerminalSessionActivityClient.refreshMaterialTerminalColors(true);
                 }
                 applyTerminalSurfaceAppearance();
                 scheduleAccessoryRenderSync("wallpaper:colors");
@@ -1771,6 +1775,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     public void onConfigurationChanged(@NonNull Configuration newConfig) {
         Logger.logVerbose(LOG_TAG, "onConfigurationChanged");
         super.onConfigurationChanged(newConfig);
+        if (mTermuxTerminalSessionActivityClient != null)
+            mTermuxTerminalSessionActivityClient.refreshMaterialTerminalColors(true);
         updateWindowBackgroundForCurrentSession();
     }
 
@@ -4004,16 +4010,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     public static void requestTermuxActivityStylingOnNextResume(Context context, boolean recreateActivity) {
+        sPendingStyleReloadRecreateActivity = recreateActivity;
         sPendingStyleReloadOnNextResume = true;
         updateTermuxActivityStyling(context, recreateActivity);
     }
 
-    private static boolean consumePendingStyleReloadOnNextResume() {
+    private static boolean consumePendingStyleReloadRecreateActivity() {
         if (!sPendingStyleReloadOnNextResume) {
-            return false;
+            return true;
         }
+        boolean recreateActivity = sPendingStyleReloadRecreateActivity;
         sPendingStyleReloadOnNextResume = false;
-        return true;
+        sPendingStyleReloadRecreateActivity = true;
+        return recreateActivity;
     }
 
     private void registerTermuxActivityBroadcastReceiver() {
@@ -4380,6 +4389,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     case TERMUX_ACTIVITY.ACTION_RELOAD_STYLE:
                         Logger.logDebug(LOG_TAG, "Received intent to reload styling");
                         sPendingStyleReloadOnNextResume = false;
+                        sPendingStyleReloadRecreateActivity = true;
                         reloadActivityStyling(intent.getBooleanExtra(TERMUX_ACTIVITY.EXTRA_RECREATE_ACTIVITY, true));
                         return;
                     case TERMUX_ACTIVITY.ACTION_REQUEST_PERMISSIONS:

@@ -101,7 +101,6 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         // the first time bell key is pressed and play() is called, since sound may not be loaded
         // quickly enough before the call to play(). https://stackoverflow.com/questions/35435625
         loadBellSoundPool();
-        refreshMaterialTerminalColorsIfNeeded();
     }
 
     /**
@@ -547,11 +546,15 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     }
 
     public void refreshMaterialTerminalColorsIfNeeded() {
+        refreshMaterialTerminalColors(false);
+    }
+
+    public void refreshMaterialTerminalColors(boolean force) {
         if (mActivity.getPreferences() == null || !mActivity.getPreferences().isTerminalDynamicColorsEnabled()) {
             return;
         }
         int signature = MaterialTerminalColorScheme.signature(mActivity);
-        if (signature != mLastMaterialTerminalPaletteSignature) {
+        if (force || signature != mLastMaterialTerminalPaletteSignature) {
             checkForFontAndColors();
         }
     }

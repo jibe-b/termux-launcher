@@ -212,7 +212,7 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 break;
             case "terminal_dynamic_colors_enabled":
                 mPreferences.setTerminalDynamicColorsEnabled(value);
-                TermuxActivity.updateTermuxActivityStyling(mContext, true);
+                TermuxActivity.requestTermuxActivityStylingOnNextResume(mContext, false);
                 break;
             case "app_launcher_bw_icons":
                 mPreferences.setAppLauncherBwIconsEnabled(value);
