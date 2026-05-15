@@ -1622,9 +1622,7 @@ public final class SuggestionBarView extends GridLayout {
             : null;
 
         boolean launched = false;
-        if (tryStartMainActivity(context, explicit != null ? explicit.getComponent() : null, launchAnimationContext)) {
-            launched = true;
-        } else if (tryStartActivity(context, explicit, launchAnimationContext)) {
+        if (tryStartActivity(context, explicit, launchAnimationContext)) {
             launched = true;
         }
 
@@ -1640,15 +1638,17 @@ public final class SuggestionBarView extends GridLayout {
                 resolveFallback.setComponent(resolved);
             }
         }
-        if (!launched && tryStartMainActivity(context, pkgDefault != null ? pkgDefault.getComponent() : null, launchAnimationContext)) {
-            launched = true;
-        } else if (!launched && tryStartMainActivity(context, resolved, launchAnimationContext)) {
-            launched = true;
-        } else if (!launched && tryStartActivity(context, pkgDefault, launchAnimationContext)) {
+        if (!launched && tryStartActivity(context, pkgDefault, launchAnimationContext)) {
             launched = true;
         } else if (!launched && tryStartActivity(context, explicitNoCategory, launchAnimationContext)) {
             launched = true;
         } else if (!launched && resolved != null && tryStartActivity(context, resolveFallback, launchAnimationContext)) {
+            launched = true;
+        } else if (!launched && tryStartMainActivity(context, explicit != null ? explicit.getComponent() : null, launchAnimationContext)) {
+            launched = true;
+        } else if (!launched && tryStartMainActivity(context, pkgDefault != null ? pkgDefault.getComponent() : null, launchAnimationContext)) {
+            launched = true;
+        } else if (!launched && tryStartMainActivity(context, resolved, launchAnimationContext)) {
             launched = true;
         }
         if (!launched) {
@@ -1664,8 +1664,8 @@ public final class SuggestionBarView extends GridLayout {
                 Intent fallbackExplicit = new Intent(Intent.ACTION_MAIN);
                 fallbackExplicit.addCategory(Intent.CATEGORY_LAUNCHER);
                 fallbackExplicit.setComponent(new ComponentName(pkg, cls));
-                if (tryStartMainActivity(context, fallbackExplicit.getComponent(), launchAnimationContext)
-                    || tryStartActivity(context, fallbackExplicit, launchAnimationContext)) {
+                if (tryStartActivity(context, fallbackExplicit, launchAnimationContext)
+                    || tryStartMainActivity(context, fallbackExplicit.getComponent(), launchAnimationContext)) {
                     launched = true;
                     break;
                 }

@@ -44,9 +44,6 @@ public final class LauncherAppLauncher {
             explicitNoCategory.setComponent(new ComponentName(entry.appRef.packageName, activityName));
         }
 
-        if (tryStartMainActivity(context, explicit != null ? explicit.getComponent() : null)) {
-            return true;
-        }
         if (tryStartActivity(context, explicit)) {
             return true;
         }
@@ -60,12 +57,6 @@ public final class LauncherAppLauncher {
             resolveFallback.setComponent(resolved);
         }
 
-        if (tryStartMainActivity(context, packageDefault != null ? packageDefault.getComponent() : null)) {
-            return true;
-        }
-        if (tryStartMainActivity(context, resolved)) {
-            return true;
-        }
         if (tryStartActivity(context, packageDefault)) {
             return true;
         }
@@ -73,6 +64,15 @@ public final class LauncherAppLauncher {
             return true;
         }
         if (resolved != null && tryStartActivity(context, resolveFallback)) {
+            return true;
+        }
+        if (tryStartMainActivity(context, explicit != null ? explicit.getComponent() : null)) {
+            return true;
+        }
+        if (tryStartMainActivity(context, packageDefault != null ? packageDefault.getComponent() : null)) {
+            return true;
+        }
+        if (tryStartMainActivity(context, resolved)) {
             return true;
         }
 
@@ -88,8 +88,8 @@ public final class LauncherAppLauncher {
             Intent fallbackExplicit = new Intent(Intent.ACTION_MAIN);
             fallbackExplicit.addCategory(Intent.CATEGORY_LAUNCHER);
             fallbackExplicit.setComponent(new ComponentName(pkg, cls));
-            if (tryStartMainActivity(context, fallbackExplicit.getComponent())
-                || tryStartActivity(context, fallbackExplicit)) {
+            if (tryStartActivity(context, fallbackExplicit)
+                || tryStartMainActivity(context, fallbackExplicit.getComponent())) {
                 return true;
             }
         }
