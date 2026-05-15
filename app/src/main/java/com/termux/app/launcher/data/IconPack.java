@@ -1,0 +1,69 @@
+package com.termux.app.launcher.data;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
+import com.termux.app.launcher.model.IconPackInfo;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+
+public final class IconPack {
+    @NonNull public final IconPackInfo info;
+    private final Map<String, String> componentDrawables;
+    private final Map<String, String> calendarPrefixes;
+    private final Map<String, IconPackDrawableItem> drawableItems;
+    @Nullable public final String iconBack;
+    @Nullable public final String iconMask;
+    @Nullable public final String iconUpon;
+    public final float scale;
+
+    IconPack(
+        @NonNull IconPackInfo info,
+        @NonNull Map<String, String> componentDrawables,
+        @NonNull Map<String, String> calendarPrefixes,
+        @NonNull Map<String, IconPackDrawableItem> drawableItems,
+        @Nullable String iconBack,
+        @Nullable String iconMask,
+        @Nullable String iconUpon,
+        float scale
+    ) {
+        this.info = info;
+        this.componentDrawables = Collections.unmodifiableMap(new LinkedHashMap<>(componentDrawables));
+        this.calendarPrefixes = Collections.unmodifiableMap(new LinkedHashMap<>(calendarPrefixes));
+        this.drawableItems = Collections.unmodifiableMap(new LinkedHashMap<>(drawableItems));
+        this.iconBack = iconBack;
+        this.iconMask = iconMask;
+        this.iconUpon = iconUpon;
+        this.scale = scale <= 0f ? 1f : scale;
+    }
+
+    @Nullable
+    public String drawableForComponent(@NonNull String packageName, @NonNull String activityName, int dayOfMonth) {
+        String component = IconPackXmlParser.componentKey(packageName, activityName);
+        String direct = componentDrawables.get(component);
+        if (direct != null) return direct;
+        String prefix = calendarPrefixes.get(component);
+        if (prefix == null) return null;
+        return prefix + dayOfMonth;
+    }
+
+    @Nullable
+    public IconPackDrawableItem drawableItem(@NonNull String drawableName) {
+        return drawableItems.get(drawableName.toLowerCase(Locale.US));
+    }
+
+    @NonNull
+    public List<IconPackDrawableItem> drawableItems() {
+        return new ArrayList<>(drawableItems.values());
+    }
+
+    @NonNull
+    public Map<String, String> componentDrawables() {
+        return componentDrawables;
+    }
+}
