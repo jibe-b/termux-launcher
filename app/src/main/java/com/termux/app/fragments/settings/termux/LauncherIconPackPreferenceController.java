@@ -3,10 +3,12 @@ package com.termux.app.fragments.settings.termux;
 import android.content.Context;
 
 import androidx.annotation.NonNull;
-import androidx.preference.ListPreference;
+import androidx.preference.Preference;
 import androidx.preference.PreferenceFragmentCompat;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.termux.app.TermuxActivity;
+import com.termux.app.launcher.data.LauncherAppDataProvider;
 import com.termux.app.launcher.data.IconPackRepository;
 import com.termux.app.launcher.model.IconPackInfo;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
@@ -27,7 +29,7 @@ final class LauncherIconPackPreferenceController {
     private static void populateIconPackList(
         Context context,
         TermuxAppSharedPreferences preferences,
-        ListPreference preference,
+        Preference preference,
         boolean themedOnly
     ) {
         if (preference == null) return;
@@ -41,29 +43,34 @@ final class LauncherIconPackPreferenceController {
             entries.add(pack.label);
             values.add(pack.packageName);
         }
-        preference.setEntries(entries.toArray(new CharSequence[0]));
-        preference.setEntryValues(values.toArray(new CharSequence[0]));
+        String currentValue = "";
         if (preferences != null) {
             if ("app_launcher_pinned_icon_pack_package".equals(preference.getKey())) {
-                preference.setValue(preferences.getAppLauncherPinnedIconPackPackage());
+                currentValue = preferences.getAppLauncherPinnedIconPackPackage();
             } else {
-                preference.setValue(preferences.getAppLauncherIconPackPackage());
+                currentValue = preferences.getAppLauncherIconPackPackage();
             }
         }
-        preference.setSummaryProvider(ListPreference.SimpleSummaryProvider.getInstance());
+        preference.setSummary(labelForValue(entries, values, currentValue));
         preference.setOnPreferenceClickListener(clickedPreference -> {
-            showIconPackDialog(context, preference, entries, values);
+            showIconPackDialog(context, preferences, preference, entries, values);
             return true;
         });
     }
 
     private static void showIconPackDialog(
         @NonNull Context context,
-        @NonNull ListPreference preference,
+        TermuxAppSharedPreferences preferences,
+        @NonNull Preference preference,
         @NonNull List<CharSequence> entries,
         @NonNull List<CharSequence> values
     ) {
-        String currentValue = preference.getValue();
+        String currentValue = "";
+        if (preferences != null) {
+            currentValue = "app_launcher_pinned_icon_pack_package".equals(preference.getKey())
+                ? preferences.getAppLauncherPinnedIconPackPackage()
+                : preferences.getAppLauncherIconPackPackage();
+        }
         int selectedIndex = 0;
         for (int i = 0; i < values.size(); i++) {
             if (String.valueOf(values.get(i)).equals(currentValue)) {
@@ -78,11 +85,42 @@ final class LauncherIconPackPreferenceController {
                 if (which < 0 || which >= values.size()) return;
                 String selectedValue = String.valueOf(values.get(which));
                 if (preference.callChangeListener(selectedValue)) {
-                    preference.setValue(selectedValue);
+                    saveIconPackPreference(context, preferences, preference.getKey(), selectedValue);
+                    preference.setSummary(entries.get(which));
                 }
                 dialog.dismiss();
             })
             .setNegativeButton(android.R.string.cancel, null)
             .show();
+    }
+
+    private static void saveIconPackPreference(
+        @NonNull Context context,
+        TermuxAppSharedPreferences preferences,
+        String key,
+        @NonNull String value
+    ) {
+        if (preferences == null || key == null) return;
+        if ("app_launcher_pinned_icon_pack_package".equals(key)) {
+            preferences.setAppLauncherPinnedIconPackPackage(value);
+        } else {
+            preferences.setAppLauncherIconPackPackage(value);
+        }
+        LauncherAppDataProvider.getInstance(context).invalidate();
+        TermuxActivity.requestTermuxActivityStylingOnNextResume(context, false);
+    }
+
+    @NonNull
+    private static CharSequence labelForValue(
+        @NonNull List<CharSequence> entries,
+        @NonNull List<CharSequence> values,
+        String value
+    ) {
+        for (int i = 0; i < values.size(); i++) {
+            if (String.valueOf(values.get(i)).equals(value)) {
+                return entries.get(i);
+            }
+        }
+        return entries.isEmpty() ? "" : entries.get(0);
     }
 }
