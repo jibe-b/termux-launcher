@@ -75,10 +75,16 @@ import com.google.android.material.bottomsheet.BottomSheetDialog;
 import com.termux.R;
 import com.termux.app.launcher.data.LauncherAppDataProvider;
 import com.termux.app.launcher.data.LauncherConfigRepository;
+import com.termux.app.launcher.data.IconPack;
+import com.termux.app.launcher.data.IconPackDrawableItem;
+import com.termux.app.launcher.data.IconPackRepository;
+import com.termux.app.launcher.data.LauncherIconResolver;
 import com.termux.app.launcher.data.LauncherRankingEngine;
 import com.termux.app.launcher.data.LauncherUsageStatsStore;
+import com.termux.app.launcher.model.IconPackInfo;
 import com.termux.app.launcher.model.AppRef;
 import com.termux.app.launcher.model.LauncherAppEntry;
+import com.termux.app.launcher.model.PinnedIconOverride;
 import com.termux.app.launcher.model.PinnedAppItem;
 import com.termux.app.launcher.model.PinnedFolderItem;
 import com.termux.app.launcher.model.PinnedItem;
@@ -135,6 +141,8 @@ public final class SuggestionBarView extends GridLayout {
 
     private LauncherAppDataProvider appDataProvider;
     private LauncherConfigRepository configRepository;
+    private LauncherIconResolver iconResolver;
+    private IconPackRepository iconPackRepository;
     private List<PinnedItem> pinnedItems = new ArrayList<>();
     private List<SuggestionBarButton> injectedSuggestionButtons;
 
@@ -513,6 +521,12 @@ public final class SuggestionBarView extends GridLayout {
         if (appDataProvider == null) {
             appDataProvider = LauncherAppDataProvider.getInstance(getContext());
         }
+        if (iconResolver == null) {
+            iconResolver = new LauncherIconResolver(getContext());
+        }
+        if (iconPackRepository == null) {
+            iconPackRepository = new IconPackRepository(getContext());
+        }
         if (!appDataProvider.hasLoadedApps()) {
             appDataProvider.warmAsync(() -> {
                 if (!hostVisible || !isAttachedToWindow()) {
@@ -563,7 +577,7 @@ public final class SuggestionBarView extends GridLayout {
                 if (!normalizedRef.stableId().equals(appItem.appRef.stableId())) {
                     changed = true;
                 }
-                cleaned.add(new PinnedAppItem(normalizedRef));
+                cleaned.add(new PinnedAppItem(normalizedRef, appItem.iconOverride));
                 continue;
             }
 
@@ -1622,9 +1636,7 @@ public final class SuggestionBarView extends GridLayout {
             : null;
 
         boolean launched = false;
-        if (tryStartMainActivity(context, explicit != null ? explicit.getComponent() : null, launchAnimationContext)) {
-            launched = true;
-        } else if (tryStartActivity(context, explicit, launchAnimationContext)) {
+        if (tryStartActivity(context, explicit, launchAnimationContext)) {
             launched = true;
         }
 
@@ -1640,15 +1652,17 @@ public final class SuggestionBarView extends GridLayout {
                 resolveFallback.setComponent(resolved);
             }
         }
-        if (!launched && tryStartMainActivity(context, pkgDefault != null ? pkgDefault.getComponent() : null, launchAnimationContext)) {
-            launched = true;
-        } else if (!launched && tryStartMainActivity(context, resolved, launchAnimationContext)) {
-            launched = true;
-        } else if (!launched && tryStartActivity(context, pkgDefault, launchAnimationContext)) {
+        if (!launched && tryStartActivity(context, pkgDefault, launchAnimationContext)) {
             launched = true;
         } else if (!launched && tryStartActivity(context, explicitNoCategory, launchAnimationContext)) {
             launched = true;
         } else if (!launched && resolved != null && tryStartActivity(context, resolveFallback, launchAnimationContext)) {
+            launched = true;
+        } else if (!launched && tryStartMainActivity(context, explicit != null ? explicit.getComponent() : null, launchAnimationContext)) {
+            launched = true;
+        } else if (!launched && tryStartMainActivity(context, pkgDefault != null ? pkgDefault.getComponent() : null, launchAnimationContext)) {
+            launched = true;
+        } else if (!launched && tryStartMainActivity(context, resolved, launchAnimationContext)) {
             launched = true;
         }
         if (!launched) {
@@ -1664,8 +1678,8 @@ public final class SuggestionBarView extends GridLayout {
                 Intent fallbackExplicit = new Intent(Intent.ACTION_MAIN);
                 fallbackExplicit.addCategory(Intent.CATEGORY_LAUNCHER);
                 fallbackExplicit.setComponent(new ComponentName(pkg, cls));
-                if (tryStartMainActivity(context, fallbackExplicit.getComponent(), launchAnimationContext)
-                    || tryStartActivity(context, fallbackExplicit, launchAnimationContext)) {
+                if (tryStartActivity(context, fallbackExplicit, launchAnimationContext)
+                    || tryStartMainActivity(context, fallbackExplicit.getComponent(), launchAnimationContext)) {
                     launched = true;
                     break;
                 }
@@ -1700,7 +1714,7 @@ public final class SuggestionBarView extends GridLayout {
         List<LauncherAppEntry> out = new ArrayList<>();
         for (PinnedItem item : source) {
             if (item instanceof PinnedAppItem) {
-                LauncherAppEntry entry = resolveRef(((PinnedAppItem) item).appRef);
+                LauncherAppEntry entry = resolvePinnedApp((PinnedAppItem) item);
                 if (entry != null) {
                     out.add(entry);
                 }
@@ -1710,6 +1724,19 @@ public final class SuggestionBarView extends GridLayout {
             }
         }
         return out;
+    }
+
+    @Nullable
+    private LauncherAppEntry resolvePinnedApp(@NonNull PinnedAppItem item) {
+        LauncherAppEntry entry = resolveRef(item.appRef);
+        if (entry == null || item.iconOverride == null || !item.iconOverride.isValid()) {
+            return entry;
+        }
+        Drawable overrideIcon = getIconResolver().loadOverride(item.iconOverride);
+        if (overrideIcon == null) {
+            return entry;
+        }
+        return new LauncherAppEntry(entry.appRef, entry.label, overrideIcon);
     }
 
     private LauncherAppEntry folderSyntheticEntry(@NonNull PinnedFolderItem folder) {
@@ -1804,7 +1831,7 @@ public final class SuggestionBarView extends GridLayout {
             if (component != null) {
                 resolvedRef = new AppRef(component.getPackageName(), component.getClassName());
                 label = String.valueOf(packageManager.getActivityInfo(component, 0).loadLabel(packageManager));
-                icon = packageManager.getActivityIcon(component);
+                icon = getIconResolver().resolve(resolvedRef);
             }
         } catch (Exception ignored) {
         }
@@ -1814,13 +1841,29 @@ public final class SuggestionBarView extends GridLayout {
                 label = String.valueOf(packageManager.getApplicationLabel(
                     packageManager.getApplicationInfo(originalRef.packageName, 0)
                 ));
-                icon = packageManager.getApplicationIcon(originalRef.packageName);
+                icon = getIconResolver().resolve(originalRef);
             } catch (Exception ignored) {
                 return null;
             }
         }
 
         return new LauncherAppEntry(resolvedRef, label, icon);
+    }
+
+    @NonNull
+    private LauncherIconResolver getIconResolver() {
+        if (iconResolver == null) {
+            iconResolver = new LauncherIconResolver(getContext());
+        }
+        return iconResolver;
+    }
+
+    @NonNull
+    private IconPackRepository getIconPackRepository() {
+        if (iconPackRepository == null) {
+            iconPackRepository = new IconPackRepository(getContext());
+        }
+        return iconPackRepository;
     }
 
     private boolean tryStartMainActivity(@NonNull Context context, @Nullable ComponentName componentName, @Nullable LaunchAnimationContext animationContext) {
@@ -2338,6 +2381,8 @@ public final class SuggestionBarView extends GridLayout {
     private void showPinnedAppOptions(int index, PinnedAppItem item) {
         String[] options = new String[] {
             "Replace app",
+            "Change icon",
+            "Reset icon",
             "Unpin",
             "Move to folder",
             "Create folder"
@@ -2351,12 +2396,18 @@ public final class SuggestionBarView extends GridLayout {
                         showReplacePinnedApp(index);
                         break;
                     case 1:
-                        removePinnedAt(index);
+                        showPinnedIconPackPicker(index, item);
                         break;
                     case 2:
-                        showMovePinnedAppToFolder(index, item);
+                        resetPinnedIcon(index, item);
                         break;
                     case 3:
+                        removePinnedAt(index);
+                        break;
+                    case 4:
+                        showMovePinnedAppToFolder(index, item);
+                        break;
+                    case 5:
                         showCreateFolderWithSeed(index, item);
                         break;
                     default:
@@ -2364,6 +2415,115 @@ public final class SuggestionBarView extends GridLayout {
                 }
             })
             .show();
+    }
+
+    private void resetPinnedIcon(int index, @NonNull PinnedAppItem item) {
+        if (index >= 0 && index < pinnedItems.size()) {
+            pinnedItems.set(index, new PinnedAppItem(item.appRef));
+            persistPinsAndReload();
+        }
+    }
+
+    private void showPinnedIconPackPicker(int index, @NonNull PinnedAppItem item) {
+        List<IconPackInfo> packs = getIconPackRepository().discoverIconPacks();
+        if (packs.isEmpty()) {
+            new AlertDialog.Builder(getContext())
+                .setTitle("Change icon")
+                .setMessage("No compatible icon packs are installed.")
+                .setPositiveButton("OK", null)
+                .show();
+            return;
+        }
+        String[] labels = new String[packs.size()];
+        for (int i = 0; i < packs.size(); i++) labels[i] = packs.get(i).label;
+        new AlertDialog.Builder(getContext())
+            .setTitle("Icon pack")
+            .setItems(labels, (dialog, which) -> showPinnedIconDrawablePicker(index, item, packs.get(which)))
+            .show();
+    }
+
+    private void showPinnedIconDrawablePicker(int index, @NonNull PinnedAppItem item, @NonNull IconPackInfo packInfo) {
+        IconPack pack = getIconPackRepository().loadIconPack(packInfo.packageName);
+        if (pack == null || pack.drawableItems().isEmpty()) {
+            new AlertDialog.Builder(getContext())
+                .setTitle(packInfo.label)
+                .setMessage("This icon pack does not expose selectable icons.")
+                .setPositiveButton("OK", null)
+                .show();
+            return;
+        }
+
+        List<IconPackDrawableItem> source = pack.drawableItems();
+        LinearLayout root = new LinearLayout(getContext());
+        root.setOrientation(LinearLayout.VERTICAL);
+        int padding = dp(12);
+        root.setPadding(padding, padding, padding, padding);
+        EditText search = new EditText(getContext());
+        search.setSingleLine(true);
+        search.setHint("Search icons");
+        ListView listView = new ListView(getContext());
+        root.addView(search, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        root.addView(listView, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(360)));
+
+        List<IconPackDrawableItem> filtered = new ArrayList<>(source);
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(getContext(), android.R.layout.simple_list_item_1, iconDrawableLabels(filtered));
+        listView.setAdapter(adapter);
+
+        final AlertDialog[] alert = new AlertDialog[1];
+        listView.setOnItemClickListener((parent, view, position, id) -> {
+            if (position < 0 || position >= filtered.size()) return;
+            IconPackDrawableItem selected = filtered.get(position);
+            if (index >= 0 && index < pinnedItems.size()) {
+                pinnedItems.set(index, new PinnedAppItem(item.appRef, new PinnedIconOverride(
+                    PinnedIconOverride.SOURCE_ICON_PACK,
+                    packInfo.packageName,
+                    selected.drawableName,
+                    selected.label
+                )));
+                persistPinsAndReload();
+            }
+            if (alert[0] != null) alert[0].dismiss();
+        });
+        search.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+                String query = s == null ? "" : s.toString().trim().toLowerCase(Locale.US);
+                filtered.clear();
+                for (IconPackDrawableItem candidate : source) {
+                    if (query.isEmpty()
+                        || candidate.label.toLowerCase(Locale.US).contains(query)
+                        || candidate.drawableName.toLowerCase(Locale.US).contains(query)) {
+                        filtered.add(candidate);
+                    }
+                }
+                adapter.clear();
+                adapter.addAll(iconDrawableLabels(filtered));
+                adapter.notifyDataSetChanged();
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+            }
+        });
+
+        alert[0] = new AlertDialog.Builder(getContext())
+            .setTitle(packInfo.label)
+            .setView(root)
+            .setNegativeButton("Cancel", null)
+            .show();
+    }
+
+    @NonNull
+    private static List<String> iconDrawableLabels(@NonNull List<IconPackDrawableItem> items) {
+        List<String> labels = new ArrayList<>(items.size());
+        for (IconPackDrawableItem item : items) {
+            labels.add(item.label + " (" + item.drawableName + ")");
+        }
+        return labels;
     }
 
     private void showFolderItemOptions(int index, PinnedFolderItem folder) {
@@ -4313,8 +4473,9 @@ public final class SuggestionBarView extends GridLayout {
     @NonNull
     private static PinnedItem clonePinnedItem(@NonNull PinnedItem item) {
         if (item instanceof PinnedAppItem) {
-            AppRef ref = ((PinnedAppItem) item).appRef;
-            return new PinnedAppItem(new AppRef(ref.packageName, ref.activityName));
+            PinnedAppItem appItem = (PinnedAppItem) item;
+            AppRef ref = appItem.appRef;
+            return new PinnedAppItem(new AppRef(ref.packageName, ref.activityName), appItem.iconOverride);
         }
         if (item instanceof PinnedFolderItem) {
             PinnedFolderItem folder = (PinnedFolderItem) item;

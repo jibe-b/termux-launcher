@@ -11,7 +11,6 @@ import com.termux.R;
 
 @Keep
 public class LauncherIconsPreferencesFragment extends PreferenceFragmentCompat {
-
     @Override
     public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
         Context context = getContext();
@@ -20,5 +19,14 @@ public class LauncherIconsPreferencesFragment extends PreferenceFragmentCompat {
         PreferenceManager preferenceManager = getPreferenceManager();
         preferenceManager.setPreferenceDataStore(TermuxStylePreferencesDataStore.getInstance(context));
         setPreferencesFromResource(R.xml.launcher_icons_preferences, rootKey);
+        LauncherIconPackPreferenceController.configure(this, context);
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        Context context = getContext();
+        if (context == null) return;
+        LauncherIconPackPreferenceController.configure(this, context);
     }
 }

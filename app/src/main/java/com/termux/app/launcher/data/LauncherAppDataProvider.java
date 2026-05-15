@@ -36,6 +36,7 @@ public final class LauncherAppDataProvider {
     private final Context context;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService executor = newIdleFriendlyExecutor();
+    private final LauncherIconResolver iconResolver;
     private final LruCache<String, Drawable> iconCache = new LruCache<>(96);
     private final List<LauncherAppEntry> cachedApps = new ArrayList<>();
     private final Map<String, LauncherAppEntry> cachedById = new LinkedHashMap<>();
@@ -49,6 +50,7 @@ public final class LauncherAppDataProvider {
 
     private LauncherAppDataProvider(@NonNull Context context) {
         this.context = context.getApplicationContext();
+        this.iconResolver = new LauncherIconResolver(this.context);
     }
 
     @NonNull
@@ -234,7 +236,7 @@ public final class LauncherAppDataProvider {
             CharSequence labelSequence = info.loadLabel(packageManager);
             String label = labelSequence != null ? labelSequence.toString() : info.packageName;
             AppRef ref = new AppRef(info.packageName, info.name);
-            Drawable icon = loadIcon(packageManager, ref);
+            Drawable icon = iconResolver.resolve(ref);
             LauncherAppEntry entry = new LauncherAppEntry(ref, label, icon);
             snapshot.apps.add(entry);
             snapshot.byId.put(ref.stableId(), entry);
@@ -264,20 +266,6 @@ public final class LauncherAppDataProvider {
             bucket.add(entry);
         }
         return snapshot;
-    }
-
-    @Nullable
-    private Drawable loadIcon(@NonNull PackageManager packageManager, @NonNull AppRef ref) {
-        try {
-            ComponentName componentName = new ComponentName(ref.packageName, normalizeActivityName(ref));
-            return packageManager.getActivityIcon(componentName);
-        } catch (Exception ignored) {
-            try {
-                return packageManager.getApplicationIcon(ref.packageName);
-            } catch (Exception ignoredAgain) {
-                return null;
-            }
-        }
     }
 
     @NonNull

@@ -3,6 +3,7 @@ package com.termux.app.launcher;
 import com.termux.app.launcher.data.LauncherConfigRepository;
 import com.termux.app.launcher.model.AppRef;
 import com.termux.app.launcher.model.PinnedAppItem;
+import com.termux.app.launcher.model.PinnedIconOverride;
 import com.termux.app.launcher.model.PinnedFolderItem;
 import com.termux.app.launcher.model.PinnedItem;
 
@@ -13,6 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 public class LauncherConfigRepositoryTest {
@@ -125,5 +127,37 @@ public class LauncherConfigRepositoryTest {
         assertEquals("", loadedFolder.apps.get(0).activityName);
         assertEquals("com.example.full", loadedFolder.apps.get(1).packageName);
         assertEquals("Main", loadedFolder.apps.get(1).activityName);
+    }
+
+    @Test
+    public void pinnedAppRoundTrip_preservesIconOverrideAndBumpsSchema() {
+        List<PinnedItem> items = new ArrayList<>();
+        items.add(new PinnedAppItem(
+            new AppRef("com.example.one", "A"),
+            new PinnedIconOverride(PinnedIconOverride.SOURCE_ICON_PACK, "pack.example", "ic_one", "One")
+        ));
+
+        repository.savePinnedItems(items);
+        List<PinnedItem> loaded = repository.loadPinnedItems();
+
+        assertEquals(LauncherConfigRepository.SCHEMA_VERSION, preferences.schemaVersion);
+        assertEquals(1, loaded.size());
+        PinnedAppItem item = (PinnedAppItem) loaded.get(0);
+        assertEquals("pack.example", item.iconOverride.iconPackPackage);
+        assertEquals("ic_one", item.iconOverride.drawableName);
+        assertEquals("One", item.iconOverride.displayLabel);
+    }
+
+    @Test
+    public void loadPinnedItems_migratesSchemaOneAppWithoutIconOverride() {
+        preferences.pinnedItemsV2 = "{\"schemaVersion\":1,\"items\":[{\"type\":\"app\",\"packageName\":\"com.example\",\"activityName\":\"Main\"}]}";
+
+        List<PinnedItem> loaded = repository.loadPinnedItems();
+
+        assertEquals(1, loaded.size());
+        PinnedAppItem item = (PinnedAppItem) loaded.get(0);
+        assertEquals("com.example", item.appRef.packageName);
+        assertEquals("Main", item.appRef.activityName);
+        assertNull(item.iconOverride);
     }
 }
