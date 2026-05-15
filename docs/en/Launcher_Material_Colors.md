@@ -115,6 +115,14 @@ If tmux is already running:
 tmux source-file ~/.tmux.conf
 ```
 
+Optional extra-keys button for reloading Termux settings through tmux:
+
+```properties
+{macro: "CTRL b F12", display: "♼"}
+```
+
+This triggers the example `F12` tmux binding instead of typing `termux-reload-settings` into the active pane.
+
 ## Refreshing Colors
 
 If terminal colors or launcher styling feel stale after an update or restart:
