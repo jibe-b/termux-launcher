@@ -48,6 +48,12 @@
             app:summary="@string/termux_app_launcher_icon_pack_summary"
             android:defaultValue="" />
 
+        <ListPreference
+            app:key="app_launcher_pinned_icon_pack_package"
+            app:title="@string/termux_app_launcher_pinned_icon_pack_title"
+            app:summary="@string/termux_app_launcher_pinned_icon_pack_summary"
+            android:defaultValue="" />
+
         <SwitchPreferenceCompat
             app:key="app_launcher_themed_icons_enabled"
             app:title="@string/termux_app_launcher_themed_icons_title"

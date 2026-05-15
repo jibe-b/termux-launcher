@@ -1729,14 +1729,14 @@ public final class SuggestionBarView extends GridLayout {
     @Nullable
     private LauncherAppEntry resolvePinnedApp(@NonNull PinnedAppItem item) {
         LauncherAppEntry entry = resolveRef(item.appRef);
-        if (entry == null || item.iconOverride == null || !item.iconOverride.isValid()) {
+        if (entry == null) {
             return entry;
         }
-        Drawable overrideIcon = getIconResolver().loadOverride(item.iconOverride);
-        if (overrideIcon == null) {
+        Drawable pinnedIcon = getIconResolver().resolvePinned(entry.appRef, item.iconOverride);
+        if (pinnedIcon == null || pinnedIcon == entry.icon) {
             return entry;
         }
-        return new LauncherAppEntry(entry.appRef, entry.label, overrideIcon);
+        return new LauncherAppEntry(entry.appRef, entry.label, pinnedIcon);
     }
 
     private LauncherAppEntry folderSyntheticEntry(@NonNull PinnedFolderItem folder) {
@@ -3090,6 +3090,36 @@ public final class SuggestionBarView extends GridLayout {
             }, false));
         } else if (topPinned) {
             final int targetPinnedIndex = topPinnedIndex;
+            TextView changeIconRow = addPopupActionRow(shell, "Change icon", tintBase, () -> {
+                dismissAppContextPopup();
+                PinnedAppItem pinnedApp = pinnedAppAt(targetPinnedIndex);
+                if (pinnedApp != null) {
+                    showPinnedIconPackPicker(targetPinnedIndex, pinnedApp);
+                }
+            });
+            appContextRows.add(new MenuActionRow(changeIconRow, () -> {
+                dismissAppContextPopup();
+                PinnedAppItem pinnedApp = pinnedAppAt(targetPinnedIndex);
+                if (pinnedApp != null) {
+                    showPinnedIconPackPicker(targetPinnedIndex, pinnedApp);
+                }
+            }, false));
+
+            TextView resetIconRow = addPopupActionRow(shell, "Reset icon", tintBase, () -> {
+                dismissAppContextPopup();
+                PinnedAppItem pinnedApp = pinnedAppAt(targetPinnedIndex);
+                if (pinnedApp != null) {
+                    resetPinnedIcon(targetPinnedIndex, pinnedApp);
+                }
+            });
+            appContextRows.add(new MenuActionRow(resetIconRow, () -> {
+                dismissAppContextPopup();
+                PinnedAppItem pinnedApp = pinnedAppAt(targetPinnedIndex);
+                if (pinnedApp != null) {
+                    resetPinnedIcon(targetPinnedIndex, pinnedApp);
+                }
+            }, false));
+
             TextView unpinRow = addPopupActionRow(shell, "Unpin", tintBase, () -> {
                 dismissAppContextPopup();
                 removePinnedAt(targetPinnedIndex);
@@ -3136,6 +3166,13 @@ public final class SuggestionBarView extends GridLayout {
             }
         });
         showPopupAtAnchor(appContextPopupWindow, context.anchor);
+    }
+
+    @Nullable
+    private PinnedAppItem pinnedAppAt(int index) {
+        if (pinnedItems == null || index < 0 || index >= pinnedItems.size()) return null;
+        PinnedItem item = pinnedItems.get(index);
+        return item instanceof PinnedAppItem ? (PinnedAppItem) item : null;
     }
 
     private void showFolderContextPopup(@NonNull PinnedFolderItem folder, int pinnedIndex, @NonNull View anchor) {

@@ -24,6 +24,7 @@ final class LauncherIconPackPreferenceController {
     static void configure(@NonNull PreferenceFragmentCompat fragment, @NonNull Context context) {
         TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(context, false);
         populateIconPackList(context, preferences, fragment.findPreference("app_launcher_icon_pack_package"), false);
+        populateIconPackList(context, preferences, fragment.findPreference("app_launcher_pinned_icon_pack_package"), false);
         populateIconPackList(context, preferences, fragment.findPreference("app_launcher_themed_icon_pack_package"), true);
 
         Preference refresh = fragment.findPreference("app_launcher_refresh_icon_packs");
@@ -40,6 +41,7 @@ final class LauncherIconPackPreferenceController {
             reset.setOnPreferenceClickListener(preference -> {
                 if (preferences != null) {
                     preferences.setAppLauncherIconPackPackage("");
+                    preferences.setAppLauncherPinnedIconPackPackage("");
                     preferences.setAppLauncherThemedIconPackPackage("");
                     preferences.setAppLauncherThemedIconsEnabled(false);
                     LauncherAppDataProvider.getInstance(context).invalidate();
@@ -72,9 +74,13 @@ final class LauncherIconPackPreferenceController {
         preference.setEntries(entries.toArray(new CharSequence[0]));
         preference.setEntryValues(values.toArray(new CharSequence[0]));
         if (preferences != null) {
-            preference.setValue(themedOnly
-                ? preferences.getAppLauncherThemedIconPackPackage()
-                : preferences.getAppLauncherIconPackPackage());
+            if ("app_launcher_pinned_icon_pack_package".equals(preference.getKey())) {
+                preference.setValue(preferences.getAppLauncherPinnedIconPackPackage());
+            } else {
+                preference.setValue(themedOnly
+                    ? preferences.getAppLauncherThemedIconPackPackage()
+                    : preferences.getAppLauncherIconPackPackage());
+            }
         }
         preference.setSummaryProvider(ListPreference.SimpleSummaryProvider.getInstance());
     }

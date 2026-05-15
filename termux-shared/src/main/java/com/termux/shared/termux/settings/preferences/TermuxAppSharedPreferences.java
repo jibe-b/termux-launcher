@@ -179,6 +179,15 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_ICON_PACK_PACKAGE, value == null ? "" : value, false);
     }
 
+    public String getAppLauncherPinnedIconPackPackage() {
+        return SharedPreferenceUtils.getString(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_PINNED_ICON_PACK_PACKAGE,
+            TERMUX_APP.DEFAULT_APP_LAUNCHER_PINNED_ICON_PACK_PACKAGE, true);
+    }
+
+    public void setAppLauncherPinnedIconPackPackage(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_PINNED_ICON_PACK_PACKAGE, value == null ? "" : value, false);
+    }
+
     public boolean isAppLauncherThemedIconsEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_THEMED_ICONS_ENABLED,
             TERMUX_APP.DEFAULT_APP_LAUNCHER_THEMED_ICONS_ENABLED);

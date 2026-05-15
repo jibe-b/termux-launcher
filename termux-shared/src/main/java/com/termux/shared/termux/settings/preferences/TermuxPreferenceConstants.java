@@ -179,6 +179,13 @@ public final class TermuxPreferenceConstants {
         public static final String DEFAULT_APP_LAUNCHER_ICON_PACK_PACKAGE = "";
 
         /**
+         * Defines the selected launcher icon-pack package for pinned apps only.
+         */
+        public static final String KEY_APP_LAUNCHER_PINNED_ICON_PACK_PACKAGE = "app_launcher_pinned_icon_pack_package";
+
+        public static final String DEFAULT_APP_LAUNCHER_PINNED_ICON_PACK_PACKAGE = "";
+
+        /**
          * Defines whether themed launcher icons are enabled.
          */
         public static final String KEY_APP_LAUNCHER_THEMED_ICONS_ENABLED = "app_launcher_themed_icons_enabled";

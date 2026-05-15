@@ -374,6 +374,11 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 com.termux.app.launcher.data.LauncherAppDataProvider.getInstance(mContext).invalidate();
                 TermuxActivity.requestTermuxActivityStylingOnNextResume(mContext, false);
                 break;
+            case "app_launcher_pinned_icon_pack_package":
+                mPreferences.setAppLauncherPinnedIconPackPackage(value);
+                com.termux.app.launcher.data.LauncherAppDataProvider.getInstance(mContext).invalidate();
+                TermuxActivity.requestTermuxActivityStylingOnNextResume(mContext, false);
+                break;
             case "app_launcher_themed_icon_pack_package":
                 mPreferences.setAppLauncherThemedIconPackPackage(value);
                 com.termux.app.launcher.data.LauncherAppDataProvider.getInstance(mContext).invalidate();
@@ -441,6 +446,8 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.getAppLauncherDefaultButtons();
             case "app_launcher_icon_pack_package":
                 return mPreferences.getAppLauncherIconPackPackage();
+            case "app_launcher_pinned_icon_pack_package":
+                return mPreferences.getAppLauncherPinnedIconPackPackage();
             case "app_launcher_themed_icon_pack_package":
                 return mPreferences.getAppLauncherThemedIconPackPackage();
             case "app_launcher_bar_height":
