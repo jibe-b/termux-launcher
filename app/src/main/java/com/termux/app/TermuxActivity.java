@@ -3099,8 +3099,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int azRowHeightPx = 0;
         int indicatorBandHeightPx = 0;
         if (azEnabled) {
-            azRowHeightPx = Math.round(22f * density);
-            indicatorBandHeightPx = Math.round(10f * density);
+            azRowHeightPx = Math.round(19f * density);
+            indicatorBandHeightPx = Math.round(9f * density);
         }
 
         int interRowGapPx = indicatorBandHeightPx;

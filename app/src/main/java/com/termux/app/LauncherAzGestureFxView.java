@@ -20,6 +20,10 @@ import androidx.annotation.Nullable;
  */
 public final class LauncherAzGestureFxView extends View {
 
+    private interface FloatUpdate {
+        void accept(float value);
+    }
+
     public enum InteractionMode {
         LETTER_TRACK,
         ICON_TRACK_LOCKED
@@ -70,11 +74,15 @@ public final class LauncherAzGestureFxView extends View {
     private boolean canPageRight;
     private int currentPageIndex;
     private int pageCount = 1;
+    private float pageIndicatorPosition;
+    @Nullable private ValueAnimator pageIndicatorAnimator;
     private boolean interactionOverflowActive;
     private boolean interactionCanPageLeft;
     private boolean interactionCanPageRight;
     private int interactionCurrentPageIndex;
     private int interactionPageCount = 1;
+    private float interactionPageIndicatorPosition;
+    @Nullable private ValueAnimator interactionPageIndicatorAnimator;
     private boolean interactionShowsPageIndicators;
     private boolean interactionUseSubtlePageIndicators;
     private float edgeProximityLeft;
@@ -182,11 +190,18 @@ public final class LauncherAzGestureFxView extends View {
     }
 
     public void setFilteredOverflowState(boolean active, boolean pageLeft, boolean pageRight, int currentPageIndex, int pageCount) {
+        int newPageCount = Math.max(1, pageCount);
+        int newPageIndex = Math.min(Math.max(0, currentPageIndex), newPageCount - 1);
+        boolean shouldAnimatePage = active
+            && filteredOverflowActive
+            && this.pageCount == newPageCount
+            && this.currentPageIndex != newPageIndex;
         filteredOverflowActive = active;
         canPageLeft = pageLeft;
         canPageRight = pageRight;
-        this.currentPageIndex = Math.max(0, currentPageIndex);
-        this.pageCount = Math.max(1, pageCount);
+        this.currentPageIndex = newPageIndex;
+        this.pageCount = newPageCount;
+        animatePageIndicatorTo(newPageIndex, shouldAnimatePage);
         refreshVisibility();
         invalidate();
     }
@@ -200,11 +215,18 @@ public final class LauncherAzGestureFxView extends View {
         boolean showPageIndicators,
         boolean useSubtlePageIndicators
     ) {
+        int newPageCount = Math.max(1, pageCount);
+        int newPageIndex = Math.min(Math.max(0, currentPageIndex), newPageCount - 1);
+        boolean shouldAnimatePage = active
+            && interactionOverflowActive
+            && interactionPageCount == newPageCount
+            && interactionCurrentPageIndex != newPageIndex;
         interactionOverflowActive = active;
         interactionCanPageLeft = pageLeft;
         interactionCanPageRight = pageRight;
-        interactionCurrentPageIndex = Math.max(0, currentPageIndex);
-        interactionPageCount = Math.max(1, pageCount);
+        interactionCurrentPageIndex = newPageIndex;
+        interactionPageCount = newPageCount;
+        animateInteractionPageIndicatorTo(newPageIndex, shouldAnimatePage);
         interactionShowsPageIndicators = showPageIndicators;
         interactionUseSubtlePageIndicators = useSubtlePageIndicators;
         refreshVisibility();
@@ -243,6 +265,9 @@ public final class LauncherAzGestureFxView extends View {
             interactionCanPageRight = false;
             interactionCurrentPageIndex = 0;
             interactionPageCount = 1;
+            pageIndicatorPosition = 0f;
+            interactionPageIndicatorPosition = 0f;
+            cancelPageIndicatorAnimations();
             interactionShowsPageIndicators = false;
             interactionUseSubtlePageIndicators = false;
         }
@@ -274,6 +299,7 @@ public final class LauncherAzGestureFxView extends View {
             launchBloomAnimator.cancel();
             launchBloomAnimator = null;
         }
+        cancelPageIndicatorAnimations();
     }
 
     @Override
@@ -494,7 +520,7 @@ public final class LauncherAzGestureFxView extends View {
         }
         drawPageIndicatorStrip(
             canvas,
-            currentPageIndex,
+            pageIndicatorPosition,
             pageCount,
             clamp(getWidth() * 0.34f, dp(120f), dp(220f)),
             dp(8.5f),
@@ -512,7 +538,7 @@ public final class LauncherAzGestureFxView extends View {
         boolean subtle = interactionUseSubtlePageIndicators;
         drawPageIndicatorStrip(
             canvas,
-            interactionCurrentPageIndex,
+            interactionPageIndicatorPosition,
             interactionPageCount,
             subtle
                 ? clamp(getWidth() * 0.22f, dp(62f), dp(118f))
@@ -531,7 +557,7 @@ public final class LauncherAzGestureFxView extends View {
 
     private void drawPageIndicatorStrip(
         Canvas canvas,
-        int activePageIndex,
+        float activePagePosition,
         int totalPages,
         float totalWidth,
         float lineHeight,
@@ -544,6 +570,7 @@ public final class LauncherAzGestureFxView extends View {
             return;
         }
         float cy = resolvePageIndicatorCenterY();
+        float clampedPosition = clamp(activePagePosition, 0f, totalPages - 1f);
         float dotSize = lineHeight;
         float activeWidth = insetActive ? dp(38f) : dp(26f);
         float desiredWidth = activeWidth
@@ -561,13 +588,65 @@ public final class LauncherAzGestureFxView extends View {
 
         float left = (getWidth() - desiredWidth) * 0.5f;
         for (int i = 0; i < totalPages; i++) {
-            boolean activePage = i == activePageIndex;
-            float width = activePage ? activeWidth : dotSize;
+            float activeAmount = 1f - clamp(Math.abs(i - clampedPosition), 0f, 1f);
+            float width = lerp(dotSize, activeWidth, activeAmount);
             float radius = dotSize * 0.5f;
             tmpRect.set(left, cy - radius, left + width, cy + radius);
-            pageIndicatorPaint.setColor(activePage ? activeLineColor : backgroundLineColor);
+            pageIndicatorPaint.setColor(lerpColor(backgroundLineColor, activeLineColor, activeAmount));
             canvas.drawRoundRect(tmpRect, radius, radius, pageIndicatorPaint);
             left += width + segmentGap;
+        }
+    }
+
+    private void animatePageIndicatorTo(int pageIndex, boolean animate) {
+        if (pageIndicatorAnimator != null) {
+            pageIndicatorAnimator.cancel();
+            pageIndicatorAnimator = null;
+        }
+        if (!animate) {
+            pageIndicatorPosition = pageIndex;
+            return;
+        }
+        pageIndicatorAnimator = createPageIndicatorAnimator(pageIndicatorPosition, pageIndex, value -> pageIndicatorPosition = value);
+        pageIndicatorAnimator.start();
+    }
+
+    private void animateInteractionPageIndicatorTo(int pageIndex, boolean animate) {
+        if (interactionPageIndicatorAnimator != null) {
+            interactionPageIndicatorAnimator.cancel();
+            interactionPageIndicatorAnimator = null;
+        }
+        if (!animate) {
+            interactionPageIndicatorPosition = pageIndex;
+            return;
+        }
+        interactionPageIndicatorAnimator = createPageIndicatorAnimator(
+            interactionPageIndicatorPosition,
+            pageIndex,
+            value -> interactionPageIndicatorPosition = value
+        );
+        interactionPageIndicatorAnimator.start();
+    }
+
+    private ValueAnimator createPageIndicatorAnimator(float start, float end, @NonNull FloatUpdate update) {
+        ValueAnimator animator = ValueAnimator.ofFloat(start, end);
+        animator.setDuration(210L);
+        animator.setInterpolator(new DecelerateInterpolator(1.4f));
+        animator.addUpdateListener(animation -> {
+            update.accept((float) animation.getAnimatedValue());
+            invalidate();
+        });
+        return animator;
+    }
+
+    private void cancelPageIndicatorAnimations() {
+        if (pageIndicatorAnimator != null) {
+            pageIndicatorAnimator.cancel();
+            pageIndicatorAnimator = null;
+        }
+        if (interactionPageIndicatorAnimator != null) {
+            interactionPageIndicatorAnimator.cancel();
+            interactionPageIndicatorAnimator = null;
         }
     }
 
@@ -635,6 +714,15 @@ public final class LauncherAzGestureFxView extends View {
     private static int withAlpha(int color, int alpha) {
         int a = Math.max(0, Math.min(255, alpha));
         return (color & 0x00FFFFFF) | (a << 24);
+    }
+
+    private static int lerpColor(int start, int end, float t) {
+        float clamped = clamp01(t);
+        int a = Math.round(lerp(Color.alpha(start), Color.alpha(end), clamped));
+        int r = Math.round(lerp(Color.red(start), Color.red(end), clamped));
+        int g = Math.round(lerp(Color.green(start), Color.green(end), clamped));
+        int b = Math.round(lerp(Color.blue(start), Color.blue(end), clamped));
+        return Color.argb(a, r, g, b);
     }
 
     private static int enforceGlassVisibility(int color, float minValue) {
