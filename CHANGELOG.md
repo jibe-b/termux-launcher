@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.2.16
+
+### Added
+- Added global icon pack support for the apps bar and pinned dock.
+- Added per-pinned app icon overrides, including apps inside folders.
+- Added visual icon selection from installed icon packs.
+
+### Changed
+- Simplified launcher icon preferences and moved icon pack settings into Apps Bar.
+- Updated icon picker, icon pack picker, wallpaper picker, and launcher popup surfaces to better match the app Material color theme.
+- Improved dock background color when transparency or wallpaper is disabled.
+
+### Fixed
+- Fixed icon changes requiring a swipe before refreshing.
+- Fixed custom icons being lost when apps move into or out of folders.
+- Fixed folder previews and folder popup icons using stale system icons.
+- Fixed themed icon controls that did not affect launcher icons.
+- Fixed app launch reliability for default launch activities.
+
 ## 0.2.15
 
 ### Changed
