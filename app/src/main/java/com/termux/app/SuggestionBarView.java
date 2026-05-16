@@ -173,6 +173,8 @@ public final class SuggestionBarView extends GridLayout {
     private int pinnedItemsPerPage = 1;
     private float swipeDownX = 0f;
     private float swipeDownY = 0f;
+    private float swipePagePosition = 0f;
+    private boolean swipePageDragging = false;
     private VelocityTracker swipeVelocityTracker;
     private boolean pageSwitchAnimating = false;
     private boolean pendingDeferredRender = false;
@@ -259,6 +261,7 @@ public final class SuggestionBarView extends GridLayout {
 
     public interface OverflowInteractionListener {
         void onOverflowInteractionChanged(boolean interacting);
+        default void onOverflowPagePositionChanged(float pagePosition) {}
     }
 
     private interface IconOverrideApplier {
@@ -809,6 +812,12 @@ public final class SuggestionBarView extends GridLayout {
         return Math.max(0, activeAzPageIndex);
     }
 
+    public float getAzVisualPagePosition() {
+        return (hasAzOverflowPages() && (swipePageDragging || pageSwitchAnimating))
+            ? swipePagePosition
+            : getAzCurrentPageIndex();
+    }
+
     public int getAzVisiblePageCount() {
         return getAzPagesCount();
     }
@@ -833,6 +842,12 @@ public final class SuggestionBarView extends GridLayout {
         return Math.max(0, pinnedPageIndex);
     }
 
+    public float getPinnedVisualPagePosition() {
+        return (hasPinnedOverflowPages() && (swipePageDragging || pageSwitchAnimating))
+            ? swipePagePosition
+            : getPinnedCurrentPageIndex();
+    }
+
     public int getPinnedVisiblePageCount() {
         return Math.max(1, getPinnedPagesCount());
     }
@@ -845,6 +860,7 @@ public final class SuggestionBarView extends GridLayout {
         if (totalPages <= 1) {
             return false;
         }
+        swipePagePosition = getAzCurrentPageIndex();
         animateAzPageSwitch(pageDelta, velocityPxPerSec);
         return true;
     }
@@ -1126,6 +1142,8 @@ public final class SuggestionBarView extends GridLayout {
             setTranslationX(0f);
             setAlpha(1f);
             suppressContextLongPressForSwipe = false;
+            swipePageDragging = false;
+            swipePagePosition = resolveCurrentSwipePagePosition();
             setRowInteractionActive(true);
             if (swipeVelocityTracker != null) swipeVelocityTracker.recycle();
             swipeVelocityTracker = VelocityTracker.obtain();
@@ -1147,6 +1165,7 @@ public final class SuggestionBarView extends GridLayout {
             if (horizontalIntent && TextUtils.isEmpty(lastInput.trim())) {
                 suppressContextLongPressForSwipe = true;
                 cancelPendingContextLongPresses();
+                applySwipePageDragFeedback(dx);
             }
         } else if (action == MotionEvent.ACTION_UP) {
             if (activeAzLetter != null) {
@@ -1175,7 +1194,6 @@ public final class SuggestionBarView extends GridLayout {
                                 swipeVelocityTracker = null;
                             }
                             suppressContextLongPressForSwipe = false;
-                            setRowInteractionActive(false);
                             return true;
                         }
                     }
@@ -1190,7 +1208,6 @@ public final class SuggestionBarView extends GridLayout {
                                 swipeVelocityTracker = null;
                             }
                             suppressContextLongPressForSwipe = false;
-                            setRowInteractionActive(false);
                             return true;
                         }
                     }
@@ -1204,8 +1221,7 @@ public final class SuggestionBarView extends GridLayout {
             }
             suppressContextLongPressForSwipe = false;
             if (!pageSwitchAnimating) {
-                setTranslationX(0f);
-                setAlpha(1f);
+                animateSwipePageDragBack();
             }
             setRowInteractionActive(false);
         } else if (action == MotionEvent.ACTION_CANCEL) {
@@ -1217,8 +1233,7 @@ public final class SuggestionBarView extends GridLayout {
             }
             suppressContextLongPressForSwipe = false;
             if (!pageSwitchAnimating) {
-                setTranslationX(0f);
-                setAlpha(1f);
+                animateSwipePageDragBack();
             }
             setRowInteractionActive(false);
         }
@@ -5129,6 +5144,9 @@ public final class SuggestionBarView extends GridLayout {
         if (targetPage == pinnedPageIndex) return;
 
         pageSwitchAnimating = true;
+        swipePageDragging = false;
+        swipePagePosition = targetPage;
+        notifyOverflowPagePositionChanged();
         final int direction = pageDelta > 0 ? 1 : -1;
         final float travel = Math.max(dp(14), getWidth() * 0.12f);
         final long duration = computePinnedPageAnimDuration(velocityPxPerSec);
@@ -5145,6 +5163,9 @@ public final class SuggestionBarView extends GridLayout {
         int targetPage = wrapAzPageIndex(activeAzPageIndex + pageDelta, totalPages);
 
         pageSwitchAnimating = true;
+        swipePageDragging = false;
+        swipePagePosition = targetPage;
+        notifyOverflowPagePositionChanged();
         final int direction = pageDelta > 0 ? 1 : -1;
         final float travel = Math.max(dp(14), getWidth() * 0.12f);
         final long duration = computePinnedPageAnimDuration(velocityPxPerSec);
@@ -5161,6 +5182,87 @@ public final class SuggestionBarView extends GridLayout {
         });
     }
 
+    private float resolveCurrentSwipePagePosition() {
+        if (activeAzLetter != null && hasAzOverflowPages()) {
+            return getAzCurrentPageIndex();
+        }
+        if (hasPinnedOverflowPages()) {
+            return getPinnedCurrentPageIndex();
+        }
+        return 0f;
+    }
+
+    private void applySwipePageDragFeedback(float dx) {
+        if (!hasGesturePageSurface()) {
+            return;
+        }
+        int pageDelta = dx < 0f ? 1 : -1;
+        boolean canMove = canMoveGesturePage(pageDelta);
+        float width = Math.max(1f, getWidth());
+        float commitDistance = Math.max(dp(42f), width * 0.30f);
+        float rawProgress = clamp01(Math.abs(dx) / commitDistance);
+        float easedProgress = 1f - (float) Math.pow(1f - rawProgress, 1.7f);
+        float resistance = canMove ? 1f : 0.28f;
+        float visualDx = dx * resistance;
+        float maxTravel = Math.max(dp(18f), width * (canMove ? 0.18f : 0.055f));
+        visualDx = clampFloat(visualDx, -maxTravel, maxTravel);
+
+        swipePageDragging = true;
+        setTranslationX(visualDx);
+        setAlpha(1f - (0.16f * easedProgress * resistance));
+
+        float base = activeAzLetter != null ? getAzCurrentPageIndex() : getPinnedCurrentPageIndex();
+        float signedProgress = (dx < 0f ? easedProgress : -easedProgress) * resistance;
+        int pageCount = activeAzLetter != null ? getAzPagesCount() : getPinnedPagesCount();
+        swipePagePosition = clampFloat(base + signedProgress, 0f, Math.max(0, pageCount - 1));
+        notifyOverflowPagePositionChanged();
+    }
+
+    private boolean hasGesturePageSurface() {
+        if (!TextUtils.isEmpty(lastInput.trim())) {
+            return false;
+        }
+        return activeAzLetter != null ? hasAzOverflowPages() : hasPinnedOverflowPages();
+    }
+
+    private boolean canMoveGesturePage(int pageDelta) {
+        if (activeAzLetter != null) {
+            return hasAzOverflowPages();
+        }
+        if (!hasPinnedOverflowPages()) {
+            return false;
+        }
+        int target = pinnedPageIndex + pageDelta;
+        return target >= 0 && target < getPinnedPagesCount();
+    }
+
+    private void animateSwipePageDragBack() {
+        if (!swipePageDragging && Math.abs(getTranslationX()) < 0.5f) {
+            setTranslationX(0f);
+            setAlpha(1f);
+            swipePagePosition = resolveCurrentSwipePagePosition();
+            notifyOverflowPagePositionChanged();
+            return;
+        }
+        swipePageDragging = false;
+        swipePagePosition = resolveCurrentSwipePagePosition();
+        notifyOverflowPagePositionChanged();
+        animate().cancel();
+        setListenerSafe(null);
+        animate()
+            .translationX(0f)
+            .alpha(1f)
+            .setDuration(150L)
+            .setInterpolator(new DecelerateInterpolator())
+            .start();
+    }
+
+    private void notifyOverflowPagePositionChanged() {
+        if (overflowInteractionListener != null) {
+            overflowInteractionListener.onOverflowPagePositionChanged(swipePagePosition);
+        }
+    }
+
     private void setRowInteractionActive(boolean active) {
         if (rowInteractionActive == active) {
             return;
@@ -5168,6 +5270,7 @@ public final class SuggestionBarView extends GridLayout {
         rowInteractionActive = active;
         if (overflowInteractionListener != null) {
             overflowInteractionListener.onOverflowInteractionChanged(active);
+            overflowInteractionListener.onOverflowPagePositionChanged(resolveCurrentSwipePagePosition());
         }
     }
 
@@ -5189,8 +5292,6 @@ public final class SuggestionBarView extends GridLayout {
         setRotationY(0f);
         setScaleX(1f);
         setScaleY(1f);
-        setTranslationX(0f);
-        setAlpha(1f);
 
         final long outgoingDuration = Math.max(70L, duration / 2L);
         final long incomingDuration = Math.max(90L, duration - outgoingDuration);
@@ -5242,11 +5343,14 @@ public final class SuggestionBarView extends GridLayout {
                             private void finish(boolean callCompleted) {
                                 setListenerSafe(null);
                                 pageSwitchAnimating = false;
+                                swipePageDragging = false;
+                                swipePagePosition = resolveCurrentSwipePagePosition();
                                 setRotationY(0f);
                                 setScaleX(1f);
                                 setScaleY(1f);
                                 setTranslationX(0f);
                                 setAlpha(1f);
+                                setRowInteractionActive(false);
                                 if (callCompleted && onCompleted != null) onCompleted.run();
                             }
                         })
@@ -5256,11 +5360,14 @@ public final class SuggestionBarView extends GridLayout {
                 private void finish(boolean callCompleted) {
                     setListenerSafe(null);
                     pageSwitchAnimating = false;
+                    swipePageDragging = false;
+                    swipePagePosition = resolveCurrentSwipePagePosition();
                     setRotationY(0f);
                     setScaleX(1f);
                     setScaleY(1f);
                     setTranslationX(0f);
                     setAlpha(1f);
+                    setRowInteractionActive(false);
                     if (callCompleted && onCompleted != null) onCompleted.run();
                 }
             })
@@ -5459,6 +5566,8 @@ public final class SuggestionBarView extends GridLayout {
 
     public void resetTransientVisualState() {
         animate().cancel();
+        swipePageDragging = false;
+        swipePagePosition = resolveCurrentSwipePagePosition();
         setTranslationX(0f);
         setTranslationY(0f);
         setScaleX(1f);

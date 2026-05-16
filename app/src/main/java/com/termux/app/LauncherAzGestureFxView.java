@@ -210,13 +210,15 @@ public final class LauncherAzGestureFxView extends View {
         boolean active,
         boolean pageLeft,
         boolean pageRight,
-        int currentPageIndex,
+        float currentPagePosition,
         int pageCount,
         boolean showPageIndicators,
         boolean useSubtlePageIndicators
     ) {
         int newPageCount = Math.max(1, pageCount);
-        int newPageIndex = Math.min(Math.max(0, currentPageIndex), newPageCount - 1);
+        float newPagePosition = clamp(currentPagePosition, 0f, newPageCount - 1f);
+        int newPageIndex = Math.min(Math.max(0, Math.round(newPagePosition)), newPageCount - 1);
+        boolean directPosition = Math.abs(newPagePosition - newPageIndex) > 0.001f;
         boolean shouldAnimatePage = active
             && interactionOverflowActive
             && interactionPageCount == newPageCount
@@ -226,7 +228,11 @@ public final class LauncherAzGestureFxView extends View {
         interactionCanPageRight = pageRight;
         interactionCurrentPageIndex = newPageIndex;
         interactionPageCount = newPageCount;
-        animateInteractionPageIndicatorTo(newPageIndex, shouldAnimatePage);
+        if (directPosition) {
+            setInteractionPageIndicatorPosition(newPagePosition);
+        } else {
+            animateInteractionPageIndicatorTo(newPageIndex, shouldAnimatePage);
+        }
         interactionShowsPageIndicators = showPageIndicators;
         interactionUseSubtlePageIndicators = useSubtlePageIndicators;
         refreshVisibility();
@@ -626,6 +632,14 @@ public final class LauncherAzGestureFxView extends View {
             value -> interactionPageIndicatorPosition = value
         );
         interactionPageIndicatorAnimator.start();
+    }
+
+    private void setInteractionPageIndicatorPosition(float pagePosition) {
+        if (interactionPageIndicatorAnimator != null) {
+            interactionPageIndicatorAnimator.cancel();
+            interactionPageIndicatorAnimator = null;
+        }
+        interactionPageIndicatorPosition = pagePosition;
     }
 
     private ValueAnimator createPageIndicatorAnimator(float start, float end, @NonNull FloatUpdate update) {
