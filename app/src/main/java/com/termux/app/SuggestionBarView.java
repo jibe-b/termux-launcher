@@ -74,7 +74,6 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.github.mmin18.widget.RealtimeBlurView;
 import com.google.android.material.color.MaterialColors;
-import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.termux.R;
@@ -2529,9 +2528,6 @@ public final class SuggestionBarView extends GridLayout {
         iconGrid.setBackgroundColor(0x00000000);
         iconGrid.setSelector(new ColorDrawable(0x00000000));
         root.addView(search, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        int sheetHeight = resolveIconPickerSheetHeight();
-        root.setMinimumHeight(sheetHeight);
-        root.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, sheetHeight));
         LinearLayout.LayoutParams gridParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f);
         gridParams.setMargins(0, dp(10), 0, 0);
         root.addView(iconGrid, gridParams);
@@ -2578,18 +2574,12 @@ public final class SuggestionBarView extends GridLayout {
             }
         });
 
-        BottomSheetDialog sheetDialog = new BottomSheetDialog(getContext());
-        sheetDialog.setContentView(root);
-        iconPickerDialog = sheetDialog;
-        sheetDialog.setOnShowListener(dialog -> {
-            if (sheetDialog.getWindow() != null) {
-                sheetDialog.getWindow().setSoftInputMode(
-                    WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING |
-                    WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN
-                );
-            }
-            configureIconPickerSheet(sheetDialog, sheetHeight);
-        });
+        Dialog dialog = new Dialog(getContext());
+        dialog.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE);
+        dialog.setCanceledOnTouchOutside(true);
+        dialog.setContentView(buildIconPickerDialogSurface(root));
+        iconPickerDialog = dialog;
+        dialog.setOnShowListener(shownDialog -> configureIconPickerDialogWindow(dialog));
         iconPickerDialog.setOnDismissListener(dialog -> {
             if (iconPickerDialog != null && !iconPickerDialog.isShowing()) {
                 iconPickerDialog = null;
@@ -2598,42 +2588,51 @@ public final class SuggestionBarView extends GridLayout {
         iconPickerDialog.show();
     }
 
-    private int resolveIconPickerSheetHeight() {
-        int screenHeight = getResources().getDisplayMetrics().heightPixels;
-        Rect visibleFrame = new Rect();
-        View rootView = getRootView();
-        if (rootView != null) {
-            rootView.getWindowVisibleDisplayFrame(visibleFrame);
+    @NonNull
+    private View buildIconPickerDialogSurface(@NonNull View content) {
+        FrameLayout overlay = new FrameLayout(getContext());
+        overlay.setClipToPadding(false);
+        overlay.setPadding(0, 0, 0, 0);
+        overlay.setLayoutParams(new ViewGroup.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT
+        ));
+
+        GradientDrawable panelBg = new GradientDrawable();
+        panelBg.setCornerRadius(dp(12));
+        int alpha = clamp(appBarOpacity, 0, 100);
+        panelBg.setColor((((int) (255f * (alpha / 100f))) << 24) | (activeMenuTintBase & 0x00FFFFFF));
+        content.setBackground(panelBg);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            content.setClipToOutline(true);
+            content.setElevation(dp(8));
         }
 
-        int availableHeight = visibleFrame.height() > 0 ? visibleFrame.height() : screenHeight;
-        int topGap = dp(24);
-        int maxHeight = Math.max(dp(280), screenHeight - topGap);
-        int minHeight = Math.min(dp(360), maxHeight);
-        int desiredHeight = availableHeight - topGap;
-        return Math.max(minHeight, Math.min(desiredHeight, maxHeight));
+        int screenWidth = getResources().getDisplayMetrics().widthPixels;
+        int cardWidth = screenWidth >= dp(640) ? dp(560) : ViewGroup.LayoutParams.MATCH_PARENT;
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+            cardWidth,
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            Gravity.CENTER
+        );
+        params.setMargins(dp(18), dp(24), dp(18), dp(24));
+        overlay.addView(content, params);
+        return overlay;
     }
 
-    private void configureIconPickerSheet(@NonNull BottomSheetDialog sheetDialog, int sheetHeight) {
-        FrameLayout bottomSheet = sheetDialog.findViewById(com.google.android.material.R.id.design_bottom_sheet);
-        if (bottomSheet == null) {
+    private void configureIconPickerDialogWindow(@NonNull Dialog dialog) {
+        android.view.Window window = dialog.getWindow();
+        if (window == null) {
             return;
         }
 
-        ViewGroup.LayoutParams params = bottomSheet.getLayoutParams();
-        if (params != null) {
-            params.height = sheetHeight;
-            bottomSheet.setLayoutParams(params);
-        }
-        bottomSheet.setMinimumHeight(sheetHeight);
-
-        BottomSheetBehavior<FrameLayout> behavior = BottomSheetBehavior.from(bottomSheet);
-        behavior.setFitToContents(false);
-        behavior.setSkipCollapsed(true);
-        behavior.setHideable(true);
-        behavior.setPeekHeight(sheetHeight);
-        behavior.setExpandedOffset(Math.max(0, getResources().getDisplayMetrics().heightPixels - sheetHeight));
-        bottomSheet.post(() -> behavior.setState(BottomSheetBehavior.STATE_EXPANDED));
+        window.setBackgroundDrawable(new ColorDrawable(0x00000000));
+        window.setDimAmount(0.32f);
+        window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+        window.setSoftInputMode(
+            WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE |
+            WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN
+        );
     }
 
     private void showIconPickerMessagePopup(@NonNull String title, @NonNull String message) {
