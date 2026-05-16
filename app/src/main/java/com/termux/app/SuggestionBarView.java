@@ -1753,10 +1753,23 @@ public final class SuggestionBarView extends GridLayout {
         return new LauncherAppEntry(entry.appRef, entry.label, pinnedIcon);
     }
 
+    @Nullable
+    private LauncherAppEntry resolvePinnedSurfaceEntry(@NonNull AppRef ref) {
+        LauncherAppEntry entry = resolveRef(ref);
+        if (entry == null) {
+            return null;
+        }
+        Drawable icon = getIconResolver().resolvePinned(entry.appRef, null);
+        if (icon == null || icon == entry.icon) {
+            return entry;
+        }
+        return new LauncherAppEntry(entry.appRef, entry.label, icon);
+    }
+
     private LauncherAppEntry folderSyntheticEntry(@NonNull PinnedFolderItem folder) {
         Drawable icon = null;
         for (AppRef ref : folder.apps) {
-            LauncherAppEntry entry = resolveRef(ref);
+            LauncherAppEntry entry = resolvePinnedSurfaceEntry(ref);
             if (entry != null && entry.icon != null) {
                 icon = entry.icon;
                 break;
@@ -2368,7 +2381,7 @@ public final class SuggestionBarView extends GridLayout {
         int placed = 0;
         for (AppRef ref : folder.apps) {
             if (placed >= 4) break;
-            LauncherAppEntry e = resolveRef(ref);
+            LauncherAppEntry e = resolvePinnedSurfaceEntry(ref);
             if (e == null || e.icon == null) continue;
             ImageView mini = new ImageView(getContext());
             mini.setImageDrawable(e.icon);
@@ -2963,7 +2976,7 @@ public final class SuggestionBarView extends GridLayout {
 
         List<LauncherAppEntry> folderEntries = new ArrayList<>();
         for (AppRef ref : folder.apps) {
-            LauncherAppEntry entry = resolveRef(ref);
+            LauncherAppEntry entry = resolvePinnedSurfaceEntry(ref);
             if (entry != null) folderEntries.add(entry);
         }
         if (folderEntries.isEmpty()) {
