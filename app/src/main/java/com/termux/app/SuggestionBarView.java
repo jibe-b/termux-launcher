@@ -10,6 +10,7 @@ import android.animation.ValueAnimator;
 import android.app.Activity;
 import android.app.ActivityOptions;
 import android.app.AlertDialog;
+import android.app.Dialog;
 import android.content.ClipData;
 import android.content.ComponentName;
 import android.content.Context;
@@ -49,7 +50,6 @@ import android.view.ViewParent;
 import android.view.WindowManager;
 import android.view.animation.DecelerateInterpolator;
 import android.view.animation.LinearInterpolator;
-import android.view.inputmethod.InputMethodManager;
 import android.widget.ArrayAdapter;
 import android.widget.BaseAdapter;
 import android.widget.Button;
@@ -74,6 +74,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.github.mmin18.widget.RealtimeBlurView;
 import com.google.android.material.color.MaterialColors;
+import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.termux.R;
@@ -153,7 +154,7 @@ public final class SuggestionBarView extends GridLayout {
     private PopupWindow folderPopupWindow;
     private PopupWindow appContextPopupWindow;
     private PopupWindow shortcutsPopupWindow;
-    @Nullable private androidx.appcompat.app.AlertDialog iconPickerDialog;
+    @Nullable private Dialog iconPickerDialog;
 
     private String lastInput = "";
     private TerminalView lastTerminalView;
@@ -2482,7 +2483,27 @@ public final class SuggestionBarView extends GridLayout {
         List<IconPackDrawableItem> source = pack.drawableItems();
         LinearLayout root = new LinearLayout(getContext());
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(2), dp(4), dp(2), 0);
+        root.setPadding(dp(18), dp(10), dp(18), dp(12));
+
+        View handle = new View(getContext());
+        GradientDrawable handleBg = new GradientDrawable();
+        handleBg.setCornerRadius(dp(2));
+        handleBg.setColor(withAlphaComponent(resolveLauncherSubtleTextColor(), 0x66));
+        handle.setBackground(handleBg);
+        LinearLayout.LayoutParams handleParams = new LinearLayout.LayoutParams(dp(36), dp(4));
+        handleParams.gravity = Gravity.CENTER_HORIZONTAL;
+        handleParams.setMargins(0, 0, 0, dp(14));
+        root.addView(handle, handleParams);
+
+        TextView title = new TextView(getContext());
+        title.setText(packInfo.label);
+        title.setTextColor(resolveLauncherTextColor());
+        title.setTextSize(18f);
+        title.setTypeface(Typeface.DEFAULT_BOLD);
+        title.setSingleLine(true);
+        title.setEllipsize(TextUtils.TruncateAt.END);
+        title.setPadding(0, 0, 0, dp(12));
+        root.addView(title, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         EditText search = new EditText(getContext());
         search.setSingleLine(true);
@@ -2508,7 +2529,10 @@ public final class SuggestionBarView extends GridLayout {
         iconGrid.setBackgroundColor(0x00000000);
         iconGrid.setSelector(new ColorDrawable(0x00000000));
         root.addView(search, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        LinearLayout.LayoutParams gridParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(390));
+        int sheetHeight = resolveIconPickerSheetHeight();
+        root.setMinimumHeight(sheetHeight);
+        root.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, sheetHeight));
+        LinearLayout.LayoutParams gridParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f);
         gridParams.setMargins(0, dp(10), 0, 0);
         root.addView(iconGrid, gridParams);
 
@@ -2554,25 +2578,17 @@ public final class SuggestionBarView extends GridLayout {
             }
         });
 
-        iconPickerDialog = new MaterialAlertDialogBuilder(getContext())
-            .setTitle(packInfo.label)
-            .setView(root)
-            .setNegativeButton(android.R.string.cancel, null)
-            .create();
-        iconPickerDialog.setOnShowListener(dialog -> {
-            search.requestFocus();
-            if (iconPickerDialog.getWindow() != null) {
-                iconPickerDialog.getWindow().setSoftInputMode(
-                    WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE
-                        | WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+        BottomSheetDialog sheetDialog = new BottomSheetDialog(getContext());
+        sheetDialog.setContentView(root);
+        iconPickerDialog = sheetDialog;
+        sheetDialog.setOnShowListener(dialog -> {
+            if (sheetDialog.getWindow() != null) {
+                sheetDialog.getWindow().setSoftInputMode(
+                    WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING |
+                    WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN
                 );
             }
-            search.post(() -> {
-                InputMethodManager inputMethodManager = (InputMethodManager) getContext().getSystemService(Context.INPUT_METHOD_SERVICE);
-                if (inputMethodManager != null) {
-                    inputMethodManager.showSoftInput(search, InputMethodManager.SHOW_IMPLICIT);
-                }
-            });
+            configureIconPickerSheet(sheetDialog, sheetHeight);
         });
         iconPickerDialog.setOnDismissListener(dialog -> {
             if (iconPickerDialog != null && !iconPickerDialog.isShowing()) {
@@ -2580,6 +2596,44 @@ public final class SuggestionBarView extends GridLayout {
             }
         });
         iconPickerDialog.show();
+    }
+
+    private int resolveIconPickerSheetHeight() {
+        int screenHeight = getResources().getDisplayMetrics().heightPixels;
+        Rect visibleFrame = new Rect();
+        View rootView = getRootView();
+        if (rootView != null) {
+            rootView.getWindowVisibleDisplayFrame(visibleFrame);
+        }
+
+        int availableHeight = visibleFrame.height() > 0 ? visibleFrame.height() : screenHeight;
+        int topGap = dp(24);
+        int maxHeight = Math.max(dp(280), screenHeight - topGap);
+        int minHeight = Math.min(dp(360), maxHeight);
+        int desiredHeight = availableHeight - topGap;
+        return Math.max(minHeight, Math.min(desiredHeight, maxHeight));
+    }
+
+    private void configureIconPickerSheet(@NonNull BottomSheetDialog sheetDialog, int sheetHeight) {
+        FrameLayout bottomSheet = sheetDialog.findViewById(com.google.android.material.R.id.design_bottom_sheet);
+        if (bottomSheet == null) {
+            return;
+        }
+
+        ViewGroup.LayoutParams params = bottomSheet.getLayoutParams();
+        if (params != null) {
+            params.height = sheetHeight;
+            bottomSheet.setLayoutParams(params);
+        }
+        bottomSheet.setMinimumHeight(sheetHeight);
+
+        BottomSheetBehavior<FrameLayout> behavior = BottomSheetBehavior.from(bottomSheet);
+        behavior.setFitToContents(false);
+        behavior.setSkipCollapsed(true);
+        behavior.setHideable(true);
+        behavior.setPeekHeight(sheetHeight);
+        behavior.setExpandedOffset(Math.max(0, getResources().getDisplayMetrics().heightPixels - sheetHeight));
+        bottomSheet.post(() -> behavior.setState(BottomSheetBehavior.STATE_EXPANDED));
     }
 
     private void showIconPickerMessagePopup(@NonNull String title, @NonNull String message) {
@@ -4062,7 +4116,7 @@ public final class SuggestionBarView extends GridLayout {
 
     private void dismissIconPickerPopup() {
         if (iconPickerDialog != null) {
-            final androidx.appcompat.app.AlertDialog dialog = iconPickerDialog;
+            final Dialog dialog = iconPickerDialog;
             iconPickerDialog = null;
             if (dialog.isShowing()) {
                 dialog.dismiss();
