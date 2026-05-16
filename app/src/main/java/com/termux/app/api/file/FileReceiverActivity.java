@@ -183,8 +183,9 @@ public class FileReceiverActivity extends AppCompatActivity {
                         showErrorDialogAndQuit("File name cannot be null or empty");
                         return;
                     }
-                    final Path receiveDir = Paths.get(TERMUX_RECEIVEDIR, text);
-                    if (Files.createDirectories(receiveDir) != receiveDir) {
+                    final Path receiveDir = resolveReceiveDirectory(text);
+                    Files.createDirectories(receiveDir);
+                    if (!Files.isDirectory(receiveDir)) {
                         showErrorDialogAndQuit("Cannot create directory: " + receiveDir.toAbsolutePath().toString());
                         return;
                     }
@@ -194,7 +195,14 @@ public class FileReceiverActivity extends AppCompatActivity {
                             try (Stream<Path> stream = Files.walk(child)) {
                                 for (Iterator<Path> i = stream.iterator(); i.hasNext();) {
                                     Path source = i.next();
-                                    Files.copy(source, receiveDir.resolve(SOURCE.relativize(source)), LinkOption.NOFOLLOW_LINKS);
+                                    if (Files.isSymbolicLink(source)) {
+                                        throw new IOException("Symbolic links are not supported in received directories: " + source);
+                                    }
+                                    Path target = receiveDir.resolve(SOURCE.relativize(source)).normalize();
+                                    if (!target.startsWith(receiveDir)) {
+                                        throw new IOException("Refusing to copy outside receive directory: " + source);
+                                    }
+                                    Files.copy(source, target, LinkOption.NOFOLLOW_LINKS);
                                 }
                             }
                         }
@@ -256,16 +264,12 @@ public class FileReceiverActivity extends AppCompatActivity {
 
     public File saveStreamWithName(InputStream in, String attachmentFileName) {
         File receiveDir = new File(TERMUX_RECEIVEDIR);
-        if (DataUtils.isNullOrEmpty(attachmentFileName)) {
-            showErrorDialogAndQuit("File name cannot be null or empty");
-            return null;
-        }
         if (!receiveDir.isDirectory() && !receiveDir.mkdirs()) {
             showErrorDialogAndQuit("Cannot create directory: " + receiveDir.getAbsolutePath());
             return null;
         }
         try {
-            final File outFile = new File(receiveDir, attachmentFileName);
+            final File outFile = resolveReceiveFile(receiveDir, attachmentFileName);
             try (FileOutputStream f = new FileOutputStream(outFile)) {
                 byte[] buffer = new byte[4096];
                 int readBytes;
@@ -279,6 +283,50 @@ public class FileReceiverActivity extends AppCompatActivity {
             Logger.logStackTraceWithMessage(LOG_TAG, "Error saving file", e);
             return null;
         }
+    }
+
+    static String sanitizeReceiveName(String attachmentFileName) throws IOException {
+        if (DataUtils.isNullOrEmpty(attachmentFileName)) {
+            throw new IOException("File name cannot be null or empty");
+        }
+        String name = attachmentFileName.trim();
+        if (name.isEmpty() || ".".equals(name) || "..".equals(name) || name.contains("/") || name.contains("\\")) {
+            throw new IOException("File name cannot contain path separators");
+        }
+        for (int i = 0; i < name.length(); i++) {
+            if (Character.isISOControl(name.charAt(i))) {
+                throw new IOException("File name cannot contain control characters");
+            }
+        }
+        return name;
+    }
+
+    private static File resolveReceiveFile(File receiveDir, String attachmentFileName) throws IOException {
+        String name = sanitizeReceiveName(attachmentFileName);
+        File canonicalReceiveDir = receiveDir.getCanonicalFile();
+        File outFile = new File(canonicalReceiveDir, name).getCanonicalFile();
+        if (!isPathInDirectory(canonicalReceiveDir, outFile)) {
+            throw new IOException("Refusing to save outside receive directory");
+        }
+        return outFile;
+    }
+
+    private static Path resolveReceiveDirectory(String attachmentFileName) throws IOException {
+        String name = sanitizeReceiveName(attachmentFileName);
+        Path receiveRootPath = Paths.get(TERMUX_RECEIVEDIR);
+        Files.createDirectories(receiveRootPath);
+        Path receiveRoot = receiveRootPath.toRealPath();
+        Path receiveDir = receiveRoot.resolve(name).normalize();
+        if (!receiveDir.startsWith(receiveRoot)) {
+            throw new IOException("Refusing to create directory outside receive directory");
+        }
+        return receiveDir;
+    }
+
+    private static boolean isPathInDirectory(File directory, File file) throws IOException {
+        String directoryPath = directory.getCanonicalPath();
+        String filePath = file.getCanonicalPath();
+        return filePath.startsWith(directoryPath + File.separator);
     }
 
     void handleUrlAndFinish(final String url) {

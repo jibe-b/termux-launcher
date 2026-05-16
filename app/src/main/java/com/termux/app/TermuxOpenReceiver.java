@@ -122,9 +122,16 @@ public class TermuxOpenReceiver extends BroadcastReceiver {
 
         @Override
         public Cursor query(@NonNull Uri uri, String[] projection, String selection, String[] selectionArgs, String sortOrder) {
-            File file = new File(uri.getPath());
             if (projection == null) {
                 projection = new String[] { MediaStore.MediaColumns.DISPLAY_NAME, MediaStore.MediaColumns.SIZE, MediaStore.MediaColumns._ID };
+            }
+            MatrixCursor cursor = new MatrixCursor(projection);
+            File file;
+            try {
+                file = getAllowedFileForUri(uri);
+            } catch (IOException | IllegalArgumentException e) {
+                Logger.logError(LOG_TAG, "Invalid query path: " + e.getMessage());
+                return cursor;
             }
             Object[] row = new Object[projection.length];
             for (int i = 0; i < projection.length; i++) {
@@ -145,14 +152,20 @@ public class TermuxOpenReceiver extends BroadcastReceiver {
                 }
                 row[i] = value;
             }
-            MatrixCursor cursor = new MatrixCursor(projection);
             cursor.addRow(row);
             return cursor;
         }
 
         @Override
         public String getType(@NonNull Uri uri) {
-            String path = uri.getLastPathSegment();
+            File file;
+            try {
+                file = getAllowedFileForUri(uri);
+            } catch (IOException | IllegalArgumentException e) {
+                Logger.logError(LOG_TAG, "Invalid getType path: " + e.getMessage());
+                return null;
+            }
+            String path = file.getName();
             int extIndex = path.lastIndexOf('.') + 1;
             if (extIndex > 0) {
                 MimeTypeMap mimeMap = MimeTypeMap.getSingleton();
@@ -179,16 +192,11 @@ public class TermuxOpenReceiver extends BroadcastReceiver {
 
         @Override
         public ParcelFileDescriptor openFile(@NonNull Uri uri, @NonNull String mode) throws FileNotFoundException {
-            File file = new File(uri.getPath());
             try {
-                String path = file.getCanonicalPath();
+                File file = getAllowedFileForUri(uri);
+                String path = file.getPath();
                 String callingPackageName = getCallingPackage();
                 Logger.logDebug(LOG_TAG, "Open file request received from " + callingPackageName + " for \"" + path + "\" with mode \"" + mode + "\"");
-                String storagePath = Environment.getExternalStorageDirectory().getCanonicalPath();
-                // See https://support.google.com/faqs/answer/7496913:
-                if (!(path.startsWith(TermuxConstants.TERMUX_FILES_DIR_PATH) || path.startsWith(storagePath))) {
-                    throw new IllegalArgumentException("Invalid path: " + path);
-                }
                 // If TermuxConstants.PROP_ALLOW_EXTERNAL_APPS property to not set to "true", then throw exception
                 String errmsg = TermuxPluginUtils.checkIfAllowExternalAppsPolicyIsViolated(getContext(), LOG_TAG);
                 if (errmsg != null) {
@@ -200,10 +208,33 @@ public class TermuxOpenReceiver extends BroadcastReceiver {
                 if (TermuxConstants.TERMUX_PROPERTIES_FILE_PATHS_LIST.contains(path) || TermuxConstants.TERMUX_FLOAT_PROPERTIES_FILE_PATHS_LIST.contains(path)) {
                     mode = "r";
                 }
+                return ParcelFileDescriptor.open(file, ParcelFileDescriptor.parseMode(mode));
+            } catch (FileNotFoundException e) {
+                throw e;
             } catch (IOException e) {
                 throw new IllegalArgumentException(e);
             }
-            return ParcelFileDescriptor.open(file, ParcelFileDescriptor.parseMode(mode));
+        }
+
+        private static File getAllowedFileForUri(@NonNull Uri uri) throws IOException {
+            String uriPath = uri.getPath();
+            if (uriPath == null) {
+                throw new IllegalArgumentException("Missing path");
+            }
+            File file = new File(uriPath).getCanonicalFile();
+            File termuxFilesDir = new File(TermuxConstants.TERMUX_FILES_DIR_PATH).getCanonicalFile();
+            File storageDir = Environment.getExternalStorageDirectory().getCanonicalFile();
+            // See https://support.google.com/faqs/answer/7496913:
+            if (!(isPathInDirectoryOrSame(termuxFilesDir, file) || isPathInDirectoryOrSame(storageDir, file))) {
+                throw new IllegalArgumentException("Invalid path: " + file.getPath());
+            }
+            return file;
+        }
+
+        private static boolean isPathInDirectoryOrSame(File directory, File file) throws IOException {
+            String directoryPath = directory.getCanonicalPath();
+            String filePath = file.getCanonicalPath();
+            return filePath.equals(directoryPath) || filePath.startsWith(directoryPath + File.separator);
         }
     }
 }

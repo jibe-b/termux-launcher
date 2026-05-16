@@ -36,4 +36,25 @@ public class FileReceiverActivityTest {
             Assert.assertFalse(FileReceiverActivity.isSharedTextAnUrl(url));
         }
     }
+
+    @Test
+    public void sanitizeReceiveNameRejectsPathTraversal() throws Exception {
+        Assert.assertEquals("note.txt", FileReceiverActivity.sanitizeReceiveName("note.txt"));
+
+        assertInvalidReceiveName("../.bashrc");
+        assertInvalidReceiveName("nested/file.txt");
+        assertInvalidReceiveName("nested\\file.txt");
+        assertInvalidReceiveName(".");
+        assertInvalidReceiveName("..");
+        assertInvalidReceiveName("bad\nname");
+    }
+
+    private static void assertInvalidReceiveName(String name) {
+        try {
+            FileReceiverActivity.sanitizeReceiveName(name);
+            Assert.fail("Expected invalid receive name: " + name);
+        } catch (Exception expected) {
+            // Expected.
+        }
+    }
 }

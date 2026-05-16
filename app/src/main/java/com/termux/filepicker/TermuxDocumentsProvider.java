@@ -70,8 +70,11 @@ public class TermuxDocumentsProvider extends DocumentsProvider {
     public Cursor queryChildDocuments(String parentDocumentId, String[] projection, String sortOrder) throws FileNotFoundException {
         final MatrixCursor result = new MatrixCursor(projection != null ? projection : DEFAULT_DOCUMENT_PROJECTION);
         final File parent = getFileForDocId(parentDocumentId);
-        for (File file : parent.listFiles()) {
-            includeFile(result, null, file);
+        File[] files = parent.listFiles();
+        if (files != null) {
+            for (File file : files) {
+                includeFile(result, null, file);
+            }
         }
         return result;
     }
@@ -97,10 +100,14 @@ public class TermuxDocumentsProvider extends DocumentsProvider {
 
     @Override
     public String createDocument(String parentDocumentId, String mimeType, String displayName) throws FileNotFoundException {
-        File newFile = new File(parentDocumentId, displayName);
+        File parent = getFileForDocId(parentDocumentId);
+        if (!parent.isDirectory()) {
+            throw new FileNotFoundException("Parent document with id " + parentDocumentId + " is not a directory");
+        }
+        File newFile = buildChildFile(parent, displayName);
         int noConflictId = 2;
         while (newFile.exists()) {
-            newFile = new File(parentDocumentId, displayName + " (" + noConflictId++ + ")");
+            newFile = buildChildFile(parent, sanitizeDisplayName(displayName) + " (" + noConflictId++ + ")");
         }
         try {
             boolean succeeded;
@@ -115,7 +122,7 @@ public class TermuxDocumentsProvider extends DocumentsProvider {
         } catch (IOException e) {
             throw new FileNotFoundException("Failed to create document with id " + newFile.getPath());
         }
-        return newFile.getPath();
+        return getDocIdForFile(newFile);
     }
 
     @Override
@@ -136,27 +143,27 @@ public class TermuxDocumentsProvider extends DocumentsProvider {
         if (!targetParentFile.isDirectory()) {
             throw new FileNotFoundException("Target parent document with id " + targetParentDocumentId + " is not a directory");
         }
-        File targetFile = new File(targetParentFile, sourceFile.getName());
+        File targetFile = buildChildFile(targetParentFile, sourceFile.getName());
         if (targetFile.exists()) {
             throw new FileNotFoundException("Failed to move document with id " + sourceDocumentId + " : target file " + targetFile.getPath() + " exists");
         }
         if (!sourceFile.renameTo(targetFile)) {
             throw new FileNotFoundException("Failed to move document with id " + sourceDocumentId + " (whose parent document id is " + sourceParentDocumentId + ") to directory with document id " + targetParentDocumentId);
         }
-        return targetFile.getPath();
+        return getDocIdForFile(targetFile);
     }
 
     @Override
     public String renameDocument(String documentId, String displayName) throws FileNotFoundException {
         File sourceFile = getFileForDocId(documentId);
-        File targetFile = new File(sourceFile.getParentFile(), displayName);
+        File targetFile = buildChildFile(sourceFile.getParentFile(), displayName);
         if (targetFile.exists()) {
             throw new FileNotFoundException("Failed to rename document with id " + documentId + " : target file " + targetFile.getPath() + " exists");
         }
         if (!sourceFile.renameTo(targetFile)) {
             throw new FileNotFoundException("Failed to rename document with id " + documentId + " to display name " + displayName);
         }
-        return targetFile.getPath();
+        return getDocIdForFile(targetFile);
     }
 
     @Override
@@ -178,17 +185,20 @@ public class TermuxDocumentsProvider extends DocumentsProvider {
         final int MAX_SEARCH_RESULTS = 50;
         while (!pending.isEmpty() && result.getCount() < MAX_SEARCH_RESULTS) {
             final File file = pending.removeFirst();
-            // Avoid directories outside the $HOME directory linked with symlinks (to avoid e.g. search
+            // Avoid directories outside the provider root linked with symlinks (to avoid e.g. search
             // through the whole SD card).
-            boolean isInsideHome;
+            boolean isInsideBaseDir;
             try {
-                isInsideHome = file.getCanonicalPath().startsWith(TermuxConstants.TERMUX_HOME_DIR_PATH);
+                isInsideBaseDir = isPathInBaseDir(file);
             } catch (IOException e) {
-                isInsideHome = true;
+                isInsideBaseDir = false;
             }
-            if (isInsideHome) {
+            if (isInsideBaseDir) {
                 if (file.isDirectory()) {
-                    Collections.addAll(pending, file.listFiles());
+                    File[] files = file.listFiles();
+                    if (files != null) {
+                        Collections.addAll(pending, files);
+                    }
                 } else {
                     if (file.getName().toLowerCase().contains(query)) {
                         includeFile(result, null, file);
@@ -201,7 +211,13 @@ public class TermuxDocumentsProvider extends DocumentsProvider {
 
     @Override
     public boolean isChildDocument(String parentDocumentId, String documentId) {
-        return documentId.startsWith(parentDocumentId);
+        try {
+            File parent = getFileForDocId(parentDocumentId);
+            File child = getFileForDocId(documentId);
+            return isPathInDirectoryOrSame(parent, child);
+        } catch (FileNotFoundException e) {
+            return false;
+        }
     }
 
     /**
@@ -218,10 +234,62 @@ public class TermuxDocumentsProvider extends DocumentsProvider {
      * Get the file given a document id (the reverse of {@link #getDocIdForFile(File)}).
      */
     private static File getFileForDocId(String docId) throws FileNotFoundException {
-        final File f = new File(docId);
-        if (!f.exists())
-            throw new FileNotFoundException(f.getAbsolutePath() + " not found");
-        return f;
+        try {
+            final File f = new File(docId).getCanonicalFile();
+            if (!isPathInBaseDir(f)) {
+                throw new FileNotFoundException(f.getAbsolutePath() + " is outside provider root");
+            }
+            if (!f.exists())
+                throw new FileNotFoundException(f.getAbsolutePath() + " not found");
+            return f;
+        } catch (IOException e) {
+            throw new FileNotFoundException("Invalid document id " + docId + ": " + e.getMessage());
+        }
+    }
+
+    private static File buildChildFile(File parent, String displayName) throws FileNotFoundException {
+        try {
+            File canonicalParent = parent.getCanonicalFile();
+            File child = new File(canonicalParent, sanitizeDisplayName(displayName)).getCanonicalFile();
+            if (!isPathInDirectory(canonicalParent, child) || !isPathInBaseDir(child)) {
+                throw new FileNotFoundException("Invalid display name " + displayName);
+            }
+            return child;
+        } catch (IOException e) {
+            throw new FileNotFoundException("Invalid display name " + displayName + ": " + e.getMessage());
+        }
+    }
+
+    private static String sanitizeDisplayName(String displayName) throws FileNotFoundException {
+        if (displayName == null) {
+            throw new FileNotFoundException("Display name is null");
+        }
+        String name = displayName.trim();
+        if (name.isEmpty() || ".".equals(name) || "..".equals(name) || name.contains("/") || name.contains("\\")) {
+            throw new FileNotFoundException("Invalid display name " + displayName);
+        }
+        for (int i = 0; i < name.length(); i++) {
+            if (Character.isISOControl(name.charAt(i))) {
+                throw new FileNotFoundException("Invalid display name " + displayName);
+            }
+        }
+        return name;
+    }
+
+    private static boolean isPathInBaseDir(File file) throws IOException {
+        return isPathInDirectoryOrSame(BASE_DIR.getCanonicalFile(), file.getCanonicalFile());
+    }
+
+    private static boolean isPathInDirectoryOrSame(File directory, File file) throws IOException {
+        File canonicalDirectory = directory.getCanonicalFile();
+        File canonicalFile = file.getCanonicalFile();
+        return canonicalDirectory.equals(canonicalFile) || isPathInDirectory(canonicalDirectory, canonicalFile);
+    }
+
+    private static boolean isPathInDirectory(File directory, File file) throws IOException {
+        String directoryPath = directory.getCanonicalPath();
+        String filePath = file.getCanonicalPath();
+        return filePath.startsWith(directoryPath + File.separator);
     }
 
     private static String getMimeType(File file) {
