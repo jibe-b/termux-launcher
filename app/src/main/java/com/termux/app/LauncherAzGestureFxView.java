@@ -580,20 +580,30 @@ public final class LauncherAzGestureFxView extends View {
         boolean subtle = interactionUseSubtlePageIndicators;
         float attention = subtle ? clamp01(subtlePageIndicatorAttention) : 1f;
         boolean compactSubtle = subtle && compactDockSpacingEnabled;
+        if (compactSubtle && attention < 0.08f) {
+            drawCompactIdlePageDots(
+                canvas,
+                interactionPageIndicatorPosition,
+                interactionPageCount,
+                withAlpha(boostColor(glassTintColor, 1.12f, 1.02f), 66),
+                withAlpha(boostColor(edgeTintColor, 1.24f, 1.10f), 150)
+            );
+            return;
+        }
         drawPageIndicatorStrip(
             canvas,
             interactionPageIndicatorPosition,
             interactionPageCount,
             compactSubtle
-                ? clamp(getWidth() * lerp(0.11f, 0.16f, attention), dp(34f), dp(86f))
+                ? clamp(getWidth() * lerp(0.08f, 0.13f, attention), dp(26f), dp(70f))
                 : subtle
                 ? clamp(getWidth() * lerp(0.16f, 0.22f, attention), dp(48f), dp(118f))
                 : clamp(getWidth() * 0.34f, dp(120f), dp(220f)),
             compactSubtle
-                ? dp(lerp(2.1f, 3.1f, attention))
+                ? dp(lerp(1.2f, 1.7f, attention))
                 : subtle ? dp(lerp(4.6f, 6f, attention)) : dp(8.5f),
             compactSubtle
-                ? dp(lerp(3.8f, 5f, attention))
+                ? dp(lerp(3.2f, 4.2f, attention))
                 : subtle ? dp(lerp(5.8f, 7f, attention)) : dp(10f),
             subtle
                 ? withAlpha(boostColor(glassTintColor, 1.12f, 1.02f), Math.round(lerp(48f, 112f, attention)))
@@ -622,15 +632,18 @@ public final class LauncherAzGestureFxView extends View {
         float cy = resolvePageIndicatorCenterY();
         float clampedPosition = clamp(activePagePosition, 0f, totalPages - 1f);
         float dotSize = lineHeight;
-        float activeWidth = insetActive ? dp(38f) : (compactDockSpacingEnabled ? dp(18f) : dp(26f));
+        float activeWidth = insetActive ? dp(38f) : (compactDockSpacingEnabled ? dp(12f) : dp(26f));
         float desiredWidth = activeWidth
             + (dotSize * Math.max(0, totalPages - 1))
             + (segmentGap * Math.max(0, totalPages - 1));
         if (desiredWidth > totalWidth) {
             float scale = totalWidth / Math.max(1f, desiredWidth);
-            dotSize = Math.max(dp(4.5f), dotSize * scale);
-            activeWidth = Math.max(dp(20f), activeWidth * scale);
-            segmentGap = Math.max(dp(4f), segmentGap * scale);
+            float minDotSize = compactDockSpacingEnabled ? dp(1.1f) : dp(4.5f);
+            float minActiveWidth = compactDockSpacingEnabled ? dp(8f) : dp(20f);
+            float minSegmentGap = compactDockSpacingEnabled ? dp(2.5f) : dp(4f);
+            dotSize = Math.max(minDotSize, dotSize * scale);
+            activeWidth = Math.max(minActiveWidth, activeWidth * scale);
+            segmentGap = Math.max(minSegmentGap, segmentGap * scale);
             desiredWidth = activeWidth
                 + (dotSize * Math.max(0, totalPages - 1))
                 + (segmentGap * Math.max(0, totalPages - 1));
@@ -645,6 +658,31 @@ public final class LauncherAzGestureFxView extends View {
             pageIndicatorPaint.setColor(lerpColor(backgroundLineColor, activeLineColor, activeAmount));
             canvas.drawRoundRect(tmpRect, radius, radius, pageIndicatorPaint);
             left += width + segmentGap;
+        }
+    }
+
+    private void drawCompactIdlePageDots(
+        Canvas canvas,
+        float activePagePosition,
+        int totalPages,
+        int inactiveColor,
+        int activeColor
+    ) {
+        if (totalPages <= 1) {
+            return;
+        }
+        float cy = resolvePageIndicatorCenterY();
+        float dotSize = dp(2.2f);
+        float gap = dp(4.2f);
+        float desiredWidth = (dotSize * totalPages) + (gap * Math.max(0, totalPages - 1));
+        float left = (getWidth() - desiredWidth) * 0.5f;
+        float activePosition = clamp(activePagePosition, 0f, totalPages - 1f);
+        for (int i = 0; i < totalPages; i++) {
+            float activeAmount = 1f - clamp(Math.abs(i - activePosition), 0f, 1f);
+            float radius = lerp(dotSize * 0.42f, dotSize * 0.58f, activeAmount);
+            pageIndicatorPaint.setColor(lerpColor(inactiveColor, activeColor, activeAmount));
+            canvas.drawCircle(left + (dotSize * 0.5f), cy, radius, pageIndicatorPaint);
+            left += dotSize + gap;
         }
     }
 
