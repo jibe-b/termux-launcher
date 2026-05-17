@@ -129,6 +129,8 @@ public final class SuggestionBarView extends GridLayout {
     private static final float PICKUP_X_AXIS_SLOP_FACTOR = 0.9f;
     private static final float PICKUP_Y_INTENT_SLOP_FACTOR = 1.8f;
     private static final float MENU_SELECTION_ARM_SLOP_FACTOR = 0.8f;
+    private static final int PINNED_FOLDER_FILL_COLOR = 0x26FFFFFF;
+    private static final int PINNED_FOLDER_STROKE_COLOR = 0x33FFFFFF;
 
     private List<LauncherAppEntry> allApps = new ArrayList<>();
     private int maxButtonCount = 7;
@@ -2521,11 +2523,7 @@ public final class SuggestionBarView extends GridLayout {
 
         FrameLayout iconShell = new FrameLayout(getContext());
         int shellSize = iconSizePx();
-        GradientDrawable bg = new GradientDrawable();
-        bg.setShape(GradientDrawable.OVAL);
-        bg.setColor(0x26FFFFFF);
-        bg.setStroke(1, 0x33FFFFFF);
-        iconShell.setBackground(bg);
+        iconShell.setBackground(createPinnedFolderShellBackground());
         iconShell.setLayoutParams(new LinearLayout.LayoutParams(shellSize, shellSize));
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             iconShell.setClipToOutline(true);
@@ -2550,7 +2548,8 @@ public final class SuggestionBarView extends GridLayout {
             GridLayout.LayoutParams params = new GridLayout.LayoutParams();
             params.width = miniSize;
             params.height = miniSize;
-            params.setMargins(dp(1), dp(1), dp(1), dp(1));
+            int miniMargin = pinnedFolderMiniIconMarginPx();
+            params.setMargins(miniMargin, miniMargin, miniMargin, miniMargin);
             mini.setLayoutParams(params);
             miniGrid.addView(mini);
             placed++;
@@ -2558,6 +2557,19 @@ public final class SuggestionBarView extends GridLayout {
         iconShell.addView(miniGrid, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER));
         root.addView(iconShell, new FrameLayout.LayoutParams(shellSize, shellSize, Gravity.CENTER));
         return root;
+    }
+
+    @NonNull
+    private GradientDrawable createPinnedFolderShellBackground() {
+        GradientDrawable bg = new GradientDrawable();
+        bg.setShape(GradientDrawable.OVAL);
+        bg.setColor(PINNED_FOLDER_FILL_COLOR);
+        bg.setStroke(1, PINNED_FOLDER_STROKE_COLOR);
+        return bg;
+    }
+
+    private int pinnedFolderMiniIconMarginPx() {
+        return dp(1);
     }
 
     private void applyPinnedSelection(@NonNull List<PinnedItem> selectedOrdered) {
@@ -5389,14 +5401,14 @@ public final class SuggestionBarView extends GridLayout {
         int alpha
     ) {
         float radius = iconSize * 0.5f;
-        swipePreviewFolderPaint.setColor(withAlphaComponent(resolveLauncherTextColor(), Math.round(alpha * 0.14f)));
-        swipePreviewFolderStrokePaint.setStrokeWidth(dp(1f));
-        swipePreviewFolderStrokePaint.setColor(withAlphaComponent(resolveLauncherTextColor(), Math.round(alpha * 0.20f)));
+        swipePreviewFolderPaint.setColor(PINNED_FOLDER_FILL_COLOR);
+        swipePreviewFolderStrokePaint.setStrokeWidth(1f);
+        swipePreviewFolderStrokePaint.setColor(PINNED_FOLDER_STROKE_COLOR);
         canvas.drawCircle(cx, cy, radius, swipePreviewFolderPaint);
         canvas.drawCircle(cx, cy, radius - dp(0.5f), swipePreviewFolderStrokePaint);
 
         int miniSize = Math.max(dp(9), Math.round(iconSize * 0.42f));
-        float miniGap = dp(1.5f);
+        float miniGap = pinnedFolderMiniIconMarginPx() * 2f;
         List<LauncherAppEntry> miniEntries = new ArrayList<>();
         for (PinnedAppItem folderApp : folder.apps) {
             if (miniEntries.size() >= 4) break;
