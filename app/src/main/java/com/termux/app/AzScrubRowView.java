@@ -81,6 +81,7 @@ public final class AzScrubRowView extends AppCompatTextView {
     @Nullable private Character lockedInlineLetter;
     private int activeLetterIndex = -1;
     private static final float LETTER_SLOT_HYSTERESIS_RATIO = 0.22f;
+    private boolean interactionRenderActive;
 
     public AzScrubRowView(Context context) {
         super(context);
@@ -103,11 +104,7 @@ public final class AzScrubRowView extends AppCompatTextView {
         setTextSize(11f);
         setPadding(0, dp(1), 0, dp(1));
         setClickable(true);
-        setLayerType(LAYER_TYPE_HARDWARE, null);
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-            setElevation(dp(20));
-            setTranslationZ(dp(20));
-        }
+        updateInteractionRenderLayer(false);
         letterPaint.setTextAlign(Paint.Align.CENTER);
         letterPaint.setTextSize(getTextSize());
         letterPaint.setColor(getCurrentTextColor());
@@ -128,6 +125,7 @@ public final class AzScrubRowView extends AppCompatTextView {
         if (width <= 0 || height <= 0) return;
 
         int baseColor = getCurrentTextColor();
+        int focusColor = resolveFocusLetterColor();
         letterPaint.setColor(baseColor);
         float baseTextSize = getTextSize();
         letterPaint.setTextSize(baseTextSize);
@@ -160,11 +158,12 @@ public final class AzScrubRowView extends AppCompatTextView {
             Paint.FontMetrics letterMetrics = letterPaint.getFontMetrics();
             float baseline = (contentBottom - dp(2) - letterMetrics.descent) - waveLift;
             if (activeFocus) {
-                float glowRatio = interactionMode == InteractionMode.INLINE_EMPHASIS_TRACK ? 0.88f : 0.68f;
-                int bright = blendColors(baseColor, accentColor, glowRatio);
-                letterPaint.setColor(bright);
+                letterPaint.setColor(focusColor);
             } else {
-                letterPaint.setColor(baseColor);
+                float colorProgress = interactionMode == InteractionMode.INLINE_EMPHASIS_TRACK
+                    ? 0f
+                    : clamp01(envelope * waveStrength * 0.72f);
+                letterPaint.setColor(blendColors(baseColor, focusColor, colorProgress));
             }
             canvas.drawText(String.valueOf(visibleLetters[i]), x, baseline, letterPaint);
         }
@@ -357,6 +356,7 @@ public final class AzScrubRowView extends AppCompatTextView {
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
                 stopSettleAnimation();
+                updateInteractionRenderLayer(true);
                 activeTouchX = x;
                 activeLetterIndex = indexOfVisibleLetter(letter);
                 waveStrength = 1f;
@@ -399,6 +399,7 @@ public final class AzScrubRowView extends AppCompatTextView {
                     waveStrength = 0f;
                     activeTouchX = -1f;
                     activeLetterIndex = -1;
+                    updateInteractionRenderLayer(false);
                     invalidate();
                 }
                 return true;
@@ -412,6 +413,7 @@ public final class AzScrubRowView extends AppCompatTextView {
                     waveStrength = 0f;
                     activeTouchX = -1f;
                     activeLetterIndex = -1;
+                    updateInteractionRenderLayer(false);
                     invalidate();
                 }
                 return true;
@@ -425,6 +427,7 @@ public final class AzScrubRowView extends AppCompatTextView {
         if (!isAttachedToWindow()) {
             waveStrength = 0f;
             activeTouchX = -1f;
+            updateInteractionRenderLayer(false);
             invalidate();
             return;
         }
@@ -435,6 +438,20 @@ public final class AzScrubRowView extends AppCompatTextView {
             updateInteractionLayerOffset();
             invalidate();
         });
+        settleAnimator.addListener(new android.animation.AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationEnd(android.animation.Animator animation) {
+                waveStrength = 0f;
+                activeTouchX = -1f;
+                updateInteractionRenderLayer(false);
+                invalidate();
+            }
+
+            @Override
+            public void onAnimationCancel(android.animation.Animator animation) {
+                updateInteractionRenderLayer(false);
+            }
+        });
         settleAnimator.start();
     }
 
@@ -442,6 +459,19 @@ public final class AzScrubRowView extends AppCompatTextView {
         if (settleAnimator != null) {
             settleAnimator.cancel();
             settleAnimator = null;
+        }
+    }
+
+    private void updateInteractionRenderLayer(boolean active) {
+        if (interactionRenderActive == active && getLayerType() != LAYER_TYPE_NONE) {
+            if (!active) return;
+        }
+        interactionRenderActive = active;
+        setLayerType(active ? LAYER_TYPE_NONE : LAYER_TYPE_HARDWARE, null);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            float z = dp(active ? 46 : 24);
+            setElevation(z);
+            setTranslationZ(z);
         }
     }
 
@@ -500,6 +530,11 @@ public final class AzScrubRowView extends AppCompatTextView {
         setTranslationY(0f);
     }
 
+    private int resolveFocusLetterColor() {
+        int vivid = boostColor(accentColor, 1.22f, 1.12f);
+        return blendColors(vivid, Color.WHITE, 0.18f);
+    }
+
     private void applyLetterWeight(float envelope, boolean active) {
         float influence = interactionMode == InteractionMode.INLINE_EMPHASIS_TRACK
             ? (active ? 1f : 0f)
@@ -530,5 +565,17 @@ public final class AzScrubRowView extends AppCompatTextView {
         int g = (int) (Color.green(from) + (Color.green(to) - Color.green(from)) * t);
         int b = (int) (Color.blue(from) + (Color.blue(to) - Color.blue(from)) * t);
         return Color.argb(a, r, g, b);
+    }
+
+    private static int boostColor(int color, float saturationMultiplier, float valueMultiplier) {
+        float[] hsv = new float[3];
+        Color.colorToHSV(color, hsv);
+        hsv[1] = Math.max(0f, Math.min(1f, hsv[1] * saturationMultiplier));
+        hsv[2] = Math.max(0f, Math.min(1f, hsv[2] * valueMultiplier));
+        return Color.HSVToColor(Color.alpha(color), hsv);
+    }
+
+    private static float clamp01(float value) {
+        return Math.max(0f, Math.min(1f, value));
     }
 }

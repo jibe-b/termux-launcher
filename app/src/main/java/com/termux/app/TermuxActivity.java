@@ -2287,8 +2287,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mAzScrubRowView.setBackgroundColor(Color.TRANSPARENT);
         mAzScrubRowView.bringToFront();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            mAzScrubRowView.setElevation(dpToPx(20));
-            mAzScrubRowView.setTranslationZ(dpToPx(20));
+            mAzScrubRowView.setElevation(dpToPx(24));
+            mAzScrubRowView.setTranslationZ(dpToPx(24));
         }
         if (mAzScrubRowView.getParent() instanceof ViewGroup) {
             ViewGroup parent = (ViewGroup) mAzScrubRowView.getParent();
