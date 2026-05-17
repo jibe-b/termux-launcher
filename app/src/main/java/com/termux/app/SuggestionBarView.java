@@ -2827,17 +2827,27 @@ public final class SuggestionBarView extends GridLayout {
         }
 
         int sideMargin = dp(18);
-        int verticalMargin = dp(24);
+        int topMargin = iconPickerTopMargin();
+        int bottomMargin = dp(24);
         int cardWidth = screenWidth >= dp(640) ? dp(560) : Math.max(dp(280), screenWidth - (sideMargin * 2));
-        int cardHeight = Math.max(dp(360), screenHeight - (verticalMargin * 2));
+        int cardHeight = Math.max(dp(360), screenHeight - topMargin - bottomMargin);
         FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
             cardWidth,
             cardHeight,
             Gravity.CENTER
         );
-        params.setMargins(sideMargin, verticalMargin, sideMargin, verticalMargin);
+        params.setMargins(sideMargin, topMargin, sideMargin, bottomMargin);
         overlay.addView(content, params);
         return overlay;
+    }
+
+    private int iconPickerTopMargin() {
+        return getStatusBarHeight() + dp(20);
+    }
+
+    private int getStatusBarHeight() {
+        int resourceId = getResources().getIdentifier("status_bar_height", "dimen", "android");
+        return resourceId > 0 ? getResources().getDimensionPixelSize(resourceId) : dp(24);
     }
 
     private void configureIconPickerDialogWindow(
@@ -2869,7 +2879,7 @@ public final class SuggestionBarView extends GridLayout {
             int fullHeight = dialogSurface.getRootView() == null ? dialogSurface.getHeight() : dialogSurface.getRootView().getHeight();
             int keyboardHeight = Math.max(0, fullHeight - visibleFrame.bottom);
             int sideMargin = dp(18);
-            int topMargin = dp(24);
+            int topMargin = iconPickerTopMargin();
             int bottomMargin = dp(24) + keyboardHeight;
             int availableHeight = Math.max(dp(280), fullHeight - topMargin - bottomMargin);
             ViewGroup.LayoutParams rawParams = content.getLayoutParams();
@@ -5175,18 +5185,21 @@ public final class SuggestionBarView extends GridLayout {
         int targetPage = clamp(pinnedPageIndex + pageDelta, 0, totalPages - 1);
         if (targetPage == pinnedPageIndex) return;
 
-        handOffSwipePreviewToLiveRow();
         pageSwitchAnimating = true;
-        swipePageDragging = false;
         swipePagePosition = targetPage;
         notifyOverflowPagePositionChanged();
         final int direction = pageDelta > 0 ? 1 : -1;
-        final float travel = Math.max(dp(24), getWidth() * 0.24f);
         final long duration = computePinnedPageAnimDuration(velocityPxPerSec);
-        runUnifiedAppsBarPageSwitch(direction, travel, duration, () -> {
+        Runnable updateContent = () -> {
             pinnedPageIndex = targetPage;
             reloadWithInput("", lastTerminalView);
-        }, null);
+        };
+        if (swipePageDragging && swipePreviewPageIndex == targetPage) {
+            runSwipePreviewPageSwitch(direction, duration, updateContent, null);
+        } else {
+            final float travel = Math.max(dp(24), getWidth() * 0.24f);
+            runUnifiedAppsBarPageSwitch(direction, travel, duration, updateContent, null);
+        }
     }
 
     private void animateAzPageSwitch(int pageDelta, float velocityPxPerSec) {
@@ -5195,25 +5208,29 @@ public final class SuggestionBarView extends GridLayout {
         if (totalPages <= 1) return;
         int targetPage = wrapAzPageIndex(activeAzPageIndex + pageDelta, totalPages);
 
-        handOffSwipePreviewToLiveRow();
         pageSwitchAnimating = true;
-        swipePageDragging = false;
         swipePagePosition = targetPage;
         notifyOverflowPagePositionChanged();
         final int direction = pageDelta > 0 ? 1 : -1;
-        final float travel = Math.max(dp(24), getWidth() * 0.24f);
         final long duration = computePinnedPageAnimDuration(velocityPxPerSec);
-        runUnifiedAppsBarPageSwitch(direction, travel, duration, () -> {
+        Runnable updateContent = () -> {
             activeAzPageIndex = targetPage;
             if (activeAzLetter != null) {
                 refreshActiveAzCandidates(activeAzLetter);
             }
             renderButtons(activeAzCandidates, true);
-        }, () -> {
+        };
+        Runnable completed = () -> {
             if (activeAzLetter != null) {
                 captureAzRenderState(activeAzLetter, activeAzPageIndex, Math.max(1, maxButtonCount), activeAzCandidates);
             }
-        });
+        };
+        if (swipePageDragging && swipePreviewPageIndex == targetPage) {
+            runSwipePreviewPageSwitch(direction, duration, updateContent, completed);
+        } else {
+            final float travel = Math.max(dp(24), getWidth() * 0.24f);
+            runUnifiedAppsBarPageSwitch(direction, travel, duration, updateContent, completed);
+        }
     }
 
     private float resolveCurrentSwipePagePosition() {
@@ -5395,6 +5412,61 @@ public final class SuggestionBarView extends GridLayout {
         clearSwipePagePreview();
     }
 
+    private void runSwipePreviewPageSwitch(
+        int direction,
+        long duration,
+        @Nullable Runnable updateContent,
+        @Nullable Runnable onCompleted
+    ) {
+        cancelSwipePreviewRebound();
+        animate().cancel();
+        setListenerSafe(null);
+        setTranslationX(0f);
+        setAlpha(1f);
+
+        final float startOffset = swipeVisualOffsetX;
+        final float targetOffset = -direction * Math.max(1f, getWidth());
+        final float distanceRatio = clamp01(Math.abs(targetOffset - startOffset) / Math.max(1f, getWidth()));
+        final long settleDuration = clamp(Math.round(duration * (0.72f + (0.28f * distanceRatio))), 240, 420);
+        swipePageDragging = true;
+        ValueAnimator settle = ValueAnimator.ofFloat(startOffset, targetOffset);
+        swipePreviewReboundAnimator = settle;
+        settle.setDuration(settleDuration);
+        settle.setInterpolator(pageSettleInterpolator());
+        settle.addUpdateListener(animation -> {
+            swipeVisualOffsetX = (Float) animation.getAnimatedValue();
+            swipeDragProgress = clamp01(Math.abs(swipeVisualOffsetX) / Math.max(1f, getWidth() * 0.42f));
+            invalidate();
+        });
+        settle.addListener(new AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationEnd(Animator animation) {
+                if (swipePreviewReboundAnimator != animation) {
+                    return;
+                }
+                swipePreviewReboundAnimator = null;
+                if (updateContent != null) updateContent.run();
+                pageSwitchAnimating = false;
+                swipePageDragging = false;
+                swipePagePosition = resolveCurrentSwipePagePosition();
+                clearSwipePagePreview();
+                setTranslationX(0f);
+                setAlpha(1f);
+                setRowInteractionActive(false);
+                if (onCompleted != null) onCompleted.run();
+                invalidate();
+            }
+
+            @Override
+            public void onAnimationCancel(Animator animation) {
+                if (swipePreviewReboundAnimator == animation) {
+                    swipePreviewReboundAnimator = null;
+                }
+            }
+        });
+        settle.start();
+    }
+
     private void cancelSwipePreviewRebound() {
         if (swipePreviewReboundAnimator != null) {
             ValueAnimator animator = swipePreviewReboundAnimator;
@@ -5470,8 +5542,8 @@ public final class SuggestionBarView extends GridLayout {
 
     private long computePinnedPageAnimDuration(float velocityPxPerSec) {
         float v = Math.max(150f, Math.min(5200f, Math.abs(velocityPxPerSec)));
-        long ms = (long) (320f - ((v - 150f) / (5200f - 150f)) * 130f);
-        return clamp((int) ms, 190, 320);
+        long ms = (long) (410f - ((v - 150f) / (5200f - 150f)) * 130f);
+        return clamp((int) ms, 280, 410);
     }
 
     @NonNull
