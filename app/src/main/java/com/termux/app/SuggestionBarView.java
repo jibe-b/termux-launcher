@@ -148,6 +148,8 @@ public final class SuggestionBarView extends GridLayout {
     private final Map<View, ValueAnimator> launchTouchAnimators = new WeakHashMap<>();
     private final Map<String, LauncherAppEntry> resolvedRefCache = new HashMap<>();
     private final Map<String, List<ShortcutInfo>> shortcutCache = new HashMap<>();
+    private final Paint swipePreviewBadgePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint swipePreviewBadgeStrokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
     private LauncherAppDataProvider appDataProvider;
     private LauncherConfigRepository configRepository;
@@ -175,6 +177,12 @@ public final class SuggestionBarView extends GridLayout {
     private float swipeDownY = 0f;
     private float swipePagePosition = 0f;
     private boolean swipePageDragging = false;
+    private float swipeVisualOffsetX = 0f;
+    private float swipeDragProgress = 0f;
+    private int swipePreviewDirection = 0;
+    private int swipePreviewPageIndex = -1;
+    @NonNull private List<LauncherAppEntry> swipePreviewEntries = Collections.emptyList();
+    @Nullable private ValueAnimator swipePreviewReboundAnimator;
     private VelocityTracker swipeVelocityTracker;
     private boolean pageSwitchAnimating = false;
     private boolean pendingDeferredRender = false;
@@ -290,6 +298,8 @@ public final class SuggestionBarView extends GridLayout {
         setRowCount(1);
         setUseDefaultMargins(false);
         setAlignmentMode(GridLayout.ALIGN_BOUNDS);
+        swipePreviewBadgePaint.setStyle(Paint.Style.FILL);
+        swipePreviewBadgeStrokePaint.setStyle(Paint.Style.STROKE);
     }
 
     @Override
@@ -332,6 +342,15 @@ public final class SuggestionBarView extends GridLayout {
     @Override
     protected void dispatchDraw(Canvas canvas) {
         if (suppressDrawUntilStableLayout) {
+            return;
+        }
+        if (swipePageDragging && Math.abs(swipeVisualOffsetX) > 0.5f) {
+            int currentAlpha = clamp(Math.round(255f * (1f - (0.10f * swipeDragProgress))), 0, 255);
+            canvas.saveLayerAlpha(0, 0, getWidth(), getHeight(), currentAlpha);
+            canvas.translate(swipeVisualOffsetX, 0f);
+            super.dispatchDraw(canvas);
+            canvas.restore();
+            drawSwipePreviewPage(canvas);
             return;
         }
         super.dispatchDraw(canvas);
@@ -1137,6 +1156,7 @@ public final class SuggestionBarView extends GridLayout {
             }
             // Always normalize row transform at new gesture start to avoid stale offsets.
             animate().cancel();
+            cancelSwipePreviewRebound();
             setListenerSafe(null);
             pageSwitchAnimating = false;
             setTranslationX(0f);
@@ -1144,6 +1164,7 @@ public final class SuggestionBarView extends GridLayout {
             suppressContextLongPressForSwipe = false;
             swipePageDragging = false;
             swipePagePosition = resolveCurrentSwipePagePosition();
+            clearSwipePagePreview();
             setRowInteractionActive(true);
             if (swipeVelocityTracker != null) swipeVelocityTracker.recycle();
             swipeVelocityTracker = VelocityTracker.obtain();
@@ -2705,7 +2726,7 @@ public final class SuggestionBarView extends GridLayout {
         search.setHintTextColor(resolveLauncherSubtleTextColor());
         GradientDrawable searchBg = new GradientDrawable();
         searchBg.setCornerRadius(dp(8));
-        searchBg.setColor(withAlphaComponent(resolveLauncherPanelColor(), 0x66));
+        searchBg.setColor(withAlphaComponent(resolveLauncherPanelColor(), 0xF2));
         searchBg.setStroke(dp(1), withAlphaComponent(resolveLauncherOutlineColor(), 0x66));
         search.setBackground(searchBg);
         search.setPadding(dp(10), 0, dp(10), 0);
@@ -2792,8 +2813,7 @@ public final class SuggestionBarView extends GridLayout {
 
         GradientDrawable panelBg = new GradientDrawable();
         panelBg.setCornerRadius(dp(12));
-        int alpha = clamp(appBarOpacity, 0, 100);
-        panelBg.setColor((((int) (255f * (alpha / 100f))) << 24) | (activeMenuTintBase & 0x00FFFFFF));
+        panelBg.setColor(withAlphaComponent(resolveLauncherPanelColor(), 0xF4));
         content.setBackground(panelBg);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             content.setClipToOutline(true);
@@ -5143,6 +5163,7 @@ public final class SuggestionBarView extends GridLayout {
         int targetPage = clamp(pinnedPageIndex + pageDelta, 0, totalPages - 1);
         if (targetPage == pinnedPageIndex) return;
 
+        handOffSwipePreviewToLiveRow();
         pageSwitchAnimating = true;
         swipePageDragging = false;
         swipePagePosition = targetPage;
@@ -5162,6 +5183,7 @@ public final class SuggestionBarView extends GridLayout {
         if (totalPages <= 1) return;
         int targetPage = wrapAzPageIndex(activeAzPageIndex + pageDelta, totalPages);
 
+        handOffSwipePreviewToLiveRow();
         pageSwitchAnimating = true;
         swipePageDragging = false;
         swipePagePosition = targetPage;
@@ -5204,18 +5226,20 @@ public final class SuggestionBarView extends GridLayout {
         float easedProgress = 1f - (float) Math.pow(1f - rawProgress, 1.7f);
         float resistance = canMove ? 1f : 0.28f;
         float visualDx = dx * resistance;
-        float maxTravel = Math.max(dp(18f), width * (canMove ? 0.18f : 0.055f));
+        float maxTravel = Math.max(dp(18f), width * (canMove ? 0.38f : 0.075f));
         visualDx = clampFloat(visualDx, -maxTravel, maxTravel);
 
         swipePageDragging = true;
-        setTranslationX(visualDx);
-        setAlpha(1f - (0.16f * easedProgress * resistance));
+        swipeVisualOffsetX = visualDx;
+        swipeDragProgress = easedProgress * resistance;
+        prepareSwipePagePreview(pageDelta);
 
         float base = activeAzLetter != null ? getAzCurrentPageIndex() : getPinnedCurrentPageIndex();
         float signedProgress = (dx < 0f ? easedProgress : -easedProgress) * resistance;
         int pageCount = activeAzLetter != null ? getAzPagesCount() : getPinnedPagesCount();
         swipePagePosition = clampFloat(base + signedProgress, 0f, Math.max(0, pageCount - 1));
         notifyOverflowPagePositionChanged();
+        invalidate();
     }
 
     private boolean hasGesturePageSurface() {
@@ -5236,25 +5260,182 @@ public final class SuggestionBarView extends GridLayout {
         return target >= 0 && target < getPinnedPagesCount();
     }
 
+    private void prepareSwipePagePreview(int pageDelta) {
+        int direction = pageDelta > 0 ? 1 : -1;
+        int targetPage = resolveSwipePreviewTargetPage(pageDelta);
+        if (targetPage < 0) {
+            swipePreviewDirection = direction;
+            swipePreviewPageIndex = -1;
+            swipePreviewEntries = Collections.emptyList();
+            return;
+        }
+        if (swipePreviewDirection == direction && swipePreviewPageIndex == targetPage && !swipePreviewEntries.isEmpty()) {
+            return;
+        }
+        swipePreviewDirection = direction;
+        swipePreviewPageIndex = targetPage;
+        swipePreviewEntries = buildSwipePreviewEntries(targetPage);
+    }
+
+    private int resolveSwipePreviewTargetPage(int pageDelta) {
+        if (activeAzLetter != null) {
+            int totalPages = getAzPagesCount();
+            return totalPages > 1 ? wrapAzPageIndex(activeAzPageIndex + pageDelta, totalPages) : -1;
+        }
+        if (!hasPinnedOverflowPages()) {
+            return -1;
+        }
+        int target = pinnedPageIndex + pageDelta;
+        return target >= 0 && target < getPinnedPagesCount() ? target : -1;
+    }
+
+    @NonNull
+    private List<LauncherAppEntry> buildSwipePreviewEntries(int pageIndex) {
+        if (activeAzLetter != null) {
+            int perPage = Math.max(1, maxButtonCount);
+            int offset = getAzPageStart(activeAzCandidates, pageIndex, perPage);
+            List<LauncherAppEntry> pageEntries = new ArrayList<>();
+            for (int i = offset; i < activeAzCandidates.size() && pageEntries.size() < perPage; i++) {
+                pageEntries.add(activeAzCandidates.get(i));
+            }
+            return pageEntries;
+        }
+        if (pinnedItems == null || pinnedItems.isEmpty()) {
+            return Collections.emptyList();
+        }
+        int perPage = Math.max(1, computePinnedItemsPerPage());
+        int offset = pageIndex * perPage;
+        List<PinnedItem> pageItems = new ArrayList<>();
+        for (int i = offset; i < pinnedItems.size() && pageItems.size() < perPage; i++) {
+            PinnedItem item = pinnedItems.get(i);
+            if (item != null) pageItems.add(item);
+        }
+        return entriesForPinnedItems(pageItems);
+    }
+
+    private void drawSwipePreviewPage(@NonNull Canvas canvas) {
+        if (swipePreviewEntries.isEmpty() || swipePreviewDirection == 0 || getWidth() <= 0 || getHeight() <= 0) {
+            return;
+        }
+        int previewAlpha = clamp(Math.round(255f * (0.72f + (0.24f * swipeDragProgress))), 0, 255);
+        int slotCount = activeAzLetter != null ? Math.max(1, maxButtonCount) : Math.max(1, computePinnedItemsPerPage());
+        int[] azColumns = null;
+        if (activeAzLetter != null) {
+            int center = clamp(Math.round(computeAzAnchorPosition(activeAzLetter, slotCount)), 0, slotCount - 1);
+            azColumns = buildAzPriorityColumnsAround(center, slotCount);
+        }
+        float pageOffset = swipeVisualOffsetX + (swipePreviewDirection * getWidth());
+        int iconSize = iconSizePx();
+        for (int i = 0; i < swipePreviewEntries.size() && i < slotCount; i++) {
+            int col = azColumns != null ? azColumns[i] : i;
+            float left = pageOffset + ((getWidth() * col) / (float) slotCount);
+            float right = pageOffset + ((getWidth() * (col + 1)) / (float) slotCount);
+            float cx = (left + right) * 0.5f;
+            float cy = getHeight() * 0.5f;
+            LauncherAppEntry entry = swipePreviewEntries.get(i);
+            drawSwipePreviewIcon(canvas, entry, cx, cy, iconSize, previewAlpha);
+        }
+    }
+
+    private void drawSwipePreviewIcon(
+        @NonNull Canvas canvas,
+        @NonNull LauncherAppEntry entry,
+        float cx,
+        float cy,
+        int iconSize,
+        int alpha
+    ) {
+        Drawable icon = entry.icon != null ? entry.icon : getContext().getPackageManager().getDefaultActivityIcon();
+        int half = Math.max(1, iconSize / 2);
+        int saveAlpha = icon.getAlpha();
+        Rect oldBounds = new Rect(icon.getBounds());
+        icon.setBounds(Math.round(cx) - half, Math.round(cy) - half, Math.round(cx) + half, Math.round(cy) + half);
+        icon.setAlpha(alpha);
+        icon.draw(canvas);
+        icon.setAlpha(saveAlpha);
+        icon.setBounds(oldBounds);
+        if (notificationBadgesEnabled && notificationBadgePackages.contains(entry.appRef.packageName)) {
+            swipePreviewBadgePaint.setColor(resolveNotificationBadgeColor());
+            swipePreviewBadgeStrokePaint.setStrokeWidth(dp(1.4f));
+            swipePreviewBadgeStrokePaint.setColor(resolveNotificationBadgeStrokeColor());
+            float radius = Math.max(dp(3.5f), iconSize * 0.075f);
+            float dotX = cx + (iconSize * 0.30f);
+            float dotY = cy - (iconSize * 0.30f);
+            canvas.drawCircle(dotX, dotY, radius + dp(1f), swipePreviewBadgeStrokePaint);
+            canvas.drawCircle(dotX, dotY, radius, swipePreviewBadgePaint);
+        }
+    }
+
+    private void clearSwipePagePreview() {
+        swipeVisualOffsetX = 0f;
+        swipeDragProgress = 0f;
+        swipePreviewDirection = 0;
+        swipePreviewPageIndex = -1;
+        swipePreviewEntries = Collections.emptyList();
+    }
+
+    private void handOffSwipePreviewToLiveRow() {
+        cancelSwipePreviewRebound();
+        if (swipePageDragging && Math.abs(swipeVisualOffsetX) > 0.5f) {
+            setTranslationX(swipeVisualOffsetX);
+            setAlpha(1f - (0.10f * swipeDragProgress));
+        }
+        clearSwipePagePreview();
+    }
+
+    private void cancelSwipePreviewRebound() {
+        if (swipePreviewReboundAnimator != null) {
+            ValueAnimator animator = swipePreviewReboundAnimator;
+            swipePreviewReboundAnimator = null;
+            animator.cancel();
+        }
+    }
+
     private void animateSwipePageDragBack() {
-        if (!swipePageDragging && Math.abs(getTranslationX()) < 0.5f) {
+        if (!swipePageDragging && Math.abs(swipeVisualOffsetX) < 0.5f && Math.abs(getTranslationX()) < 0.5f) {
+            clearSwipePagePreview();
             setTranslationX(0f);
             setAlpha(1f);
             swipePagePosition = resolveCurrentSwipePagePosition();
             notifyOverflowPagePositionChanged();
             return;
         }
-        swipePageDragging = false;
         swipePagePosition = resolveCurrentSwipePagePosition();
         notifyOverflowPagePositionChanged();
         animate().cancel();
         setListenerSafe(null);
-        animate()
-            .translationX(0f)
-            .alpha(1f)
-            .setDuration(150L)
-            .setInterpolator(new DecelerateInterpolator())
-            .start();
+        final float startOffset = swipeVisualOffsetX;
+        cancelSwipePreviewRebound();
+        swipePreviewReboundAnimator = ValueAnimator.ofFloat(startOffset, 0f);
+        swipePreviewReboundAnimator.setDuration(150L);
+        swipePreviewReboundAnimator.setInterpolator(new DecelerateInterpolator());
+        swipePreviewReboundAnimator.addUpdateListener(animation -> {
+            swipeVisualOffsetX = (Float) animation.getAnimatedValue();
+            swipeDragProgress = startOffset == 0f ? 0f : Math.abs(swipeVisualOffsetX / startOffset);
+            invalidate();
+        });
+        swipePreviewReboundAnimator.addListener(new AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationEnd(Animator animation) {
+                if (swipePreviewReboundAnimator != animation) {
+                    return;
+                }
+                swipePreviewReboundAnimator = null;
+                swipePageDragging = false;
+                clearSwipePagePreview();
+                setTranslationX(0f);
+                setAlpha(1f);
+                invalidate();
+            }
+
+            @Override
+            public void onAnimationCancel(Animator animation) {
+                if (swipePreviewReboundAnimator == animation) {
+                    swipePreviewReboundAnimator = null;
+                }
+            }
+        });
+        swipePreviewReboundAnimator.start();
     }
 
     private void notifyOverflowPagePositionChanged() {
@@ -5345,6 +5526,7 @@ public final class SuggestionBarView extends GridLayout {
                                 pageSwitchAnimating = false;
                                 swipePageDragging = false;
                                 swipePagePosition = resolveCurrentSwipePagePosition();
+                                clearSwipePagePreview();
                                 setRotationY(0f);
                                 setScaleX(1f);
                                 setScaleY(1f);
@@ -5362,6 +5544,7 @@ public final class SuggestionBarView extends GridLayout {
                     pageSwitchAnimating = false;
                     swipePageDragging = false;
                     swipePagePosition = resolveCurrentSwipePagePosition();
+                    clearSwipePagePreview();
                     setRotationY(0f);
                     setScaleX(1f);
                     setScaleY(1f);
@@ -5566,8 +5749,10 @@ public final class SuggestionBarView extends GridLayout {
 
     public void resetTransientVisualState() {
         animate().cancel();
+        cancelSwipePreviewRebound();
         swipePageDragging = false;
         swipePagePosition = resolveCurrentSwipePagePosition();
+        clearSwipePagePreview();
         setTranslationX(0f);
         setTranslationY(0f);
         setScaleX(1f);
