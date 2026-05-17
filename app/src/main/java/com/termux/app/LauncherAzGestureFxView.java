@@ -793,7 +793,11 @@ public final class LauncherAzGestureFxView extends View {
 
     private float resolvePageIndicatorCenterY() {
         if (!indicatorBandRawBounds.isEmpty()) {
-            return ((indicatorBandRawBounds.top + indicatorBandRawBounds.bottom) * 0.5f) - locationOnScreen[1];
+            float cy = ((indicatorBandRawBounds.top + indicatorBandRawBounds.bottom) * 0.5f) - locationOnScreen[1];
+            if (compactDockSpacingEnabled && interactionUseSubtlePageIndicators) {
+                cy -= dp(1.1f);
+            }
+            return cy;
         }
         float rowBottom = appsRowRawBounds.bottom - locationOnScreen[1];
         if (azRowRawBounds.isEmpty()) {
