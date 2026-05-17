@@ -584,12 +584,12 @@ public final class LauncherAzGestureFxView extends View {
         }
         boolean subtle = interactionUseSubtlePageIndicators;
         float attention = subtle ? clamp01(subtlePageIndicatorAttention) : 1f;
-        boolean compactSubtle = subtle && compactDockSpacingEnabled;
-        if (compactSubtle && attention < 0.08f) {
+        boolean compactInteraction = compactDockSpacingEnabled;
+        if (compactInteraction && subtle && attention < 0.08f) {
             drawCompactIdlePageDots(canvas, interactionPageIndicatorPosition, interactionPageCount);
             return;
         }
-        if (compactSubtle) {
+        if (compactInteraction) {
             drawCompactActivePageIndicator(canvas, interactionPageIndicatorPosition, interactionPageCount, attention);
             return;
         }
