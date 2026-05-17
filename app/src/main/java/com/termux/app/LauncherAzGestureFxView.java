@@ -86,6 +86,7 @@ public final class LauncherAzGestureFxView extends View {
     private boolean interactionShowsPageIndicators;
     private boolean interactionUseSubtlePageIndicators;
     private boolean compactDockSpacingEnabled;
+    private boolean drawingCompactPageIndicator;
     private float subtlePageIndicatorAttention = 1f;
     private boolean subtlePageIndicatorFadeScheduled;
     @Nullable private ValueAnimator subtlePageIndicatorAttentionAnimator;
@@ -560,6 +561,10 @@ public final class LauncherAzGestureFxView extends View {
         if (!filteredOverflowActive || pageCount <= 1 || appsRowRawBounds.isEmpty() || azRowRawBounds.isEmpty()) {
             return;
         }
+        if (compactDockSpacingEnabled) {
+            drawCompactActivePageIndicator(canvas, pageIndicatorPosition, pageCount, 1f);
+            return;
+        }
         drawPageIndicatorStrip(
             canvas,
             pageIndicatorPosition,
@@ -581,30 +586,22 @@ public final class LauncherAzGestureFxView extends View {
         float attention = subtle ? clamp01(subtlePageIndicatorAttention) : 1f;
         boolean compactSubtle = subtle && compactDockSpacingEnabled;
         if (compactSubtle && attention < 0.08f) {
-            drawCompactIdlePageDots(
-                canvas,
-                interactionPageIndicatorPosition,
-                interactionPageCount,
-                withAlpha(boostColor(glassTintColor, 1.12f, 1.02f), 66),
-                withAlpha(boostColor(edgeTintColor, 1.24f, 1.10f), 150)
-            );
+            drawCompactIdlePageDots(canvas, interactionPageIndicatorPosition, interactionPageCount);
+            return;
+        }
+        if (compactSubtle) {
+            drawCompactActivePageIndicator(canvas, interactionPageIndicatorPosition, interactionPageCount, attention);
             return;
         }
         drawPageIndicatorStrip(
             canvas,
             interactionPageIndicatorPosition,
             interactionPageCount,
-            compactSubtle
-                ? clamp(getWidth() * lerp(0.08f, 0.13f, attention), dp(26f), dp(70f))
-                : subtle
+            subtle
                 ? clamp(getWidth() * lerp(0.16f, 0.22f, attention), dp(48f), dp(118f))
                 : clamp(getWidth() * 0.34f, dp(120f), dp(220f)),
-            compactSubtle
-                ? dp(lerp(1.2f, 1.7f, attention))
-                : subtle ? dp(lerp(4.6f, 6f, attention)) : dp(8.5f),
-            compactSubtle
-                ? dp(lerp(3.2f, 4.2f, attention))
-                : subtle ? dp(lerp(5.8f, 7f, attention)) : dp(10f),
+            subtle ? dp(lerp(4.6f, 6f, attention)) : dp(8.5f),
+            subtle ? dp(lerp(5.8f, 7f, attention)) : dp(10f),
             subtle
                 ? withAlpha(boostColor(glassTintColor, 1.12f, 1.02f), Math.round(lerp(48f, 112f, attention)))
                 : withAlpha(boostColor(glassTintColor, 1.22f, 1.08f), 150),
@@ -613,6 +610,26 @@ public final class LauncherAzGestureFxView extends View {
                 : withAlpha(boostColor(edgeTintColor, 1.28f, 1.14f), 232),
             !subtle
         );
+    }
+
+    private void drawCompactActivePageIndicator(Canvas canvas, float activePagePosition, int totalPages, float attention) {
+        float clampedAttention = clamp01(attention);
+        drawingCompactPageIndicator = true;
+        try {
+            drawPageIndicatorStrip(
+                canvas,
+                activePagePosition,
+                totalPages,
+                clamp(getWidth() * lerp(0.08f, 0.13f, clampedAttention), dp(26f), dp(70f)),
+                dp(lerp(1.2f, 1.7f, clampedAttention)),
+                dp(lerp(3.2f, 4.2f, clampedAttention)),
+                withAlpha(boostColor(glassTintColor, 1.12f, 1.02f), Math.round(lerp(48f, 112f, clampedAttention))),
+                withAlpha(boostColor(edgeTintColor, 1.20f, 1.08f), Math.round(lerp(104f, 196f, clampedAttention))),
+                false
+            );
+        } finally {
+            drawingCompactPageIndicator = false;
+        }
     }
 
     private void drawPageIndicatorStrip(
@@ -661,16 +678,31 @@ public final class LauncherAzGestureFxView extends View {
         }
     }
 
-    private void drawCompactIdlePageDots(
+    private void drawCompactIdlePageDots(Canvas canvas, float activePagePosition, int totalPages) {
+        if (totalPages <= 1) {
+            return;
+        }
+        drawingCompactPageIndicator = true;
+        try {
+            drawCompactIdlePageDotsInternal(
+                canvas,
+                activePagePosition,
+                totalPages,
+                withAlpha(boostColor(glassTintColor, 1.12f, 1.02f), 66),
+                withAlpha(boostColor(edgeTintColor, 1.24f, 1.10f), 150)
+            );
+        } finally {
+            drawingCompactPageIndicator = false;
+        }
+    }
+
+    private void drawCompactIdlePageDotsInternal(
         Canvas canvas,
         float activePagePosition,
         int totalPages,
         int inactiveColor,
         int activeColor
     ) {
-        if (totalPages <= 1) {
-            return;
-        }
         float cy = resolvePageIndicatorCenterY();
         float dotSize = dp(2.2f);
         float gap = dp(4.2f);
@@ -792,7 +824,7 @@ public final class LauncherAzGestureFxView extends View {
     }
 
     private float resolvePageIndicatorCenterY() {
-        if (compactDockSpacingEnabled && interactionUseSubtlePageIndicators
+        if (compactDockSpacingEnabled && drawingCompactPageIndicator
             && !appsRowRawBounds.isEmpty() && !azRowRawBounds.isEmpty()) {
             float appTop = appsRowRawBounds.top - locationOnScreen[1];
             float appBottom = appsRowRawBounds.bottom - locationOnScreen[1];
