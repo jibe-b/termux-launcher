@@ -51,7 +51,9 @@ import android.view.ViewParent;
 import android.view.ViewTreeObserver;
 import android.view.WindowManager;
 import android.view.animation.DecelerateInterpolator;
+import android.view.animation.Interpolator;
 import android.view.animation.LinearInterpolator;
+import android.view.animation.PathInterpolator;
 import android.widget.ArrayAdapter;
 import android.widget.BaseAdapter;
 import android.widget.Button;
@@ -2786,7 +2788,7 @@ public final class SuggestionBarView extends GridLayout {
             }
         });
 
-        Dialog dialog = new Dialog(getContext());
+        Dialog dialog = new Dialog(getContext(), android.R.style.Theme_Translucent_NoTitleBar);
         dialog.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE);
         dialog.setCanceledOnTouchOutside(true);
         View dialogSurface = buildIconPickerDialogSurface(root);
@@ -2806,9 +2808,13 @@ public final class SuggestionBarView extends GridLayout {
         FrameLayout overlay = new FrameLayout(getContext());
         overlay.setClipToPadding(false);
         overlay.setPadding(0, 0, 0, 0);
+        int screenWidth = getResources().getDisplayMetrics().widthPixels;
+        int screenHeight = getResources().getDisplayMetrics().heightPixels;
+        overlay.setMinimumWidth(screenWidth);
+        overlay.setMinimumHeight(screenHeight);
         overlay.setLayoutParams(new ViewGroup.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.MATCH_PARENT
+            screenWidth,
+            screenHeight
         ));
 
         GradientDrawable panelBg = new GradientDrawable();
@@ -2820,14 +2826,16 @@ public final class SuggestionBarView extends GridLayout {
             content.setElevation(dp(8));
         }
 
-        int screenWidth = getResources().getDisplayMetrics().widthPixels;
-        int cardWidth = screenWidth >= dp(640) ? dp(560) : ViewGroup.LayoutParams.MATCH_PARENT;
+        int sideMargin = dp(18);
+        int verticalMargin = dp(24);
+        int cardWidth = screenWidth >= dp(640) ? dp(560) : Math.max(dp(280), screenWidth - (sideMargin * 2));
+        int cardHeight = Math.max(dp(360), screenHeight - (verticalMargin * 2));
         FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
             cardWidth,
-            ViewGroup.LayoutParams.MATCH_PARENT,
+            cardHeight,
             Gravity.CENTER
         );
-        params.setMargins(dp(18), dp(24), dp(18), dp(24));
+        params.setMargins(sideMargin, verticalMargin, sideMargin, verticalMargin);
         overlay.addView(content, params);
         return overlay;
     }
@@ -2843,6 +2851,7 @@ public final class SuggestionBarView extends GridLayout {
         }
 
         window.setBackgroundDrawable(new ColorDrawable(0x00000000));
+        window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
         window.setDimAmount(0.32f);
         window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
         window.setSoftInputMode(
@@ -2862,6 +2871,7 @@ public final class SuggestionBarView extends GridLayout {
             int sideMargin = dp(18);
             int topMargin = dp(24);
             int bottomMargin = dp(24) + keyboardHeight;
+            int availableHeight = Math.max(dp(280), fullHeight - topMargin - bottomMargin);
             ViewGroup.LayoutParams rawParams = content.getLayoutParams();
             if (!(rawParams instanceof FrameLayout.LayoutParams)) {
                 return;
@@ -2870,10 +2880,12 @@ public final class SuggestionBarView extends GridLayout {
             if (params.leftMargin == sideMargin
                 && params.topMargin == topMargin
                 && params.rightMargin == sideMargin
-                && params.bottomMargin == bottomMargin) {
+                && params.bottomMargin == bottomMargin
+                && params.height == availableHeight) {
                 return;
             }
             params.setMargins(sideMargin, topMargin, sideMargin, bottomMargin);
+            params.height = availableHeight;
             content.setLayoutParams(params);
         });
     }
@@ -5169,7 +5181,7 @@ public final class SuggestionBarView extends GridLayout {
         swipePagePosition = targetPage;
         notifyOverflowPagePositionChanged();
         final int direction = pageDelta > 0 ? 1 : -1;
-        final float travel = Math.max(dp(14), getWidth() * 0.12f);
+        final float travel = Math.max(dp(24), getWidth() * 0.24f);
         final long duration = computePinnedPageAnimDuration(velocityPxPerSec);
         runUnifiedAppsBarPageSwitch(direction, travel, duration, () -> {
             pinnedPageIndex = targetPage;
@@ -5189,7 +5201,7 @@ public final class SuggestionBarView extends GridLayout {
         swipePagePosition = targetPage;
         notifyOverflowPagePositionChanged();
         final int direction = pageDelta > 0 ? 1 : -1;
-        final float travel = Math.max(dp(14), getWidth() * 0.12f);
+        final float travel = Math.max(dp(24), getWidth() * 0.24f);
         final long duration = computePinnedPageAnimDuration(velocityPxPerSec);
         runUnifiedAppsBarPageSwitch(direction, travel, duration, () -> {
             activeAzPageIndex = targetPage;
@@ -5223,7 +5235,7 @@ public final class SuggestionBarView extends GridLayout {
         float width = Math.max(1f, getWidth());
         float commitDistance = Math.max(dp(42f), width * 0.30f);
         float rawProgress = clamp01(Math.abs(dx) / commitDistance);
-        float easedProgress = 1f - (float) Math.pow(1f - rawProgress, 1.7f);
+        float easedProgress = (float) Math.sin(rawProgress * (Math.PI * 0.5f));
         float resistance = canMove ? 1f : 0.28f;
         float visualDx = dx * resistance;
         float maxTravel = Math.max(dp(18f), width * (canMove ? 0.38f : 0.075f));
@@ -5407,8 +5419,9 @@ public final class SuggestionBarView extends GridLayout {
         final float startOffset = swipeVisualOffsetX;
         cancelSwipePreviewRebound();
         swipePreviewReboundAnimator = ValueAnimator.ofFloat(startOffset, 0f);
-        swipePreviewReboundAnimator.setDuration(150L);
-        swipePreviewReboundAnimator.setInterpolator(new DecelerateInterpolator());
+        long reboundDuration = clamp(Math.round(150f + (70f * clamp01(Math.abs(startOffset) / Math.max(1f, getWidth() * 0.38f)))), 150, 220);
+        swipePreviewReboundAnimator.setDuration(reboundDuration);
+        swipePreviewReboundAnimator.setInterpolator(pageSettleInterpolator());
         swipePreviewReboundAnimator.addUpdateListener(animation -> {
             swipeVisualOffsetX = (Float) animation.getAnimatedValue();
             swipeDragProgress = startOffset == 0f ? 0f : Math.abs(swipeVisualOffsetX / startOffset);
@@ -5456,9 +5469,17 @@ public final class SuggestionBarView extends GridLayout {
     }
 
     private long computePinnedPageAnimDuration(float velocityPxPerSec) {
-        float v = Math.max(200f, Math.min(6000f, Math.abs(velocityPxPerSec)));
-        long ms = (long) (230f - ((v - 200f) / (6000f - 200f)) * 120f);
-        return clamp((int) ms, 110, 230);
+        float v = Math.max(150f, Math.min(5200f, Math.abs(velocityPxPerSec)));
+        long ms = (long) (320f - ((v - 150f) / (5200f - 150f)) * 130f);
+        return clamp((int) ms, 190, 320);
+    }
+
+    @NonNull
+    private Interpolator pageSettleInterpolator() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            return new PathInterpolator(0.2f, 0f, 0f, 1f);
+        }
+        return new DecelerateInterpolator(1.8f);
     }
 
     private void runUnifiedAppsBarPageSwitch(
@@ -5474,14 +5495,15 @@ public final class SuggestionBarView extends GridLayout {
         setScaleX(1f);
         setScaleY(1f);
 
-        final long outgoingDuration = Math.max(70L, duration / 2L);
-        final long incomingDuration = Math.max(90L, duration - outgoingDuration);
+        final Interpolator settleInterpolator = pageSettleInterpolator();
+        final long outgoingDuration = Math.max(92L, Math.round(duration * 0.44f));
+        final long incomingDuration = Math.max(118L, duration - outgoingDuration);
 
         animate()
-            .translationX(-direction * (travel * 0.55f))
+            .translationX(-direction * (travel * 0.78f))
             .alpha(0f)
             .setDuration(outgoingDuration)
-            .setInterpolator(new DecelerateInterpolator())
+            .setInterpolator(settleInterpolator)
             .setListener(new AnimatorListenerAdapter() {
                 private boolean completed;
 
@@ -5503,7 +5525,7 @@ public final class SuggestionBarView extends GridLayout {
                         .translationX(0f)
                         .alpha(1f)
                         .setDuration(incomingDuration)
-                        .setInterpolator(new DecelerateInterpolator())
+                        .setInterpolator(settleInterpolator)
                         .setListener(new AnimatorListenerAdapter() {
                             private boolean incomingCompleted;
 
