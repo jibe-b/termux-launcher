@@ -130,6 +130,7 @@ import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.viewpager.widget.ViewPager;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -234,6 +235,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private static final long PACKAGE_REFRESH_DEBOUNCE_MS = 120L;
     private static final long LAUNCHER_CATALOG_WARM_DELAY_MS = 450L;
     private boolean mPackageRefreshForceCatalogReload = false;
+    private int mLastLauncherCatalogSignature = Integer.MIN_VALUE;
     private final Runnable mPackageRefreshRunnable = () -> {
         boolean forceCatalogRefresh = mPackageRefreshForceCatalogReload;
         mPackageRefreshForceCatalogReload = false;
@@ -668,7 +670,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         registerPackageChangeReceiver();
         registerLauncherAppsCallback();
         registerWallpaperColorsChangedListener();
-        scheduleSuggestionBarPackageRefresh(false, true);
+        refreshSuggestionBarIfLauncherCatalogChanged();
         getWindow().getDecorView().post(() -> LauncherCtlApiServer.getInstance().ensureStartedAsync(getApplicationContext()));
     }
 
@@ -4184,6 +4186,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             LauncherCtlApiServer.getInstance().invalidatePackageCaches();
             mSuggestionBarView.clearAppCache();
             mSuggestionBarView.reloadAllApps();
+            mLastLauncherCatalogSignature = computeLauncherCatalogSignature();
             syncAzScrubLettersAndTint();
         } else if (mSuggestionBarView.hasPinnedOverflowPages()) {
             // Keep affordance state fresh without forcing a catalog rebuild.
@@ -4369,6 +4372,44 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
         mAzGestureHandler.postDelayed(mPackageRefreshRunnable, PACKAGE_REFRESH_DEBOUNCE_MS);
+    }
+
+    private void refreshSuggestionBarIfLauncherCatalogChanged() {
+        if (!isSuggestionBarEnabled() || mSuggestionBarView == null) {
+            return;
+        }
+        int signature = computeLauncherCatalogSignature();
+        if (mLastLauncherCatalogSignature == Integer.MIN_VALUE) {
+            mLastLauncherCatalogSignature = signature;
+            return;
+        }
+        if (mLastLauncherCatalogSignature == signature) {
+            return;
+        }
+        mLastLauncherCatalogSignature = signature;
+        scheduleSuggestionBarPackageRefresh(false, true);
+    }
+
+    private int computeLauncherCatalogSignature() {
+        PackageManager packageManager = getPackageManager();
+        Intent main = new Intent(Intent.ACTION_MAIN, null);
+        main.addCategory(Intent.CATEGORY_LAUNCHER);
+        List<ResolveInfo> launchables = packageManager.queryIntentActivities(main, 0);
+        List<String> ids = new ArrayList<>(launchables.size());
+        for (ResolveInfo resolveInfo : launchables) {
+            if (resolveInfo == null || resolveInfo.activityInfo == null
+                || resolveInfo.activityInfo.packageName == null || resolveInfo.activityInfo.name == null) {
+                continue;
+            }
+            ids.add(resolveInfo.activityInfo.packageName + "/" + resolveInfo.activityInfo.name);
+        }
+        Collections.sort(ids);
+        int signature = 17;
+        signature = (31 * signature) + ids.size();
+        for (String id : ids) {
+            signature = (31 * signature) + id.hashCode();
+        }
+        return signature;
     }
 
     private void scheduleLauncherCatalogWarmup() {
