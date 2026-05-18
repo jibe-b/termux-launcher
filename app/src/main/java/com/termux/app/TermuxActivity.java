@@ -2373,7 +2373,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean returningToIconTrack = !isInAppsRowCorridor(rawY) && !isInAzCaptureWedge(rawX, rawY) && isInAzReturnBand(rawY);
 
         if (mAzGestureMode == AzGestureMode.AZ_TRACKING) {
-            if (enteringUpwardLock) {
+            if (enteringIconTrack && mAzHasPreviewAnchor && phase != AzScrubRowView.GesturePhase.UP) {
+                lockAzGestureAnchor(letter, selectionIndex, AzGestureMode.ICON_TRACKING_LOCKED);
+            } else if (enteringUpwardLock) {
                 lockAzGestureAnchor(letter, selectionIndex, AzGestureMode.UPWARD_LOCKED);
             } else if (withinAzFilterBand || phase == AzScrubRowView.GesturePhase.DOWN) {
                 persistAzPreviewAnchor(letter, selectionIndex);
