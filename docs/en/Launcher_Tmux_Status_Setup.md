@@ -109,7 +109,7 @@ After setup, tapping the CPU or RAM area in the example tmux status bar opens `m
 
 The mini layout is the better default for Android: it keeps CPU and processes visible, uses a slower two-second refresh, and disables network, disk, and I/O panels because those counters are often unavailable or incomplete through Shizuku `rish`.
 
-## 6. Optional Extra-Keys Button
+## 6. Optional Extra-Keys Layouts
 
 The example tmux config binds `F12` to:
 
@@ -119,7 +119,44 @@ termux-reload-settings
 
 Binding `termux-reload-settings` through tmux gives you a quick shell recovery button after launcher updates, terminal theme changes, or stale UI state. The key runs inside tmux instead of typing the command into the active pane.
 
-Example two-row `~/.termux/termux.properties` extra-keys layout:
+Use one of the examples below in `~/.termux/termux.properties`. Replace any existing `extra-keys = ...` entry with the block you choose, then run `termux-reload-settings`.
+
+### One-Row Layout
+
+This is the compact option. It keeps one row of tmux helpers above the soft keyboard:
+
+- `♼` runs `termux-reload-settings` through tmux.
+- `𝍣` splits the current tmux pane vertically, with horizontal split `𝍬` as the swipe-up popup.
+- `⓵`, `⓶`, and `⓷` jump to tmux windows 1, 2, and 3.
+- `✎` enters tmux copy mode.
+- The keyboard key toggles the soft keyboard, with paste on swipe-up.
+- `㋡` sends the tmux prefix.
+
+```properties
+extra-keys = [[ \
+  {macro: "CTRL b F12", display: "♼"}, \
+  {macro: "CTRL b h", display: "𝍣", popup: {macro: "CTRL b v", display: "𝍬"}}, \
+  {macro: "CTRL b 1", display: "⓵"}, \
+  {macro: "CTRL b 2", display: "⓶"}, \
+  {macro: "CTRL b 3", display: "⓷"}, \
+  {macro: "CTRL b [", display: "✎"}, \
+  {key: KEYBOARD, popup: PASTE}, \
+  {macro: "CTRL b", display: "㋡"} \
+]]
+```
+
+### Two-Row Layout
+
+This is the fuller dock-oriented option. It pairs better with the launcher apps bar and AZ row, especially when compact dock spacing is enabled:
+
+- The first row is mostly tmux navigation and session controls.
+- `𝍣` and `𝍬` split the current tmux pane vertically and horizontally.
+- `⬸` and `⤑` move to the previous or next tmux window through `ALT LEFT` and `ALT RIGHT`.
+- `+` creates a tmux window.
+- `✏` enters tmux copy mode.
+- `□` toggles pane zoom, `×` closes the current pane, and swipe-up `⊠` closes the current window.
+- The second row keeps regular terminal keys: `Esc`, `Tab`, `Shift`, `Ctrl`, `Alt`, left/right arrows, keyboard toggle, and paste.
+- Swipe up on `Esc` to run the tmux `F12` reload binding.
 
 ```properties
 extra-keys = [[ \
@@ -143,14 +180,13 @@ extra-keys = [[ \
 ]]
 ```
 
-Then reload Termux settings:
+Reload Termux settings after changing the property:
 
 ```sh
 termux-reload-settings
 ```
 
-The macro assumes the example tmux prefix is active. The example config keeps `CTRL b` available as a secondary prefix.
-This two-row layout pairs well with the launcher apps bar and AZ row when compact dock spacing is enabled.
+Both examples assume the tmux config from this guide is installed. They use `CTRL b` as the tmux prefix, and the example config keeps `CTRL b` available as a secondary prefix.
 
 ## 7. Optional kew Ticker
 

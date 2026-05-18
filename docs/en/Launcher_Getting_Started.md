@@ -40,7 +40,7 @@ That guide covers the recommended order:
 2. Check that `launcherctl` works.
 3. Download the CPU/RAM, weather, and optional `kew` helpers.
 4. Download the example tmux config and Material theme.
-5. Optionally add Shizuku `btop` and the extra-keys reload button.
+5. Optionally add Shizuku `btop` and a one-row or two-row extra-keys layout.
 
 ## Search Split Character
 
