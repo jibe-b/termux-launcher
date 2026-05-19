@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.18
+
+### Changed
+- Enabled wallpaper mode and the A-Z row by default for fresh installs.
+
 ## 0.2.17
 
 ### Added
