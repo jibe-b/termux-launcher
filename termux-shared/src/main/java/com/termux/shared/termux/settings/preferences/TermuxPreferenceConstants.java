@@ -225,7 +225,7 @@ public final class TermuxPreferenceConstants {
          */
         public static final String KEY_APP_LAUNCHER_AZ_ROW_ENABLED = "app_launcher_az_row_enabled";
 
-        public static final boolean DEFAULT_APP_LAUNCHER_AZ_ROW_ENABLED = false;
+        public static final boolean DEFAULT_APP_LAUNCHER_AZ_ROW_ENABLED = true;
 
         /**
          * Defines the key for enabling double-tap on A-Z row to lock screen.
@@ -444,7 +444,7 @@ public final class TermuxPreferenceConstants {
          */
         public static final String KEY_USE_SYSTEM_WALLPAPER = "use_system_wallpaper";
 
-        public static final boolean DEFAULT_VALUE_USE_SYSTEM_WALLPAPER = false;
+        public static final boolean DEFAULT_VALUE_USE_SYSTEM_WALLPAPER = true;
     }
 
     /**

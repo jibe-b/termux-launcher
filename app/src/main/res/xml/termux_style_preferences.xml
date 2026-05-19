@@ -17,7 +17,8 @@
 
     <SwitchPreferenceCompat
         app:key="use_system_wallpaper"
-        app:title="@string/termux_use_system_wallpaper_title" />
+        app:title="@string/termux_use_system_wallpaper_title"
+        android:defaultValue="true" />
 
     <PreferenceCategory
         app:key="termux_terminal_background"

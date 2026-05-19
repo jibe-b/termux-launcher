@@ -15,7 +15,7 @@
             app:key="app_launcher_az_row_enabled"
             app:title="@string/termux_app_launcher_az_row_enabled_title"
             app:dependency="app_launcher_apps_row_enabled"
-            android:defaultValue="false" />
+            android:defaultValue="true" />
 
         <SwitchPreferenceCompat
             app:key="app_launcher_notification_dots"
