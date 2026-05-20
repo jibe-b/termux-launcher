@@ -206,6 +206,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     AzScrubRowView mAzScrubRowView;
     LauncherAzGestureFxView mLauncherAzGestureFxUnderlayView;
     LauncherAzGestureFxView mLauncherAzGestureFxOverlayView;
+    LauncherAzGestureFxView mLauncherAzGestureFxLabelOverlayView;
 
     private LauncherAppDataProvider mLauncherAppDataProvider;
     private LauncherConfigRepository mLauncherConfigRepository;
@@ -1500,6 +1501,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View azRow = findViewById(R.id.apps_bar_az_row);
         View azFxUnderlay = findViewById(R.id.apps_bar_az_fx_underlay);
         View azFxOverlay = findViewById(R.id.apps_bar_az_fx_overlay);
+        View azLabelOverlay = findViewById(R.id.apps_bar_az_label_overlay);
         boolean useRenderEffectBlur = shouldUseAccessoryRenderEffectBlur(state);
 
         if (extraKeysBackgroundBlur != null && !useRenderEffectBlur) {
@@ -1547,6 +1549,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (azFxUnderlay != null) {
                 azFxUnderlay.setVisibility(View.GONE);
             }
+            if (azLabelOverlay != null) {
+                azLabelOverlay.setVisibility(View.GONE);
+            }
             clearAccessoryRenderEffectBackdrop();
             configureAccessoryTopEdgeFx(false, state.barAlpha);
             resetAzOverflowAffordanceState();
@@ -1580,6 +1585,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (azFxOverlay != null) {
             azFxOverlay.setVisibility(View.GONE);
+        }
+        if (azLabelOverlay != null) {
+            azLabelOverlay.setVisibility(View.GONE);
         }
 
         if (extraKeysBackground != null) {
@@ -1977,11 +1985,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mAzScrubRowView = findViewById(R.id.apps_bar_az_row);
         mLauncherAzGestureFxUnderlayView = findViewById(R.id.apps_bar_az_fx_underlay);
         mLauncherAzGestureFxOverlayView = findViewById(R.id.apps_bar_az_fx_overlay);
+        mLauncherAzGestureFxLabelOverlayView = findViewById(R.id.apps_bar_az_label_overlay);
         if (mLauncherAzGestureFxUnderlayView != null) {
             mLauncherAzGestureFxUnderlayView.setRenderLayer(LauncherAzGestureFxView.RenderLayer.UNDERLAY);
         }
         if (mLauncherAzGestureFxOverlayView != null) {
             mLauncherAzGestureFxOverlayView.setRenderLayer(LauncherAzGestureFxView.RenderLayer.OVERLAY);
+        }
+        if (mLauncherAzGestureFxLabelOverlayView != null) {
+            mLauncherAzGestureFxLabelOverlayView.setRenderLayer(LauncherAzGestureFxView.RenderLayer.OVERLAY);
         }
         if (appsBarContainer == null) {
             return;
@@ -2297,6 +2309,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mLauncherAzGestureFxOverlayView.setTranslationZ(dpToPx(30));
             }
         }
+        if (mLauncherAzGestureFxLabelOverlayView != null) {
+            mLauncherAzGestureFxLabelOverlayView.setColors(orbColor, edgeColor);
+            mLauncherAzGestureFxLabelOverlayView.setCompactDockSpacingEnabled(compactDock);
+            mLauncherAzGestureFxLabelOverlayView.setDarkThemeActive(isNightThemeActive());
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                mLauncherAzGestureFxLabelOverlayView.setElevation(dpToPx(40));
+                mLauncherAzGestureFxLabelOverlayView.setTranslationZ(dpToPx(40));
+            }
+        }
         updateAzOverflowAffordance();
         mAzScrubRowView.setBackgroundColor(Color.TRANSPARENT);
         mAzScrubRowView.bringToFront();
@@ -2487,8 +2508,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mAppsRowRawBounds.isEmpty()) {
             return false;
         }
-        float tolerance = dpToPx(20);
-        return rawY >= (mAppsRowRawBounds.top - tolerance) && rawY <= (mAppsRowRawBounds.bottom + tolerance);
+        float topTolerance = dpToPx(2);
+        float bottomTolerance = dpToPx(4);
+        return rawY >= (mAppsRowRawBounds.top - topTolerance) && rawY <= (mAppsRowRawBounds.bottom + bottomTolerance);
     }
 
     private boolean isInAzCaptureWedge(float rawX, float rawY) {
@@ -2496,8 +2518,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return false;
         }
         float startY = mAzLockedAnchorRawY - dpToPx(4);
-        float topLimit = mAppsRowRawBounds.top - dpToPx(20);
-        float bottomLimit = mAppsRowRawBounds.bottom + dpToPx(20);
+        float topLimit = mAppsRowRawBounds.top - dpToPx(2);
+        float bottomLimit = mAppsRowRawBounds.bottom + dpToPx(4);
         if (rawY > startY || rawY < topLimit || rawY > bottomLimit) {
             return false;
         }
@@ -2671,6 +2693,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mLauncherAzGestureFxOverlayView != null) {
             mLauncherAzGestureFxOverlayView.setRowBounds(mAzRowRawBounds, mAppsRowRawBounds, mIndicatorBandRawBounds, mExtraKeysRawBounds);
         }
+        if (mLauncherAzGestureFxLabelOverlayView != null) {
+            mLauncherAzGestureFxLabelOverlayView.setRowBounds(mAzRowRawBounds, mAppsRowRawBounds, mIndicatorBandRawBounds, mExtraKeysRawBounds);
+        }
     }
 
     private void applyAzFxInteractionOverflowState(
@@ -2704,6 +2729,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mLauncherAzGestureFxOverlayView.clearDrag(false);
             mLauncherAzGestureFxOverlayView.setVisibility(View.GONE);
         }
+        if (mLauncherAzGestureFxLabelOverlayView != null) {
+            mLauncherAzGestureFxLabelOverlayView.clearDrag(false);
+            mLauncherAzGestureFxLabelOverlayView.setVisibility(View.GONE);
+        }
     }
 
     private void applyAzFxEdgeProximity(float leftProximity, float rightProximity) {
@@ -2729,7 +2758,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mLauncherAzGestureFxUnderlayView.setFocusedAppLabel(null);
         }
         if (mLauncherAzGestureFxOverlayView != null) {
-            mLauncherAzGestureFxOverlayView.setFocusedAppLabel(label);
+            mLauncherAzGestureFxOverlayView.setFocusedAppLabel(null);
+        }
+        if (mLauncherAzGestureFxLabelOverlayView != null) {
+            mLauncherAzGestureFxLabelOverlayView.setFocusedAppLabel(label);
         }
     }
 
@@ -2874,6 +2906,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (mLauncherAzGestureFxOverlayView != null) {
             mLauncherAzGestureFxOverlayView.clearDrag(keepOverflowAffordance);
+        }
+        if (mLauncherAzGestureFxLabelOverlayView != null) {
+            mLauncherAzGestureFxLabelOverlayView.clearDrag(false);
         }
         if (clearPreview && mSuggestionBarView != null) {
             mSuggestionBarView.clearAzPreview();
