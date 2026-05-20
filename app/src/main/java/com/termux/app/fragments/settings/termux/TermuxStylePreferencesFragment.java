@@ -177,11 +177,7 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
 
     private final TermuxAppSharedPreferences mPreferences;
     private boolean mPendingRecreateActivity;
-    private final Runnable mStyleSyncRunnable = () -> {
-        boolean recreateActivity = mPendingRecreateActivity;
-        mPendingRecreateActivity = false;
-        TermuxActivity.requestTermuxActivityStylingOnNextResume(mContext, recreateActivity);
-    };
+    private final Runnable mStyleSyncRunnable;
 
     private static TermuxStylePreferencesDataStore mInstance;
     private static final String LOG_TAG = "TermuxStylePreferences";
@@ -189,6 +185,11 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
     private TermuxStylePreferencesDataStore(Context context) {
         mContext = context;
         mPreferences = TermuxAppSharedPreferences.build(context, true);
+        mStyleSyncRunnable = () -> {
+            boolean recreateActivity = mPendingRecreateActivity;
+            mPendingRecreateActivity = false;
+            TermuxActivity.requestTermuxActivityStylingOnNextResume(mContext, recreateActivity);
+        };
     }
 
     public static synchronized TermuxStylePreferencesDataStore getInstance(Context context) {
