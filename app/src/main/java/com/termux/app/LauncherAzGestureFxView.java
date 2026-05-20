@@ -16,6 +16,7 @@ import android.util.AttributeSet;
 import android.view.View;
 import android.view.animation.DecelerateInterpolator;
 import android.graphics.Typeface;
+import android.graphics.drawable.Drawable;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -105,6 +106,7 @@ public final class LauncherAzGestureFxView extends View {
     private float edgeDwellRawX;
     private float edgeDwellRawY;
     @Nullable private String focusedAppLabel;
+    @Nullable private Drawable focusedAppPreviewIcon;
     private float focusedAppLabelProgress;
     @Nullable private ValueAnimator focusedAppLabelAnimator;
     private boolean darkThemeActive = true;
@@ -301,6 +303,25 @@ public final class LauncherAzGestureFxView extends View {
         invalidate();
     }
 
+    public void setFocusedAppPreviewIcon(@Nullable Drawable icon) {
+        Drawable next = null;
+        if (icon != null) {
+            Drawable.ConstantState state = icon.getConstantState();
+            next = state != null ? state.newDrawable(getResources()).mutate() : icon.mutate();
+        }
+        boolean same = (focusedAppPreviewIcon == null && next == null)
+            || (focusedAppPreviewIcon != null && next != null && focusedAppPreviewIcon.getConstantState() == next.getConstantState());
+        float target = next == null ? 0f : 1f;
+        if (same && Math.abs(focusedAppLabelProgress - target) < 0.01f) {
+            return;
+        }
+        if (next != null) {
+            focusedAppPreviewIcon = next;
+        }
+        animateFocusedAppLabelTo(target);
+        invalidate();
+    }
+
     public void setCompactDockSpacingEnabled(boolean enabled) {
         if (compactDockSpacingEnabled == enabled) {
             return;
@@ -327,6 +348,7 @@ public final class LauncherAzGestureFxView extends View {
         edgeProximityRight = 0f;
         edgeDwellProgress = 0f;
         setFocusedAppLabel(null);
+        setFocusedAppPreviewIcon(null);
         interactionMode = InteractionMode.LETTER_TRACK;
         if (!keepOverflowAffordance) {
             interactionOverflowActive = false;
@@ -396,8 +418,50 @@ public final class LauncherAzGestureFxView extends View {
             }
         }
         if (focusedAppLabelProgress > 0.01f && renderLayer == RenderLayer.OVERLAY) {
-            drawFocusedAppLabel(canvas);
+            drawFocusedAppPreviewIcon(canvas);
         }
+    }
+
+    private void drawFocusedAppPreviewIcon(Canvas canvas) {
+        if (focusedAppPreviewIcon == null || appsRowRawBounds.isEmpty()) {
+            return;
+        }
+        float progress = clamp01(focusedAppLabelProgress);
+        float rowTop = appsRowRawBounds.top - locationOnScreen[1];
+        float rowLeft = appsRowRawBounds.left - locationOnScreen[0];
+        float rowRight = appsRowRawBounds.right - locationOnScreen[0];
+        float focusCx = hasFocus && !focusRawRect.isEmpty()
+            ? focusRawRect.centerX() - locationOnScreen[0]
+            : targetRawX - locationOnScreen[0];
+        focusCx = clamp(focusCx, rowLeft + dp(8f), rowRight - dp(8f));
+
+        float baseSize = hasFocus && !focusRawRect.isEmpty()
+            ? Math.max(focusRawRect.width(), focusRawRect.height())
+            : dp(52f);
+        float iconSize = clamp(baseSize * 1.18f, dp(54f), dp(74f));
+        float left = clamp(focusCx - (iconSize * 0.5f), dp(8f), Math.max(dp(8f), getWidth() - iconSize - dp(8f)));
+        float top = rowTop - iconSize - dp(18f);
+        if (top < dp(8f)) {
+            top = dp(8f);
+        }
+        top += lerp(dp(8f), 0f, progress);
+        float scale = lerp(0.84f, 1f, progress);
+        float alpha = lerp(0f, 1f, progress);
+        float cx = left + (iconSize * 0.5f);
+        float cy = top + (iconSize * 0.5f);
+
+        int save = canvas.save();
+        canvas.scale(scale, scale, cx, cy);
+        focusedAppPreviewIcon.setAlpha(Math.round(255f * alpha));
+        focusedAppPreviewIcon.setBounds(
+            Math.round(left),
+            Math.round(top),
+            Math.round(left + iconSize),
+            Math.round(top + iconSize)
+        );
+        focusedAppPreviewIcon.draw(canvas);
+        focusedAppPreviewIcon.setAlpha(255);
+        canvas.restoreToCount(save);
     }
 
     private void drawFocusedAppLabel(Canvas canvas) {
@@ -896,6 +960,10 @@ public final class LauncherAzGestureFxView extends View {
         float start = focusedAppLabelProgress;
         if (Math.abs(start - boundedTarget) < 0.01f) {
             focusedAppLabelProgress = boundedTarget;
+            if (boundedTarget <= 0.01f) {
+                focusedAppLabel = null;
+                focusedAppPreviewIcon = null;
+            }
             refreshVisibility();
             invalidate();
             return;
@@ -918,6 +986,7 @@ public final class LauncherAzGestureFxView extends View {
                 focusedAppLabelProgress = boundedTarget;
                 if (boundedTarget <= 0.01f) {
                     focusedAppLabel = null;
+                    focusedAppPreviewIcon = null;
                 }
                 refreshVisibility();
                 invalidate();

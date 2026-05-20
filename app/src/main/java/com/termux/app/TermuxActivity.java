@@ -2612,12 +2612,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             focusBounds,
             interactionMode
         );
-        CharSequence focusedLabel = interactionMode == LauncherAzGestureFxView.InteractionMode.ICON_TRACK_LOCKED
+        Drawable focusedIcon = interactionMode == LauncherAzGestureFxView.InteractionMode.ICON_TRACK_LOCKED
             && focusResult != null
             && focusResult.entry != null
-            ? focusResult.entry.label
+            ? focusResult.entry.icon
             : null;
-        applyAzFxFocusedAppLabel(focusedLabel);
+        if (focusedIcon == null && interactionMode == LauncherAzGestureFxView.InteractionMode.ICON_TRACK_LOCKED
+            && focusResult != null && focusResult.entry != null) {
+            focusedIcon = getPackageManager().getDefaultActivityIcon();
+        }
+        applyAzFxFocusedAppIcon(focusedIcon);
     }
 
     private void populateRawBounds(@Nullable View view, @NonNull RectF out) {
@@ -2765,6 +2769,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (mLauncherAzGestureFxLabelOverlayView != null) {
             mLauncherAzGestureFxLabelOverlayView.setFocusedAppLabel(label);
+        }
+    }
+
+    private void applyAzFxFocusedAppIcon(@Nullable Drawable icon) {
+        if (mLauncherAzGestureFxUnderlayView != null) {
+            mLauncherAzGestureFxUnderlayView.setFocusedAppPreviewIcon(null);
+            mLauncherAzGestureFxUnderlayView.setFocusedAppLabel(null);
+        }
+        if (mLauncherAzGestureFxOverlayView != null) {
+            mLauncherAzGestureFxOverlayView.setFocusedAppPreviewIcon(null);
+            mLauncherAzGestureFxOverlayView.setFocusedAppLabel(null);
+        }
+        if (mLauncherAzGestureFxLabelOverlayView != null) {
+            mLauncherAzGestureFxLabelOverlayView.setFocusedAppPreviewIcon(icon);
         }
     }
 
