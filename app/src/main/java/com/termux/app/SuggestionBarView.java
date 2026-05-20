@@ -159,6 +159,7 @@ public final class SuggestionBarView extends GridLayout {
     private final Paint azFocusedLabelFillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint azFocusedLabelStrokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint azFocusedLabelTextPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final RectF azFocusedLabelRect = new RectF();
 
     private LauncherAppDataProvider appDataProvider;
     private LauncherConfigRepository configRepository;
@@ -364,9 +365,11 @@ public final class SuggestionBarView extends GridLayout {
             super.dispatchDraw(canvas);
             canvas.restore();
             drawSwipePreviewPage(canvas);
+            drawAzFocusedLabel(canvas);
             return;
         }
         super.dispatchDraw(canvas);
+        drawAzFocusedLabel(canvas);
     }
 
     @Override
@@ -1057,12 +1060,6 @@ public final class SuggestionBarView extends GridLayout {
         azFocusLastSeenUptimeMs = 0L;
     }
 
-    @Override
-    protected void dispatchDraw(Canvas canvas) {
-        super.dispatchDraw(canvas);
-        drawAzFocusedLabel(canvas);
-    }
-
     private void drawAzFocusedLabel(@NonNull Canvas canvas) {
         if (azFocusedView == null || TextUtils.isEmpty(azFocusedEntryLabel) || getWidth() <= 0 || getHeight() <= 0) {
             return;
@@ -1097,14 +1094,14 @@ public final class SuggestionBarView extends GridLayout {
         if (top + labelHeight > getHeight() - dp(2)) {
             top = Math.max(dp(2), getHeight() - labelHeight - dp(2));
         }
-        tmpRect.set(left, top, left + labelWidth, top + labelHeight);
+        azFocusedLabelRect.set(left, top, left + labelWidth, top + labelHeight);
         float radius = Math.min(dp(10), labelHeight * 0.5f);
         azFocusedLabelFillPaint.setColor(withAlphaComponent(resolveLauncherPanelColor(), 0xEA));
         azFocusedLabelStrokePaint.setStyle(Paint.Style.STROKE);
         azFocusedLabelStrokePaint.setStrokeWidth(dp(1));
         azFocusedLabelStrokePaint.setColor(withAlphaComponent(resolveLauncherOutlineColor(), 0x7A));
-        canvas.drawRoundRect(tmpRect, radius, radius, azFocusedLabelFillPaint);
-        canvas.drawRoundRect(tmpRect, radius, radius, azFocusedLabelStrokePaint);
+        canvas.drawRoundRect(azFocusedLabelRect, radius, radius, azFocusedLabelFillPaint);
+        canvas.drawRoundRect(azFocusedLabelRect, radius, radius, azFocusedLabelStrokePaint);
         float baseline = top + padY - fm.ascent;
         canvas.drawText(label, left + padX, baseline, azFocusedLabelTextPaint);
     }
