@@ -2463,8 +2463,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (phase == AzScrubRowView.GesturePhase.UP) {
             boolean launched = false;
             if (mAzGestureMode == AzGestureMode.ICON_TRACKING_LOCKED && focusResult != null && focusResult.hasFocusEntry()) {
-                if (mLauncherAzGestureFxOverlayView != null) {
-                    mLauncherAzGestureFxOverlayView.playLaunchBloom(rawX, rawY);
+                if (mLauncherAzGestureFxLabelOverlayView != null) {
+                    mLauncherAzGestureFxLabelOverlayView.playLaunchBloom(rawX, rawY);
                 }
                 launched = mSuggestionBarView.launchAzFocusedEntry(focusResult);
             }

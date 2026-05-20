@@ -111,6 +111,7 @@ public final class LauncherAzGestureFxView extends View {
     @Nullable private ValueAnimator focusedAppLabelAnimator;
     private boolean hasPreviewPosition;
     private float previewDisplayRawX;
+    private boolean focusedAppPreviewLaunchDismissing;
     private boolean darkThemeActive = true;
     @NonNull private RenderLayer renderLayer = RenderLayer.OVERLAY;
 
@@ -308,7 +309,7 @@ public final class LauncherAzGestureFxView extends View {
             invalidate();
             return;
         }
-        animateFocusedAppLabelTo(target);
+        animateFocusedAppLabelTo(target, false);
     }
 
     public void setRenderLayer(@NonNull RenderLayer renderLayer) {
@@ -331,8 +332,9 @@ public final class LauncherAzGestureFxView extends View {
         }
         if (next != null) {
             focusedAppPreviewIcon = next;
+            focusedAppPreviewLaunchDismissing = false;
         }
-        animateFocusedAppLabelTo(target);
+        animateFocusedAppLabelTo(target, false);
         invalidate();
     }
 
@@ -362,7 +364,9 @@ public final class LauncherAzGestureFxView extends View {
         edgeProximityRight = 0f;
         edgeDwellProgress = 0f;
         setFocusedAppLabel(null);
-        setFocusedAppPreviewIcon(null);
+        if (!focusedAppPreviewLaunchDismissing) {
+            setFocusedAppPreviewIcon(null);
+        }
         hasPreviewPosition = false;
         interactionMode = InteractionMode.LETTER_TRACK;
         if (!keepOverflowAffordance) {
@@ -391,9 +395,10 @@ public final class LauncherAzGestureFxView extends View {
     }
 
     public void playLaunchBloom(float rawX, float rawY) {
-        // Intentionally disabled: launch glow visuals were removed.
         launchBloomRawX = rawX;
         launchBloomRawY = rawY;
+        focusedAppPreviewLaunchDismissing = true;
+        animateFocusedAppLabelTo(0f, true);
     }
 
     @Override
@@ -459,8 +464,12 @@ public final class LauncherAzGestureFxView extends View {
         if (top < dp(8f)) {
             top = dp(8f);
         }
-        top += lerp(dp(6f), 0f, progress);
-        float scale = lerp(0.88f, 1f, progress);
+        top += focusedAppPreviewLaunchDismissing
+            ? lerp(dp(-8f), 0f, progress)
+            : lerp(dp(6f), 0f, progress);
+        float scale = focusedAppPreviewLaunchDismissing
+            ? lerp(0.92f, 1f, progress)
+            : lerp(0.88f, 1f, progress);
         float alpha = lerp(0f, 1f, progress);
         float cx = left + (bubbleSize * 0.5f);
         float cy = top + (bubbleSize * 0.5f);
@@ -982,7 +991,7 @@ public final class LauncherAzGestureFxView extends View {
         return animator;
     }
 
-    private void animateFocusedAppLabelTo(float target) {
+    private void animateFocusedAppLabelTo(float target, boolean launchDismiss) {
         float boundedTarget = clamp01(target);
         if (focusedAppLabelAnimator != null) {
             focusedAppLabelAnimator.cancel();
@@ -994,14 +1003,15 @@ public final class LauncherAzGestureFxView extends View {
             if (boundedTarget <= 0.01f) {
                 focusedAppLabel = null;
                 focusedAppPreviewIcon = null;
+                focusedAppPreviewLaunchDismissing = false;
             }
             refreshVisibility();
             invalidate();
             return;
         }
         focusedAppLabelAnimator = ValueAnimator.ofFloat(start, boundedTarget);
-        focusedAppLabelAnimator.setDuration(boundedTarget > start ? 92L : 78L);
-        focusedAppLabelAnimator.setInterpolator(new DecelerateInterpolator(1.55f));
+        focusedAppLabelAnimator.setDuration(launchDismiss ? 112L : (boundedTarget > start ? 96L : 84L));
+        focusedAppLabelAnimator.setInterpolator(new DecelerateInterpolator(launchDismiss ? 1.75f : 1.55f));
         focusedAppLabelAnimator.addUpdateListener(animation -> {
             focusedAppLabelProgress = (Float) animation.getAnimatedValue();
             refreshVisibility();
@@ -1018,6 +1028,7 @@ public final class LauncherAzGestureFxView extends View {
                 if (boundedTarget <= 0.01f) {
                     focusedAppLabel = null;
                     focusedAppPreviewIcon = null;
+                    focusedAppPreviewLaunchDismissing = false;
                 }
                 refreshVisibility();
                 invalidate();

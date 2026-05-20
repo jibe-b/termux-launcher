@@ -238,8 +238,6 @@ public final class SuggestionBarView extends GridLayout {
     private long azFocusLastSeenUptimeMs = 0L;
     private static final long AZ_FOCUS_BOUNCE_COOLDOWN_MS = 320L;
     private static final long AZ_FOCUS_LOSS_GRACE_MS = 180L;
-    private static final float AZ_FOCUS_REST_SCALE = 1.08f;
-    private static final float AZ_FOCUS_REST_LIFT_DP = 6.4f;
     private static final float AZ_FOCUS_REST_ALPHA = 0.18f;
 
     public static final int AZ_EDGE_NONE = 0;
@@ -1030,7 +1028,7 @@ public final class SuggestionBarView extends GridLayout {
         azFocusedView = target;
         if ((now - lastAzFocusBounceUptimeMs) >= AZ_FOCUS_BOUNCE_COOLDOWN_MS) {
             lastAzFocusBounceUptimeMs = now;
-            animateAzFocusBounce(target);
+            animateAzFocusAlpha(target);
         } else {
             applyAzFocusRestState(target);
         }
@@ -1046,27 +1044,28 @@ public final class SuggestionBarView extends GridLayout {
             azFocusedView.setScaleX(1f);
             azFocusedView.setScaleY(1f);
             azFocusedView.setTranslationY(0f);
-            azFocusedView.setAlpha(1f);
+            azFocusedView.animate()
+                .alpha(1f)
+                .setDuration(96L)
+                .setInterpolator(new DecelerateInterpolator(1.45f))
+                .setListener(null)
+                .start();
         }
         azFocusedView = null;
         azFocusedEntryKey = null;
         azFocusLastSeenUptimeMs = 0L;
     }
 
-    private void animateAzFocusBounce(@NonNull View target) {
+    private void animateAzFocusAlpha(@NonNull View target) {
         target.animate().cancel();
-        target.setPivotX(target.getWidth() * 0.5f);
-        target.setPivotY(target.getHeight() * 0.5f);
-        float restLift = dp(AZ_FOCUS_REST_LIFT_DP);
-        float lift = Math.max(restLift + dp(1.2f), dp(4f));
+        target.setScaleX(1f);
+        target.setScaleY(1f);
+        target.setTranslationY(0f);
         AnimatorSet bounce = new AnimatorSet();
-        ObjectAnimator scaleX = ObjectAnimator.ofFloat(target, View.SCALE_X, 1f, 1.06f, 1.01f, AZ_FOCUS_REST_SCALE);
-        ObjectAnimator scaleY = ObjectAnimator.ofFloat(target, View.SCALE_Y, 1f, 1.06f, 1.01f, AZ_FOCUS_REST_SCALE);
-        ObjectAnimator translateY = ObjectAnimator.ofFloat(target, View.TRANSLATION_Y, 0f, -lift, -(restLift * 0.85f), -restLift);
-        ObjectAnimator alpha = ObjectAnimator.ofFloat(target, View.ALPHA, 1f, 0.58f, AZ_FOCUS_REST_ALPHA);
-        bounce.playTogether(scaleX, scaleY, translateY, alpha);
-        bounce.setDuration(480L);
-        bounce.setInterpolator(new DecelerateInterpolator());
+        ObjectAnimator alpha = ObjectAnimator.ofFloat(target, View.ALPHA, target.getAlpha(), AZ_FOCUS_REST_ALPHA);
+        bounce.playTogether(alpha);
+        bounce.setDuration(86L);
+        bounce.setInterpolator(new DecelerateInterpolator(1.55f));
         bounce.addListener(new AnimatorListenerAdapter() {
             @Override
             public void onAnimationEnd(Animator animation) {
@@ -1087,9 +1086,9 @@ public final class SuggestionBarView extends GridLayout {
     }
 
     private void applyAzFocusRestState(@NonNull View target) {
-        target.setScaleX(AZ_FOCUS_REST_SCALE);
-        target.setScaleY(AZ_FOCUS_REST_SCALE);
-        target.setTranslationY(-dp(AZ_FOCUS_REST_LIFT_DP));
+        target.setScaleX(1f);
+        target.setScaleY(1f);
+        target.setTranslationY(0f);
         target.setAlpha(AZ_FOCUS_REST_ALPHA);
     }
 
