@@ -161,7 +161,7 @@ public final class LauncherAzGestureFxView extends View {
         edgeInnerPaint.setStyle(Paint.Style.FILL);
         pageIndicatorPaint.setStyle(Paint.Style.FILL);
         previewFillPaint.setStyle(Paint.Style.FILL);
-        previewLabelPaint.setTextAlign(Paint.Align.CENTER);
+        previewLabelPaint.setTextAlign(Paint.Align.LEFT);
         previewLabelPaint.setSubpixelText(true);
         previewLabelPaint.setTextSize(dp(11f));
     }
@@ -550,6 +550,7 @@ public final class LauncherAzGestureFxView extends View {
         float sourceIconSize,
         float alpha
     ) {
+        String displayLabel = addPreviewLabelBreakOpportunities(label);
         previewLabelPaint.setTextSize(clamp(sourceIconSize * 0.22f, dp(9.5f), dp(11.5f)));
         previewLabelPaint.setColor(darkThemeActive
             ? withAlpha(Color.rgb(230, 224, 233), Math.round(245f * alpha))
@@ -557,11 +558,11 @@ public final class LauncherAzGestureFxView extends View {
 
         float horizontalPadding = dp(7f);
         float verticalPadding = dp(4f);
-        int maxInnerWidth = Math.round(clamp(getWidth() * 0.32f, dp(78f), dp(132f)));
+        int maxInnerWidth = Math.round(clamp(getWidth() * 0.30f, dp(78f), dp(124f)));
         int minInnerWidth = Math.round(dp(38f));
-        float measuredTextWidth = previewLabelPaint.measureText(label);
+        float measuredTextWidth = previewLabelPaint.measureText(displayLabel);
         int textWidth = Math.max(minInnerWidth, Math.min(maxInnerWidth, Math.round(measuredTextWidth + dp(1f))));
-        StaticLayout layout = StaticLayout.Builder.obtain(label, 0, label.length(), previewLabelPaint, textWidth)
+        StaticLayout layout = StaticLayout.Builder.obtain(displayLabel, 0, displayLabel.length(), previewLabelPaint, textWidth)
             .setAlignment(Layout.Alignment.ALIGN_CENTER)
             .setIncludePad(false)
             .setMaxLines(2)
@@ -577,15 +578,15 @@ public final class LauncherAzGestureFxView extends View {
         }
 
         tmpRect.set(pillLeft, pillTop, pillLeft + pillWidth, pillTop + pillHeight);
-        previewFillPaint.setColor(withAlpha(Color.BLACK, Math.round((darkThemeActive ? 76f : 24f) * alpha)));
+        previewFillPaint.setColor(withAlpha(Color.BLACK, Math.round((darkThemeActive ? 58f : 18f) * alpha)));
         RectF shadow = new RectF(tmpRect);
         shadow.offset(0f, dp(1.5f));
         canvas.drawRoundRect(shadow, pillHeight * 0.5f, pillHeight * 0.5f, previewFillPaint);
 
         int pillColor = darkThemeActive
-            ? lerpColor(Color.rgb(32, 29, 36), edgeTintColor, 0.05f)
-            : lerpColor(Color.rgb(245, 240, 248), edgeTintColor, 0.04f);
-        previewFillPaint.setColor(withAlpha(pillColor, Math.round((darkThemeActive ? 214f : 226f) * alpha)));
+            ? lerpColor(Color.rgb(34, 30, 39), edgeTintColor, 0.04f)
+            : lerpColor(Color.rgb(238, 234, 242), edgeTintColor, 0.035f);
+        previewFillPaint.setColor(withAlpha(pillColor, Math.round((darkThemeActive ? 188f : 204f) * alpha)));
         canvas.drawRoundRect(tmpRect, pillHeight * 0.5f, pillHeight * 0.5f, previewFillPaint);
 
         int save = canvas.save();
@@ -594,6 +595,19 @@ public final class LauncherAzGestureFxView extends View {
         canvas.translate(textLeft, textTop);
         layout.draw(canvas);
         canvas.restoreToCount(save);
+    }
+
+    @NonNull
+    private static String addPreviewLabelBreakOpportunities(@NonNull String label) {
+        StringBuilder out = new StringBuilder(label.length() + 4);
+        for (int i = 0; i < label.length(); i++) {
+            char c = label.charAt(i);
+            out.append(c);
+            if ((c == ':' || c == '/' || c == '-' || c == '_' || c == '.') && i < label.length() - 1) {
+                out.append('\u200B');
+            }
+        }
+        return out.toString();
     }
 
     private void drawEdgeDwellBloom(Canvas canvas) {
