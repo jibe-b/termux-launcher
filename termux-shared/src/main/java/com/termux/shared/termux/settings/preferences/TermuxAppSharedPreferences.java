@@ -171,6 +171,15 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_COMPACT_DOCK, value, false);
     }
 
+    public boolean isAppLauncherDisplayAppNamesEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_DISPLAY_APP_NAMES,
+            TERMUX_APP.DEFAULT_APP_LAUNCHER_DISPLAY_APP_NAMES);
+    }
+
+    public void setAppLauncherDisplayAppNamesEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_DISPLAY_APP_NAMES, value, false);
+    }
+
     public boolean isAppLauncherBwIconsEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_BW_ICONS, TERMUX_APP.DEFAULT_APP_LAUNCHER_BW_ICONS);
     }

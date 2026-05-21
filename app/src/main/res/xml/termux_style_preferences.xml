@@ -83,6 +83,12 @@
             app:summary="@string/termux_app_launcher_compact_dock_summary"
             android:defaultValue="false" />
 
+        <SwitchPreferenceCompat
+            app:key="app_launcher_display_app_names"
+            app:title="@string/termux_app_launcher_display_app_names_title"
+            app:summary="@string/termux_app_launcher_display_app_names_summary"
+            android:defaultValue="false" />
+
     </PreferenceCategory>
 
     <PreferenceCategory

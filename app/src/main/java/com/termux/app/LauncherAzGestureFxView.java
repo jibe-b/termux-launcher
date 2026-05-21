@@ -10,6 +10,10 @@ import android.graphics.RadialGradient;
 import android.graphics.RectF;
 import android.graphics.Shader;
 import android.os.SystemClock;
+import android.text.Layout;
+import android.text.StaticLayout;
+import android.text.TextPaint;
+import android.text.TextUtils;
 import android.util.AttributeSet;
 import android.view.View;
 import android.view.animation.DecelerateInterpolator;
@@ -46,6 +50,7 @@ public final class LauncherAzGestureFxView extends View {
     private final Paint bloomPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint pageIndicatorPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint previewFillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final TextPaint previewLabelPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
     private final Path liquidBridgePath = new Path();
 
     private final RectF tmpRect = new RectF();
@@ -108,6 +113,8 @@ public final class LauncherAzGestureFxView extends View {
     private boolean hasPreviewPosition;
     private float previewDisplayRawX;
     private boolean focusedAppPreviewLaunchDismissing;
+    private boolean focusedAppPreviewLabelEnabled;
+    @Nullable private String focusedAppPreviewLabel;
     private boolean darkThemeActive = true;
     @NonNull private RenderLayer renderLayer = RenderLayer.OVERLAY;
 
@@ -154,6 +161,9 @@ public final class LauncherAzGestureFxView extends View {
         edgeInnerPaint.setStyle(Paint.Style.FILL);
         pageIndicatorPaint.setStyle(Paint.Style.FILL);
         previewFillPaint.setStyle(Paint.Style.FILL);
+        previewLabelPaint.setTextAlign(Paint.Align.CENTER);
+        previewLabelPaint.setSubpixelText(true);
+        previewLabelPaint.setTextSize(dp(11f));
     }
 
     public void setColors(int glassTintColor, int edgeTintColor) {
@@ -311,6 +321,26 @@ public final class LauncherAzGestureFxView extends View {
         invalidate();
     }
 
+    public void setFocusedAppPreviewLabel(@Nullable String label) {
+        String next = label == null ? null : label.trim();
+        if (next != null && next.isEmpty()) {
+            next = null;
+        }
+        if (TextUtils.equals(focusedAppPreviewLabel, next)) {
+            return;
+        }
+        focusedAppPreviewLabel = next;
+        invalidate();
+    }
+
+    public void setFocusedAppPreviewLabelEnabled(boolean enabled) {
+        if (focusedAppPreviewLabelEnabled == enabled) {
+            return;
+        }
+        focusedAppPreviewLabelEnabled = enabled;
+        invalidate();
+    }
+
     public void setCompactDockSpacingEnabled(boolean enabled) {
         if (compactDockSpacingEnabled == enabled) {
             return;
@@ -454,8 +484,13 @@ public final class LauncherAzGestureFxView extends View {
         float sourceIconSize = hasFocus && !focusRawRect.isEmpty()
             ? Math.max(focusRawRect.width(), focusRawRect.height())
             : dp(44f);
-        float bubbleSize = clamp(sourceIconSize * 1.18f, dp(46f), dp(64f));
-        float iconSize = clamp(sourceIconSize * 0.82f, dp(32f), bubbleSize - dp(14f));
+        boolean drawLabel = focusedAppPreviewLabelEnabled
+            && focusedAppPreviewLabel != null
+            && !focusedAppPreviewLabel.isEmpty();
+        float bubbleScale = drawLabel ? 1.10f : 1.18f;
+        float iconScale = drawLabel ? 0.76f : 0.82f;
+        float bubbleSize = clamp(sourceIconSize * bubbleScale, dp(44f), dp(62f));
+        float iconSize = clamp(sourceIconSize * iconScale, dp(30f), bubbleSize - dp(14f));
         float left = clamp(focusCx - (bubbleSize * 0.5f), dp(8f), Math.max(dp(8f), getWidth() - bubbleSize - dp(8f)));
         float verticalGap = clamp(sourceIconSize * 0.22f, dp(8f), dp(14f));
         float top = rowTop - bubbleSize - verticalGap;
@@ -491,6 +526,10 @@ public final class LauncherAzGestureFxView extends View {
         previewFillPaint.setColor(withAlpha(baseFill, Math.round((darkThemeActive ? 222f : 236f) * alpha)));
         canvas.drawRoundRect(previewRect, radius, radius, previewFillPaint);
 
+        if (drawLabel) {
+            drawFocusedAppPreviewLabel(canvas, focusedAppPreviewLabel, cx, top, sourceIconSize, alpha);
+        }
+
         focusedAppPreviewIcon.setAlpha(Math.round(255f * alpha));
         focusedAppPreviewIcon.setBounds(
             Math.round(iconLeft),
@@ -500,6 +539,60 @@ public final class LauncherAzGestureFxView extends View {
         );
         focusedAppPreviewIcon.draw(canvas);
         focusedAppPreviewIcon.setAlpha(255);
+        canvas.restoreToCount(save);
+    }
+
+    private void drawFocusedAppPreviewLabel(
+        @NonNull Canvas canvas,
+        @NonNull String label,
+        float centerX,
+        float bubbleTop,
+        float sourceIconSize,
+        float alpha
+    ) {
+        previewLabelPaint.setTextSize(clamp(sourceIconSize * 0.24f, dp(10f), dp(12f)));
+        previewLabelPaint.setColor(darkThemeActive
+            ? withAlpha(Color.rgb(230, 224, 233), Math.round(245f * alpha))
+            : withAlpha(Color.rgb(29, 27, 32), Math.round(235f * alpha)));
+
+        int maxWidth = Math.round(clamp(getWidth() * 0.38f, dp(92f), dp(156f)));
+        int minWidth = Math.round(dp(48f));
+        float measuredTextWidth = previewLabelPaint.measureText(label);
+        int textWidth = Math.max(minWidth, Math.min(maxWidth, Math.round(measuredTextWidth + dp(1f))));
+        StaticLayout layout = StaticLayout.Builder.obtain(label, 0, label.length(), previewLabelPaint, textWidth)
+            .setAlignment(Layout.Alignment.ALIGN_CENTER)
+            .setIncludePad(false)
+            .setMaxLines(2)
+            .setEllipsize(TextUtils.TruncateAt.END)
+            .build();
+
+        float horizontalPadding = dp(9f);
+        float verticalPadding = dp(5f);
+        float pillWidth = Math.min(maxWidth + (horizontalPadding * 2f), Math.max(dp(58f), layout.getWidth() + (horizontalPadding * 2f)));
+        float pillHeight = layout.getHeight() + (verticalPadding * 2f);
+        float pillLeft = clamp(centerX - (pillWidth * 0.5f), dp(8f), Math.max(dp(8f), getWidth() - pillWidth - dp(8f)));
+        float pillTop = bubbleTop - pillHeight - dp(6f);
+        if (pillTop < dp(8f)) {
+            pillTop = dp(8f);
+        }
+
+        tmpRect.set(pillLeft, pillTop, pillLeft + pillWidth, pillTop + pillHeight);
+        previewFillPaint.setColor(withAlpha(Color.BLACK, Math.round((darkThemeActive ? 76f : 24f) * alpha)));
+        RectF shadow = new RectF(tmpRect);
+        shadow.offset(0f, dp(1.5f));
+        canvas.drawRoundRect(shadow, pillHeight * 0.5f, pillHeight * 0.5f, previewFillPaint);
+
+        int pillColor = darkThemeActive
+            ? lerpColor(Color.rgb(32, 29, 36), edgeTintColor, 0.05f)
+            : lerpColor(Color.rgb(245, 240, 248), edgeTintColor, 0.04f);
+        previewFillPaint.setColor(withAlpha(pillColor, Math.round((darkThemeActive ? 214f : 226f) * alpha)));
+        canvas.drawRoundRect(tmpRect, pillHeight * 0.5f, pillHeight * 0.5f, previewFillPaint);
+
+        int save = canvas.save();
+        float textLeft = tmpRect.centerX() - (layout.getWidth() * 0.5f);
+        float textTop = tmpRect.top + ((pillHeight - layout.getHeight()) * 0.5f);
+        canvas.translate(textLeft, textTop);
+        layout.draw(canvas);
         canvas.restoreToCount(save);
     }
 

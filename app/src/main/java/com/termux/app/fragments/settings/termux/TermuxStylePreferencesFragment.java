@@ -244,6 +244,10 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 mPreferences.setAppLauncherCompactDockEnabled(value);
                 scheduleTermuxActivityStylingSync(false);
                 break;
+            case "app_launcher_display_app_names":
+                mPreferences.setAppLauncherDisplayAppNamesEnabled(value);
+                scheduleTermuxActivityStylingSync(false);
+                break;
             case "app_launcher_notification_dots":
                 mPreferences.setAppLauncherNotificationDotsEnabled(value);
                 scheduleTermuxActivityStylingSync(false);
@@ -282,6 +286,8 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.isAppLauncherAppsRowEnabled();
             case "app_launcher_compact_dock":
                 return mPreferences.isAppLauncherCompactDockEnabled();
+            case "app_launcher_display_app_names":
+                return mPreferences.isAppLauncherDisplayAppNamesEnabled();
             case "app_launcher_notification_dots":
                 return mPreferences.isAppLauncherNotificationDotsEnabled();
             case "app_launcher_az_row_enabled":

@@ -2313,6 +2313,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mLauncherAzGestureFxLabelOverlayView.setColors(orbColor, edgeColor);
             mLauncherAzGestureFxLabelOverlayView.setCompactDockSpacingEnabled(compactDock);
             mLauncherAzGestureFxLabelOverlayView.setDarkThemeActive(isNightThemeActive());
+            mLauncherAzGestureFxLabelOverlayView.setFocusedAppPreviewLabelEnabled(
+                mPreferences != null && mPreferences.isAppLauncherDisplayAppNamesEnabled()
+            );
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                 mLauncherAzGestureFxLabelOverlayView.setElevation(dpToPx(40));
                 mLauncherAzGestureFxLabelOverlayView.setTranslationZ(dpToPx(40));
@@ -2621,7 +2624,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             && focusResult != null && focusResult.entry != null) {
             focusedIcon = getPackageManager().getDefaultActivityIcon();
         }
-        applyAzFxFocusedAppIcon(focusedIcon);
+        String focusedLabel = interactionMode == LauncherAzGestureFxView.InteractionMode.ICON_TRACK_LOCKED
+            && focusResult != null
+            && focusResult.entry != null
+            ? focusResult.entry.label
+            : null;
+        applyAzFxFocusedAppIcon(focusedIcon, focusedLabel);
     }
 
     private void populateRawBounds(@Nullable View view, @NonNull RectF out) {
@@ -2760,14 +2768,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
-    private void applyAzFxFocusedAppIcon(@Nullable Drawable icon) {
+    private void applyAzFxFocusedAppIcon(@Nullable Drawable icon, @Nullable String label) {
         if (mLauncherAzGestureFxUnderlayView != null) {
             mLauncherAzGestureFxUnderlayView.setFocusedAppPreviewIcon(null);
+            mLauncherAzGestureFxUnderlayView.setFocusedAppPreviewLabel(null);
         }
         if (mLauncherAzGestureFxOverlayView != null) {
             mLauncherAzGestureFxOverlayView.setFocusedAppPreviewIcon(null);
+            mLauncherAzGestureFxOverlayView.setFocusedAppPreviewLabel(null);
         }
         if (mLauncherAzGestureFxLabelOverlayView != null) {
+            mLauncherAzGestureFxLabelOverlayView.setFocusedAppPreviewLabel(label);
             mLauncherAzGestureFxLabelOverlayView.setFocusedAppPreviewIcon(icon);
         }
     }

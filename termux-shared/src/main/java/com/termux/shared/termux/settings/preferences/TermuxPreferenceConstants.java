@@ -179,6 +179,13 @@ public final class TermuxPreferenceConstants {
         public static final boolean DEFAULT_APP_LAUNCHER_COMPACT_DOCK = false;
 
         /**
+         * Defines the key for showing focused app names while scrubbing the dock.
+         */
+        public static final String KEY_APP_LAUNCHER_DISPLAY_APP_NAMES = "app_launcher_display_app_names";
+
+        public static final boolean DEFAULT_APP_LAUNCHER_DISPLAY_APP_NAMES = false;
+
+        /**
          * Defines the key for app launcher black and white icons.
          */
         public static final String KEY_APP_LAUNCHER_BW_ICONS = "app_launcher_bw_icons";
