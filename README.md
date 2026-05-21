@@ -4,7 +4,7 @@ Termux Launcher is a terminal-first Android home launcher inspired by [TEL](http
 
 [Download builds](https://github.com/PickleHik3/termux-launcher/releases) | [Documentation](docs/en/index.md) | [LauncherCtl API](docs/en/LauncherCtl_API.md) | [Changelog](CHANGELOG.md)
 
-![Launcher demo](screenshots/launcher-demo.gif)
+<video src="screenshots/launcher-demo.mp4" controls muted loop playsinline></video>
 
 ## Why This Exists
 
@@ -65,8 +65,7 @@ bind -n M-w run-shell 'tmux display-message "Opening WhatsApp"; launcherctl laun
 
 ## Known Limitations
 
-- If the terminal slows down after an app update or after the last terminal session exits, run `termux-reload-settings`.
-    - When termux is set as home launcher, and you exit out of the last terminal shell: android seems to recreate the activity immediatly preventing termux from exiting its process cleanly (is my best guess).
+- When Termux is set as the home launcher and the last terminal shell exits, Android may recreate the activity before Termux can exit its process cleanly.
 
 ## Screenshots
 

@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.2.20
+
+### Added
+- Added an optional app-name preview pill while scrubbing the A-Z dock.
+
+### Changed
+- Improved A-Z dock scrubbing, page dwell feedback, preview animations, and overflow handling.
+- Refined dock, wallpaper, extra keys, and text-selection colors for light and dark themes.
+- Settings changes now refresh launcher styling automatically without manually running `termux-reload-settings`.
+
+### Fixed
+- Fixed first-run defaults for wallpaper mode and the A-Z row.
+- Fixed app-name preview placement, sizing, wrapping, and alignment.
+- Fixed sticky extra-key pressed state visibility.
+
 ## 0.2.18
 
 ### Changed
