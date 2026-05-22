@@ -307,6 +307,17 @@
                 <string name="termux_app_launcher_notification_access_message">Notification dots use Android notification access to detect which apps currently have clearable notifications. Content is not used for apps bar dots.</string>
                 <string name="termux_app_launcher_notification_access_enable">Open settings</string>
                 <string name="termux_app_launcher_notification_access_unavailable">Notification access settings are unavailable on this device.</string>
+                <string name="termux_app_launcher_permissions_title">Permissions</string>
+                <string name="termux_app_launcher_permissions_summary">Review launcher and Termux access.</string>
+                <string name="termux_app_launcher_access_status_on">Enabled</string>
+                <string name="termux_app_launcher_access_status_off">Not enabled</string>
+                <string name="termux_app_launcher_storage_access_title">Storage access</string>
+                <string name="termux_app_launcher_notification_access_settings_title">Notification access</string>
+                <string name="termux_app_launcher_accessibility_lock_access_title">Accessibility lock service</string>
+                <string name="termux_app_launcher_notification_settings_title">App notifications</string>
+                <string name="termux_app_launcher_app_permissions_title">App permissions</string>
+                <string name="termux_app_launcher_app_permissions_summary">Open Android app permission settings.</string>
+                <string name="termux_app_launcher_permission_settings_unavailable">Permission settings are unavailable on this device.</string>
                 <string name="termux_app_launcher_az_row_enabled_title">Alphabets row</string>
                 <string name="termux_app_launcher_az_row_enabled_summary">Shows an alphabet strip between apps bar and extra keys for quick launch scrubbing.</string>
                 <string name="termux_app_launcher_az_double_tap_lock_title">Double tap alphabets row lockscreen</string>

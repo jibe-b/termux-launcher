@@ -78,6 +78,7 @@ import com.termux.app.api.file.FileReceiverActivity;
 import com.termux.app.launcher.animation.LauncherTransitionController;
 import com.termux.app.launcher.data.LauncherAppDataProvider;
 import com.termux.app.launcher.data.LauncherConfigRepository;
+import com.termux.app.launcher.LauncherLockAccessibilityAccess;
 import com.termux.app.launcher.LockAccessibilityService;
 import com.termux.launcherctl.LauncherCtlApiServer;
 import com.termux.privileged.PrivilegedBackendManager;
@@ -3047,30 +3048,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             showEnableAccessibilityLockDialog();
             return;
         }
-        if (isLockAccessibilityServiceEnabled() && LockAccessibilityService.lockScreen()) {
+        if (LauncherLockAccessibilityAccess.isEnabled(this) && LockAccessibilityService.lockScreen()) {
             return;
         }
         showEnableAccessibilityLockDialog();
-    }
-
-    private boolean isLockAccessibilityServiceEnabled() {
-        String enabledServices = Settings.Secure.getString(
-            getContentResolver(),
-            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
-        );
-        if (TextUtils.isEmpty(enabledServices)) {
-            return false;
-        }
-        ComponentName componentName = new ComponentName(this, LockAccessibilityService.class);
-        TextUtils.SimpleStringSplitter splitter = new TextUtils.SimpleStringSplitter(':');
-        splitter.setString(enabledServices);
-        while (splitter.hasNext()) {
-            ComponentName enabled = ComponentName.unflattenFromString(splitter.next());
-            if (componentName.equals(enabled)) {
-                return true;
-            }
-        }
-        return false;
     }
 
     private void showEnableAccessibilityLockDialog() {

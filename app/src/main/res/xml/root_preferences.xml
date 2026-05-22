@@ -25,6 +25,12 @@
         app:fragment="com.termux.app.fragments.settings.termux.LauncherPreferencesFragment"/>
 
     <Preference
+        app:key="permissions"
+        app:title="@string/termux_app_launcher_permissions_title"
+        app:summary="@string/termux_app_launcher_permissions_summary"
+        app:fragment="com.termux.app.fragments.settings.termux.LauncherPermissionsPreferencesFragment"/>
+
+    <Preference
         app:key="termux_api"
         app:title="@string/termux_api_preferences_title"
         app:summary="@string/termux_api_preferences_summary"

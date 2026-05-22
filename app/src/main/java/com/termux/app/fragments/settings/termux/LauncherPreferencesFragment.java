@@ -10,6 +10,7 @@ import android.provider.Settings;
 import android.widget.Toast;
 
 import androidx.annotation.Keep;
+import androidx.preference.ListPreference;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceFragmentCompat;
 import androidx.preference.PreferenceManager;
@@ -17,6 +18,7 @@ import androidx.preference.SwitchPreferenceCompat;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.termux.R;
+import com.termux.app.launcher.LauncherLockAccessibilityAccess;
 import com.termux.app.launcher.data.LauncherUsageStatsStore;
 import com.termux.app.launcher.notifications.LauncherNotificationAccess;
 
@@ -62,6 +64,16 @@ public class LauncherPreferencesFragment extends PreferenceFragmentCompat {
                 return true;
             });
             updateNotificationDotsSummary(context, notificationDotsPreference);
+        }
+
+        ListPreference lockMethodPreference = findPreference("app_launcher_az_lock_method");
+        if (lockMethodPreference != null) {
+            lockMethodPreference.setOnPreferenceChangeListener((preference, newValue) -> {
+                if ("accessibility".equals(newValue) && !LauncherLockAccessibilityAccess.isEnabled(context)) {
+                    showAccessibilityLockPrompt(context);
+                }
+                return true;
+            });
         }
 
         Preference setHomePreference = findPreference("app_launcher_set_home");
@@ -139,6 +151,19 @@ public class LauncherPreferencesFragment extends PreferenceFragmentCompat {
             return;
         }
         Toast.makeText(context, R.string.termux_app_launcher_notification_access_unavailable, Toast.LENGTH_SHORT).show();
+    }
+
+    private void showAccessibilityLockPrompt(Context context) {
+        new MaterialAlertDialogBuilder(context)
+            .setTitle(R.string.termux_app_launcher_accessibility_lock_prompt_title)
+            .setMessage(R.string.termux_app_launcher_accessibility_lock_prompt_message)
+            .setPositiveButton(R.string.termux_app_launcher_accessibility_lock_prompt_enable, (dialog, which) -> {
+                if (!startSettingsIntent(context, new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))) {
+                    Toast.makeText(context, R.string.termux_app_launcher_permission_settings_unavailable, Toast.LENGTH_SHORT).show();
+                }
+            })
+            .setNegativeButton(android.R.string.cancel, null)
+            .show();
     }
 
     private void openHomeLauncherSettings(Context context) {
