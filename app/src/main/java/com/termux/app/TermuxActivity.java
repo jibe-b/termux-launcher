@@ -1338,7 +1338,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         WallpaperManager wallpaperManager = WallpaperManager.getInstance(this);
-        Drawable wallpaper = wallpaperManager.getDrawable();
+        Drawable wallpaper;
+        try {
+            wallpaper = wallpaperManager.getDrawable();
+        } catch (SecurityException e) {
+            Logger.logStackTraceWithMessage(LOG_TAG, "Cannot read system wallpaper for accessory backdrop", e);
+            return null;
+        }
         if (wallpaper == null) {
             return null;
         }
