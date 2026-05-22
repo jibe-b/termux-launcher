@@ -1,0 +1,228 @@
+#!/data/data/com.termux/files/usr/bin/sh
+
+set -eu
+
+RAW_BASE="${TERMUX_LAUNCHER_RAW_BASE:-https://raw.githubusercontent.com/PickleHik3/termux-launcher/dev/docs/en/examples}"
+TPM_REPO="${TPM_REPO:-https://github.com/tmux-plugins/tpm}"
+PLUGIN_REPO="${TERMUX_LAUNCHER_TMUX_REPO:-https://github.com/PickleHik3/termux-launcher-tmux}"
+TPM_DIR="${TPM_DIR:-$HOME/.tmux/plugins/tpm}"
+PLUGIN_DIR="${TERMUX_LAUNCHER_TMUX_DIR:-$HOME/.tmux/plugins/termux-launcher-tmux}"
+TMUX_CONF="${TMUX_CONF:-$HOME/.tmux.conf}"
+BTOP_SETUP="${BTOP_SETUP:-$HOME/setup-btop-rish}"
+
+log() { printf '%s\n' "$*"; }
+warn() { printf 'setup-tmux-btop: %s\n' "$*" >&2; }
+fail() { warn "$*"; exit 1; }
+
+require_cmd() {
+    command -v "$1" >/dev/null 2>&1 || fail "missing required command: $1"
+}
+
+welcome() {
+    cat <<'EOF'
+Termux Launcher optional tmux and btop setup
+
+Before the tmux theme will look right:
+  - Open Settings -> Appearance in Termux Launcher.
+  - Turn on Terminal Material colors.
+  - Start Shizuku for launcher resource widgets such as CPU and RAM.
+
+Before the Shizuku btop helper can be installed:
+  - Put rish in your PATH and grant it Shizuku access.
+
+This script can install missing Termux packages with pkg, install TPM and the
+Termux Launcher TPM plugin, and run the rish-backed btop setup helper.
+EOF
+}
+
+choose_setup() {
+    cat >&2 <<'EOF'
+
+Choose what to set up:
+  1) All
+  2) tmux only
+  3) btop only
+  4) Exit
+EOF
+    printf '> ' >&2
+    IFS= read -r choice
+    case "$choice" in
+        1|all|All|ALL) printf 'all\n' ;;
+        2|tmux|TMUX) printf 'tmux\n' ;;
+        3|btop|BTOP) printf 'btop\n' ;;
+        4|exit|Exit|EXIT|'') printf 'exit\n' ;;
+        *) fail "unknown choice: $choice" ;;
+    esac
+}
+
+install_missing_packages() {
+    missing_packages=""
+
+    for item in "$@"; do
+        cmd="${item%%:*}"
+        package="${item#*:}"
+        if ! command -v "$cmd" >/dev/null 2>&1; then
+            missing_packages="$missing_packages $package"
+        fi
+    done
+
+    [ -n "$missing_packages" ] || return 0
+    require_cmd pkg
+    log
+    log "Installing missing Termux packages:$missing_packages"
+    # pkg fronts apt and pacman Termux installs.
+    pkg install -y $missing_packages
+}
+
+material_colors_ready() {
+    [ -s "$HOME/.termux/material-colors.sh" ] ||
+        [ -s "$HOME/.termux/material-colors.properties" ]
+}
+
+ensure_tmux_conf_line() {
+    needle="$1"
+    line="$2"
+
+    touch "$TMUX_CONF"
+    if ! grep -Fq "$needle" "$TMUX_CONF"; then
+        {
+            printf '\n'
+            printf '%s\n' "$line"
+        } >> "$TMUX_CONF"
+    fi
+}
+
+install_tmux_plugin() {
+    log
+    log "Setting up tmux theme and TPM..."
+    if ! material_colors_ready; then
+        warn "Terminal Material colors export was not found."
+        warn "Turn on Settings -> Appearance -> Terminal Material colors, then run this script again."
+        return 1
+    fi
+
+    install_missing_packages tmux:tmux curl:curl jq:jq git:git
+
+    if [ ! -d "$TPM_DIR/.git" ]; then
+        mkdir -p "$(dirname "$TPM_DIR")"
+        git clone "$TPM_REPO" "$TPM_DIR"
+    fi
+
+    if [ ! -d "$PLUGIN_DIR/.git" ]; then
+        mkdir -p "$(dirname "$PLUGIN_DIR")"
+        git clone "$PLUGIN_REPO" "$PLUGIN_DIR"
+    fi
+
+    ensure_tmux_conf_line "PickleHik3/termux-launcher-tmux" \
+        "set -g @plugin 'PickleHik3/termux-launcher-tmux'"
+    ensure_tmux_conf_line "plugins/tpm/tpm" \
+        "run '$TPM_DIR/tpm'"
+
+    log "tmux theme setup complete."
+    log "  TPM: $TPM_DIR"
+    log "  Plugin: $PLUGIN_DIR"
+    log "  Config: $TMUX_CONF"
+
+    if command -v tmux >/dev/null 2>&1 && tmux list-sessions >/dev/null 2>&1; then
+        tmux source-file "$TMUX_CONF" || warn "tmux could not reload $TMUX_CONF"
+    fi
+}
+
+install_btop_helper() {
+    log
+    log "Setting up btop through Shizuku rish..."
+    install_missing_packages curl:curl tar:tar
+    require_cmd curl
+
+    if ! command -v rish >/dev/null 2>&1; then
+        warn "rish is not available in PATH."
+        warn "Set up Shizuku rish first, then run this script again for btop."
+        return 1
+    fi
+
+    if ! command -v launcherctl >/dev/null 2>&1; then
+        warn "launcherctl is not available yet."
+        warn "Open Termux Launcher once, then run this script again for btop."
+        return 1
+    fi
+
+    curl -fsSL "$RAW_BASE/setup-btop-rish" -o "$BTOP_SETUP"
+    chmod 700 "$BTOP_SETUP"
+    "$BTOP_SETUP"
+}
+
+print_extra_keys() {
+    cat <<'EOF'
+
+Optional one-row Extra Keys layout for ~/.termux/termux.properties:
+
+extra-keys = [[ \
+  {macro: "CTRL b F12", display: "♼"}, \
+  {macro: "CTRL b h", display: "𝍣", popup: {macro: "CTRL b v", display: "𝍬"}}, \
+  {macro: "CTRL b 1", display: "⓵"}, \
+  {macro: "CTRL b 2", display: "⓶"}, \
+  {macro: "CTRL b 3", display: "⓷"}, \
+  {macro: "CTRL b [", display: "✎"}, \
+  {key: KEYBOARD, popup: PASTE}, \
+  {macro: "CTRL b", display: "㋡"} \
+]]
+
+Optional two-row Extra Keys layout for ~/.termux/termux.properties:
+
+extra-keys = [[ \
+  {macro: "CTRL b h", display: "𝍣"}, \
+  {macro: "CTRL b v", display: "𝍬"}, \
+  {macro: "ALT LEFT", display: "⬸"}, \
+  {macro: "CTRL b c", display: "+"}, \
+  {macro: "ALT RIGHT", display: "⤑"}, \
+  {macro: "CTRL b [", display: "✏"}, \
+  {macro: "CTRL b z", display: "□"}, \
+  {macro: "CTRL b x", display: "×", popup: {macro: "CTRL b k", display: "⊠"}} \
+], [ \
+  {key: ESC, display: "Esc", popup: {macro: "CTRL b F12", display: "⟲"}}, \
+  {key: TAB, display: "TAB"}, \
+  {key: SHIFT, display: "SHFT"}, \
+  {key: CTRL, display: "CTRL"}, \
+  {key: ALT, display: "ALT"}, \
+  {key: LEFT, popup: DOWN}, \
+  {key: RIGHT, popup: UP}, \
+  {key: KEYBOARD, popup: PASTE} \
+]]
+EOF
+}
+
+print_guide() {
+    cat <<'EOF'
+
+Next steps
+  - Start tmux with: tmux
+  - In the Termux Launcher tmux plugin, Alt+e opens the keybind reference.
+  - After editing ~/.termux/termux.properties, run: termux-reload-settings
+  - Also run termux-reload-settings if terminal UI changes feel stale or stuttery.
+  - btop wrappers are named btop-shizuku and mini-btop-shizuku.
+EOF
+    print_extra_keys
+}
+
+main() {
+    welcome
+    selection="$(choose_setup)"
+    case "$selection" in
+        all)
+            install_tmux_plugin
+            install_btop_helper
+            ;;
+        tmux)
+            install_tmux_plugin
+            ;;
+        btop)
+            install_btop_helper
+            ;;
+        exit)
+            exit 0
+            ;;
+    esac
+    print_guide
+}
+
+main "$@"
