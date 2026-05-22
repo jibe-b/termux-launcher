@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.21
+
+### Added
+- Added launcher permission access settings and an accessibility lock prompt.
+- Added a guided optional tmux and Shizuku btop setup helper.
+
+### Fixed
+- Fixed launch failure when Android denies access to the system wallpaper backdrop.
+
 ## 0.2.20
 
 ### Added
