@@ -69,7 +69,7 @@ bind -n M-w run-shell 'tmux display-message "Opening WhatsApp"; launcherctl laun
 
 ## Known Limitations
 
-- When Termux is set as the home launcher and the last terminal shell exits, Android may recreate the activity before Termux can exit its process cleanly.
+- When Termux is set as the home launcher and the last terminal shell exits, Android may recreate the activity before Termux can exit its process cleanly, can be fixed by running 'termux-reload-settings'.
 
 ## Screenshots
 
