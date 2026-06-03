@@ -3,6 +3,7 @@
 ⚠️🤖 this project is entirely vibe coded, it is in very usable state, a couple of passes for security concerns has been done with GPT 5.5 default, does not seem to affect my battery life (nothing phone 2) if you're a dev who like the idea pleaese take this from me ❤️ it started out since i liked TEL so much 🤖⚠️
 
 ❗ this app cannot be installed alongside your existing termux app ❗
+❗ if terminal slows down, run termux-reload-settings ❗
 
 Termux Launcher is a terminal-first Android home launcher inspired by [TEL](https://github.com/t-e-l/tel), built on [termux-app](https://github.com/termux/termux-app), with sixel-capable terminal rendering and a launcher surface integrated into the Termux session.
 
