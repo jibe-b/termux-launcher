@@ -119,6 +119,14 @@ material_colors_ready() {
         [ -s "$HOME/.termux/material-colors.properties" ]
 }
 
+rish_available() {
+    if [ -n "${RISH_BIN:-}" ]; then
+        [ -x "$RISH_BIN" ]
+        return $?
+    fi
+    command -v rish >/dev/null 2>&1
+}
+
 ensure_tmux_conf_line() {
     needle="$1"
     line="$2"
@@ -172,8 +180,8 @@ install_btop_helper() {
     log
     log "Setting up btop through Shizuku rish..."
 
-    if ! command -v rish >/dev/null 2>&1; then
-        warn "rish is not available in PATH."
+    if ! rish_available; then
+        warn "rish is not available in PATH and RISH_BIN is not executable."
         show_rish_help
         return 1
     fi

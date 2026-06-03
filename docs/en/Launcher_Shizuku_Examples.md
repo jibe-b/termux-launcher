@@ -71,7 +71,7 @@ Downloads a helper that installs a Linux `btop` binary into `/data/local/tmp` th
 - `btop-shizuku`
 - `mini-btop-shizuku`
 
-The helper resolves `rish` from `$PATH` by default. Set `RISH_BIN=/path/to/rish` only if you need an explicit path.
+The helper resolves `rish` from `$PATH` by default. Set `RISH_BIN=/path/to/rish` only if you need an explicit path; the generated wrappers keep that resolved path.
 
 This helper does not require Termux Launcher. It only needs working Termux, Shizuku, and `rish`.
 

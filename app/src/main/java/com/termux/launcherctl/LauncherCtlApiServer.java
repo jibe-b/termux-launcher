@@ -788,8 +788,13 @@ public class LauncherCtlApiServer {
             "#!/data/data/com.termux/files/usr/bin/sh\n" +
             "set -eu\n" +
             "cmd=\"${1:-status}\"\n" +
-            "if [ \"$cmd\" = \"update-scripts\" ]; then\n" +
-            "  shift || true\n" +
+            "update_scripts_help=0\n" +
+            "if [ \"$cmd\" = \"help\" ] && [ \"${2:-}\" = \"update-scripts\" ]; then\n" +
+            "  update_scripts_help=1\n" +
+            "  shift 2 || true\n" +
+            "fi\n" +
+            "if [ \"$cmd\" = \"update-scripts\" ] || [ \"$update_scripts_help\" = \"1\" ]; then\n" +
+            "  [ \"$update_scripts_help\" = \"1\" ] || shift || true\n" +
             "  command -v curl >/dev/null 2>&1 || { echo \"launcherctl update-scripts: missing required command: curl\" >&2; echo \"install it with: pkg install curl\" >&2; exit 1; }\n" +
             "  raw_root=\"${TERMUX_LAUNCHER_RAW_ROOT:-https://raw.githubusercontent.com/PickleHik3/termux-launcher/dev}\"\n" +
             "  tmp_dir=\"${TMPDIR:-$HOME/.tmp}/launcherctl-update-scripts.$$\"\n" +
@@ -797,7 +802,11 @@ public class LauncherCtlApiServer {
             "  trap 'rm -rf \"$tmp_dir\"' EXIT HUP INT TERM\n" +
             "  curl -fsSL \"$raw_root/resources/bin/launcherctl\" -o \"$tmp_dir/launcherctl\" || exit 1\n" +
             "  sh -n \"$tmp_dir/launcherctl\" || exit 1\n" +
-            "  sh \"$tmp_dir/launcherctl\" update-scripts \"$@\"\n" +
+            "  if [ \"$update_scripts_help\" = \"1\" ]; then\n" +
+            "    sh \"$tmp_dir/launcherctl\" update-scripts --help \"$@\"\n" +
+            "  else\n" +
+            "    sh \"$tmp_dir/launcherctl\" update-scripts \"$@\"\n" +
+            "  fi\n" +
             "  exit $?\n" +
             "fi\n" +
             "LAUNCHERCTL_DIR=\"$HOME/.launcherctl\"\n" +

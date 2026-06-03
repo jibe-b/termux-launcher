@@ -70,6 +70,12 @@ rish_exec() {
     "$RISH_BIN" -c "$1"
 }
 
+shell_quote() {
+    printf "'"
+    printf '%s' "$1" | sed "s/'/'\\\\''/g"
+    printf "'"
+}
+
 candidate_assets() {
     arch="$(uname -m 2>/dev/null || echo unknown)"
     case "$arch" in
@@ -222,13 +228,14 @@ install_remote() {
 
 install_wrappers() {
     mkdir -p "$PREFIX_DIR/bin"
-    cat > "$PREFIX_DIR/bin/btop-shizuku" <<'WRAP'
+    rish_quoted="$(shell_quote "$RISH_BIN")"
+    cat > "$PREFIX_DIR/bin/btop-shizuku" <<WRAP
 #!/data/data/com.termux/files/usr/bin/sh
-exec rish -c "XDG_CONFIG_HOME=/data/local/tmp/btop-config /data/local/tmp/btop/btop --force-utf"
+exec $rish_quoted -c "XDG_CONFIG_HOME=/data/local/tmp/btop-config /data/local/tmp/btop/btop --force-utf"
 WRAP
-    cat > "$PREFIX_DIR/bin/mini-btop-shizuku" <<'WRAP'
+    cat > "$PREFIX_DIR/bin/mini-btop-shizuku" <<WRAP
 #!/data/data/com.termux/files/usr/bin/sh
-exec rish -c "XDG_CONFIG_HOME=/data/local/tmp/btop-mini /data/local/tmp/btop/btop --force-utf"
+exec $rish_quoted -c "XDG_CONFIG_HOME=/data/local/tmp/btop-mini /data/local/tmp/btop/btop --force-utf"
 WRAP
     chmod 755 "$PREFIX_DIR/bin/btop-shizuku" "$PREFIX_DIR/bin/mini-btop-shizuku"
 }
