@@ -176,7 +176,7 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
 
     @NonNull
     private Contents contents(@NonNull String text) {
-        return new Contents(Collections.singletonList(new Content.Text(text)));
+        return Contents.Companion.of(text);
     }
 
     @NonNull
