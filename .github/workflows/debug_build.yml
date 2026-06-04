@@ -28,6 +28,18 @@ jobs:
       - name: Setup Gradle cache
         uses: gradle/actions/setup-gradle@v4
 
+      - name: Run unit tests
+        shell: bash {0}
+        env:
+          GRADLE_OPTS: >-
+            -Dorg.gradle.internal.http.connectionTimeout=120000
+            -Dorg.gradle.internal.http.socketTimeout=120000
+          GRADLE_MAX_ATTEMPTS: "5"
+          GRADLE_RETRY_SLEEP_SECONDS: "20"
+          GRADLE_REFRESH_FROM_ATTEMPT: "2"
+        run: |
+          ./.github/scripts/gradle_retry.sh ./gradlew --no-daemon testDebugUnitTest
+
       - name: Build APKs
         shell: bash {0}
         env:
