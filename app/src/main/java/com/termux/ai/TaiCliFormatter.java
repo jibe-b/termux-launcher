@@ -35,6 +35,9 @@ public final class TaiCliFormatter {
                 case "unload":
                     return formatUnload(data);
                 case "chat":
+                    if (data.has("commands") || "terminal_helper".equals(data.optString("profile", ""))) {
+                        return formatPlan(data, "TAI plan");
+                    }
                     return formatChat(data);
                 case "plan":
                 case "build":
