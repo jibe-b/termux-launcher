@@ -2,7 +2,7 @@
 
 TAI is the native local AI assistant foundation for Termux Launcher. It is designed to run in the Android app process and expose capabilities to Termux shells through the existing authenticated `launcherctl` local bridge.
 
-This first version is intentionally a foundation build. It adds settings, model registry, authenticated API routes, shell helpers, safety planners, and documentation. Local model inference is still stubbed behind `TaiRuntime` so LiteRT-LM or another Android-side runtime can be added without changing the shell/API surface.
+This implementation is phased. It adds settings, model registry, authenticated API routes, shell helpers, safety planners, foreground model downloads, and a LiteRT-LM runtime adapter behind `TaiRuntime` so the shell/API surface stays stable as runtime features expand.
 
 ## Model Roles
 
@@ -14,7 +14,7 @@ TAI starts with these default role assignments:
 
 These are defaults only. Open Settings -> TAI / Termux AI to change role assignments.
 
-TAI does not bundle model files in the APK. Downloads and imports must be explicit user actions, with license/terms awareness for gated or restricted models. Hugging Face tokens are not bundled.
+TAI does not bundle model files in the APK. Downloads and imports must be explicit user actions, with license/terms awareness for gated or restricted models. Hugging Face tokens are never bundled; an optional user token can be saved in app-private settings for Hugging Face downloads.
 
 ## Runtime Defaults
 
@@ -82,7 +82,7 @@ Implemented foundation endpoints:
 - `POST /v1/ai/prompt-lab/run`
 - `POST /v1/chat/completions`
 
-Model import and download registry persistence is implemented. The real model runtime is still stubbed, so loading a downloaded/imported model records runtime intent but does not run inference yet.
+Model import and download registry persistence is implemented. Downloaded or imported `.litertlm` models can be loaded through the Android-side LiteRT-LM adapter on supported 64-bit devices.
 
 ## Safety Policy
 
@@ -127,19 +127,19 @@ tai downloads
 
 Import registers a readable local file path. It does not copy the file into app-private storage yet.
 
-Download starts a background app-process transfer into app-private storage under `files/tai/models/`. It requires:
+Download starts a foreground app-process transfer into app-private storage under `files/tai/models/`. Settings shows progress while the page is open, and Android shows a progress notification while the transfer runs. Downloads require:
 
 - an explicit HTTPS URL
 - an explicit model id
 - `--accept-terms`, meaning you reviewed the provider license/terms yourself
 
-TAI does not bundle provider tokens. Do not put Hugging Face or other private tokens in shell history. Gated model support needs a future UI/token-handling flow.
+For gated Hugging Face models, first accept the provider terms on Hugging Face, create a read token, and save it in Settings -> TAI / Termux AI -> Hugging Face token. TAI sends that token only as a Bearer token to Hugging Face download URLs. Do not put Hugging Face or other private tokens in shell history.
 
 ## Current Limitations / TODO
 
-- Replace `StubTaiRuntime` with LiteRT-LM or another Android-side local runtime.
+- Expand the LiteRT-LM runtime adapter with streaming, benchmark counters, multimodal prompts, and tool-calling integration.
 - Add copy-into-private-storage import mode and UI file picker.
-- Add explicit model download/import UI with safer license/terms and token handling.
+- Add pause/cancel/retry controls for foreground downloads.
 - Add streaming/SSE responses.
 - Add image input and audio scribe support for capable models.
 - Implement safe Android-side flashlight/device action execution.

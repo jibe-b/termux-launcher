@@ -1,6 +1,10 @@
 package com.termux.ai;
 
+import android.content.Context;
+import android.content.Intent;
+
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -14,9 +18,15 @@ import java.net.URL;
 import java.util.LinkedHashSet;
 
 public final class TaiModelDownloader {
+    public interface ProgressCallback {
+        void onProgress(@NonNull JSONObject transfer);
+    }
+
+    private final Context appContext;
     private final TaiModelStore store;
 
-    public TaiModelDownloader(@NonNull TaiModelStore store) {
+    public TaiModelDownloader(@NonNull Context context, @NonNull TaiModelStore store) {
+        appContext = context.getApplicationContext();
         this.store = store;
     }
 
@@ -26,7 +36,8 @@ public final class TaiModelDownloader {
         @NonNull String url,
         @NonNull String displayName,
         @NonNull String license,
-        @NonNull LinkedHashSet<String> capabilities
+        @NonNull LinkedHashSet<String> capabilities,
+        @Nullable String authToken
     ) throws JSONException {
         String safeModelId = sanitize(modelId);
         if (safeModelId.isEmpty()) return error(400, "bad_request", "Missing model id");
@@ -38,9 +49,21 @@ public final class TaiModelDownloader {
         JSONObject transfer = transfer(transferId, safeModelId, url, output.getAbsolutePath(), "queued", 0L, 0L, "");
         store.upsertDownload(transfer);
 
-        Thread thread = new Thread(() -> runDownload(transferId, safeModelId, url, output, displayName, license, capabilities), "tai-model-download");
-        thread.setDaemon(true);
-        thread.start();
+        Intent intent = new Intent(appContext, TaiModelDownloadService.class);
+        intent.setAction(TaiModelDownloadService.ACTION_DOWNLOAD);
+        intent.putExtra(TaiModelDownloadService.EXTRA_TRANSFER_ID, transferId);
+        intent.putExtra(TaiModelDownloadService.EXTRA_MODEL_ID, safeModelId);
+        intent.putExtra(TaiModelDownloadService.EXTRA_URL, url);
+        intent.putExtra(TaiModelDownloadService.EXTRA_OUTPUT_PATH, output.getAbsolutePath());
+        intent.putExtra(TaiModelDownloadService.EXTRA_DISPLAY_NAME, displayName);
+        intent.putExtra(TaiModelDownloadService.EXTRA_LICENSE, license);
+        intent.putExtra(TaiModelDownloadService.EXTRA_CAPABILITIES, capabilities.toArray(new String[0]));
+        intent.putExtra(TaiModelDownloadService.EXTRA_AUTH_TOKEN, authToken == null ? "" : authToken);
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            appContext.startForegroundService(intent);
+        } else {
+            appContext.startService(intent);
+        }
 
         JSONObject data = new JSONObject();
         data.put("ok", true);
@@ -50,14 +73,16 @@ public final class TaiModelDownloader {
         return data;
     }
 
-    private void runDownload(
+    public void runDownload(
         String transferId,
         String modelId,
         String url,
         File output,
         String displayName,
         String license,
-        LinkedHashSet<String> capabilities
+        LinkedHashSet<String> capabilities,
+        @Nullable String authToken,
+        @Nullable ProgressCallback callback
     ) {
         long bytesRead = 0L;
         long contentLength = 0L;
@@ -71,12 +96,15 @@ public final class TaiModelDownloader {
             connection.setConnectTimeout(15_000);
             connection.setReadTimeout(30_000);
             connection.setInstanceFollowRedirects(true);
+            if (shouldAttachBearerToken(url, authToken)) {
+                connection.setRequestProperty("Authorization", "Bearer " + authToken.trim());
+            }
             int status = connection.getResponseCode();
             if (status < 200 || status >= 300) {
                 throw new IllegalStateException("Download failed with HTTP " + status);
             }
             contentLength = connection.getHeaderFieldLong("Content-Length", -1L);
-            store.upsertDownload(transfer(transferId, modelId, url, output.getAbsolutePath(), "running", 0L, contentLength, ""));
+            persist(transfer(transferId, modelId, url, output.getAbsolutePath(), "running", 0L, contentLength, ""), callback);
 
             try (InputStream input = new BufferedInputStream(connection.getInputStream());
                  FileOutputStream outputStream = new FileOutputStream(output, false)) {
@@ -87,7 +115,7 @@ public final class TaiModelDownloader {
                     outputStream.write(buffer, 0, read);
                     bytesRead += read;
                     if (bytesRead - lastPersisted >= 1024L * 1024L) {
-                        store.upsertDownload(transfer(transferId, modelId, url, output.getAbsolutePath(), "running", bytesRead, contentLength, ""));
+                        persist(transfer(transferId, modelId, url, output.getAbsolutePath(), "running", bytesRead, contentLength, ""), callback);
                         lastPersisted = bytesRead;
                     }
                 }
@@ -109,13 +137,24 @@ public final class TaiModelDownloader {
                 false
             );
             store.upsertUserModel(spec);
-            store.upsertDownload(transfer(transferId, modelId, url, output.getAbsolutePath(), "complete", output.length(), output.length(), ""));
+            persist(transfer(transferId, modelId, url, output.getAbsolutePath(), "complete", output.length(), output.length(), ""), callback);
         } catch (Exception e) {
             try {
-                store.upsertDownload(transfer(transferId, modelId, url, output.getAbsolutePath(), "failed", bytesRead, contentLength, e.getMessage()));
+                persist(transfer(transferId, modelId, url, output.getAbsolutePath(), "failed", bytesRead, contentLength, e.getMessage()), callback);
             } catch (JSONException ignored) {
             }
         }
+    }
+
+    private void persist(@NonNull JSONObject transfer, @Nullable ProgressCallback callback) {
+        store.upsertDownload(transfer);
+        if (callback != null) callback.onProgress(transfer);
+    }
+
+    private boolean shouldAttachBearerToken(@NonNull String url, @Nullable String authToken) {
+        return authToken != null
+            && !authToken.trim().isEmpty()
+            && (url.startsWith("https://huggingface.co/") || url.startsWith("https://www.huggingface.co/"));
     }
 
     @NonNull

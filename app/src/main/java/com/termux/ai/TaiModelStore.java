@@ -115,6 +115,22 @@ public final class TaiModelStore {
         preferences.edit().putString(KEY_DOWNLOADS, next.toString()).apply();
     }
 
+    public synchronized void updateDownloadStatus(@NonNull String transferId, @NonNull String status, @NonNull String error) {
+        JSONArray current = getDownloads();
+        for (int i = 0; i < current.length(); i++) {
+            JSONObject item = current.optJSONObject(i);
+            if (item == null || !transferId.equals(item.optString("id", ""))) continue;
+            try {
+                item.put("status", status);
+                item.put("error", error);
+                item.put("updatedAtMs", System.currentTimeMillis());
+            } catch (JSONException ignored) {
+            }
+            break;
+        }
+        preferences.edit().putString(KEY_DOWNLOADS, current.toString()).apply();
+    }
+
     @NonNull
     private JSONArray parseArray(@Nullable String raw) {
         if (raw == null || raw.trim().isEmpty()) return new JSONArray();

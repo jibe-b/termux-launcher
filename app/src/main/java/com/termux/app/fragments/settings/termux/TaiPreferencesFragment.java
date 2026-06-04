@@ -4,9 +4,12 @@ import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.widget.Toast;
 
 import androidx.annotation.Keep;
+import androidx.preference.EditTextPreference;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceCategory;
 import androidx.preference.PreferenceFragmentCompat;
@@ -30,6 +33,19 @@ import java.util.Map;
 @Keep
 public class TaiPreferencesFragment extends PreferenceFragmentCompat {
     private static final String MODEL_ROW_PREFIX = "tai_model_row_";
+    private final Handler handler = new Handler(Looper.getMainLooper());
+    private final Runnable refreshDownloadsRunnable = new Runnable() {
+        @Override
+        public void run() {
+            Context context = getContext();
+            if (context != null) {
+                populateModelRows(context);
+                if (hasActiveDownloads(context)) {
+                    handler.postDelayed(this, 2000L);
+                }
+            }
+        }
+    };
 
     @Override
     public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
@@ -41,6 +57,7 @@ public class TaiPreferencesFragment extends PreferenceFragmentCompat {
         setPreferencesFromResource(R.xml.termux_ai_preferences, rootKey);
         setStaticSummary("tai_model_privacy_notice", R.string.termux_ai_model_privacy_notice_summary);
         setStaticSummary("tai_notification_privacy_notice", R.string.termux_ai_notification_privacy_notice_summary);
+        configureHuggingFaceToken();
         configureModelManager(context);
     }
 
@@ -50,7 +67,16 @@ public class TaiPreferencesFragment extends PreferenceFragmentCompat {
         Context context = getContext();
         if (context != null) {
             populateModelRows(context);
+            if (hasActiveDownloads(context)) {
+                handler.postDelayed(refreshDownloadsRunnable, 2000L);
+            }
         }
+    }
+
+    @Override
+    public void onPause() {
+        handler.removeCallbacks(refreshDownloadsRunnable);
+        super.onPause();
     }
 
     private void setStaticSummary(String key, int summaryResId) {
@@ -71,6 +97,21 @@ public class TaiPreferencesFragment extends PreferenceFragmentCompat {
         populateModelRows(context);
     }
 
+    private void configureHuggingFaceToken() {
+        EditTextPreference token = findPreference(TaiSettings.KEY_HUGGINGFACE_TOKEN);
+        if (token == null) return;
+        token.setOnBindEditTextListener(editText -> {
+            editText.setSingleLine(true);
+            editText.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        });
+        token.setSummaryProvider(preference -> {
+            String value = ((EditTextPreference) preference).getText();
+            return value == null || value.trim().isEmpty()
+                ? getString(R.string.termux_ai_huggingface_token_summary)
+                : getString(R.string.termux_ai_huggingface_token_set_summary);
+        });
+    }
+
     private void populateModelRows(Context context) {
         PreferenceCategory category = findPreference("tai_models_category");
         if (category == null) return;
@@ -87,10 +128,12 @@ public class TaiPreferencesFragment extends PreferenceFragmentCompat {
         JSONArray downloads = store.getDownloads();
 
         for (TaiModelCatalog.CatalogEntry entry : TaiModelCatalog.entries().values()) {
-            Preference row = new Preference(context);
+            TaiModelPreference row = new TaiModelPreference(context);
+            JSONObject download = findDownload(downloads, entry.modelId);
             row.setKey(MODEL_ROW_PREFIX + entry.modelId);
             row.setTitle(entry.displayName);
-            row.setSummary(buildModelSummary(entry, installedModels.get(entry.modelId), findDownload(downloads, entry.modelId)));
+            row.setSummary(buildModelSummary(entry, installedModels.get(entry.modelId), download));
+            configureProgress(row, download);
             row.setPersistent(false);
             row.setOnPreferenceClickListener(preference -> {
                 showModelActions(context, entry, installedModels.get(entry.modelId), findDownload(new TaiModelStore(context).getDownloads(), entry.modelId));
@@ -98,6 +141,18 @@ public class TaiPreferencesFragment extends PreferenceFragmentCompat {
             });
             category.addPreference(row);
         }
+    }
+
+    private void configureProgress(TaiModelPreference row, JSONObject download) {
+        if (download == null) {
+            row.setDownloadProgress(false, false, 0);
+            return;
+        }
+        String status = download.optString("status", "");
+        boolean active = "queued".equals(status) || "running".equals(status);
+        long bytesRead = download.optLong("bytesRead", 0L);
+        long totalBytes = download.optLong("totalBytes", 0L);
+        row.setDownloadProgress(active, totalBytes <= 0L, totalBytes > 0L ? (int) (bytesRead * 10000L / totalBytes) : 0);
     }
 
     private String buildModelSummary(TaiModelCatalog.CatalogEntry entry, TaiModelSpec installed, JSONObject download) {
@@ -141,7 +196,8 @@ public class TaiPreferencesFragment extends PreferenceFragmentCompat {
             new MaterialAlertDialogBuilder(context)
                 .setTitle(R.string.termux_ai_model_gated_title)
                 .setMessage(context.getString(R.string.termux_ai_model_gated_message, entry.displayName))
-                .setPositiveButton(R.string.termux_ai_model_open_provider, (dialog, which) -> openUrl(context, entry.providerPageUrl))
+                .setPositiveButton(R.string.termux_ai_model_download_start, (dialog, which) -> startCatalogDownload(context, entry))
+                .setNeutralButton(R.string.termux_ai_model_open_provider, (dialog, which) -> openUrl(context, entry.providerPageUrl))
                 .setNegativeButton(android.R.string.cancel, null)
                 .show();
             return;
@@ -161,6 +217,8 @@ public class TaiPreferencesFragment extends PreferenceFragmentCompat {
             JSONObject result = TaiManager.getInstance(context).downloadCatalogModel(entry.modelId);
             if (result.optBoolean("ok", false)) {
                 Toast.makeText(context, R.string.termux_ai_model_download_started, Toast.LENGTH_SHORT).show();
+                handler.removeCallbacks(refreshDownloadsRunnable);
+                handler.postDelayed(refreshDownloadsRunnable, 1000L);
             } else {
                 Toast.makeText(context, result.optString("message", context.getString(R.string.termux_ai_model_action_failed)), Toast.LENGTH_LONG).show();
             }
@@ -193,6 +251,17 @@ public class TaiPreferencesFragment extends PreferenceFragmentCompat {
             }
         }
         return null;
+    }
+
+    private boolean hasActiveDownloads(Context context) {
+        JSONArray downloads = new TaiModelStore(context).getDownloads();
+        for (int i = 0; i < downloads.length(); i++) {
+            JSONObject item = downloads.optJSONObject(i);
+            if (item == null) continue;
+            String status = item.optString("status", "");
+            if ("queued".equals(status) || "running".equals(status)) return true;
+        }
+        return false;
     }
 
     private String formatPercent(long value, long total) {

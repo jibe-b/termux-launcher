@@ -26,6 +26,7 @@ public final class TaiSettings {
     public static final String KEY_SPECULATIVE_DECODING = "tai_speculative_decoding";
     public static final String KEY_UNATTENDED_MODE = "tai_unattended_mode";
     public static final String KEY_IDLE_UNLOAD_MINUTES = "tai_idle_unload_minutes";
+    public static final String KEY_HUGGINGFACE_TOKEN = "tai_huggingface_token";
 
     private static final String AUTO = "auto";
 
@@ -77,6 +78,11 @@ public final class TaiSettings {
     }
 
     @NonNull
+    public String getHuggingFaceToken() {
+        return preferences.getString(KEY_HUGGINGFACE_TOKEN, "");
+    }
+
+    @NonNull
     public String getGeneralSystemPrompt() {
         return preferences.getString(KEY_SYSTEM_PROMPT_GENERAL,
             "You are TAI, Termux AI, a local assistant integrated with Termux Launcher. Prefer safe, reviewable actions.");
@@ -104,6 +110,7 @@ public final class TaiSettings {
         json.put("runtimeOptions", getRuntimeOptions().toJson());
         json.put("unattendedMode", isUnattendedModeEnabled());
         json.put("idleUnloadMinutes", getIdleUnloadMinutes());
+        json.put("huggingFaceTokenConfigured", !getHuggingFaceToken().trim().isEmpty());
         json.put("autoModelDefaultState", "nullable overrides are only passed when user configured");
         return json;
     }

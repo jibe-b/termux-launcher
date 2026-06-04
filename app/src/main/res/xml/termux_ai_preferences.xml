@@ -17,6 +17,11 @@
     <PreferenceCategory
         app:key="tai_models_category"
         app:title="@string/termux_ai_models_header">
+        <EditTextPreference
+            app:key="tai_huggingface_token"
+            app:title="@string/termux_ai_huggingface_token_title"
+            app:dialogTitle="@string/termux_ai_huggingface_token_title"
+            app:summary="@string/termux_ai_huggingface_token_summary"/>
         <Preference
             app:key="tai_models_refresh"
             app:title="@string/termux_ai_models_refresh_title"

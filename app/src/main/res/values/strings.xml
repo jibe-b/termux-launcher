@@ -249,6 +249,9 @@
         <string name="termux_ai_preferences_summary">Local AI roles, runtime defaults, prompts, and safety settings</string>
         <string name="termux_ai_overview_header">Overview</string>
         <string name="termux_ai_models_header">Models</string>
+        <string name="termux_ai_huggingface_token_title">Hugging Face token</string>
+        <string name="termux_ai_huggingface_token_summary">Optional. Stored in app-private preferences and used only for Hugging Face model downloads that need authentication.</string>
+        <string name="termux_ai_huggingface_token_set_summary">Token saved. It will be sent as a Bearer token only to Hugging Face download URLs.</string>
         <string name="termux_ai_models_refresh_title">Refresh model status</string>
         <string name="termux_ai_models_refresh_summary">Update installed model and download progress rows</string>
         <string name="termux_ai_model_download_title">Download %1$s</string>
@@ -258,8 +261,9 @@
         <string name="termux_ai_model_delete_message">Remove the downloaded or imported TAI model entry and any app-private downloaded files for this model.</string>
         <string name="termux_ai_model_delete_action">Delete</string>
         <string name="termux_ai_model_gated_title">Gated model</string>
-        <string name="termux_ai_model_gated_message">%1$s requires Hugging Face login/license acceptance. TAI does not support authenticated downloads yet. Open the provider page to review access requirements.</string>
+        <string name="termux_ai_model_gated_message">%1$s requires Hugging Face login/license acceptance. Save a Hugging Face token here after accepting the model terms, then start the download.</string>
         <string name="termux_ai_model_open_provider">Open provider page</string>
+        <string name="termux_ai_model_missing_token">Save a Hugging Face token first, after accepting the provider terms.</string>
         <string name="termux_ai_model_download_started">Model download started</string>
         <string name="termux_ai_model_deleted">Model entry deleted</string>
         <string name="termux_ai_model_delete_missing">No downloaded model entry found</string>
@@ -292,7 +296,7 @@
         <string name="termux_ai_general_prompt_title">General chat system prompt</string>
         <string name="termux_ai_terminal_prompt_title">Terminal helper system prompt</string>
         <string name="termux_ai_stub_status_title">Runtime status</string>
-        <string name="termux_ai_stub_status_summary">Foundation build: settings, model registry, local API, shell helpers, and safety planners are active. LiteRT-LM inference is TODO.</string>
+        <string name="termux_ai_stub_status_summary">LiteRT-LM text inference is enabled for downloaded or imported .litertlm models on supported 64-bit devices. Multimodal input, streaming UI, and tool-calling integration are still TODO.</string>
 
             <string name="termux_privileged_access_overview_title">Overview</string>
             <string name="termux_privileged_backend_status_title">Backend Status</string>

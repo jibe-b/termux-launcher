@@ -32,8 +32,8 @@ public final class TaiManager {
         settings = new TaiSettings(appContext);
         registry = new TaiModelRegistry();
         modelStore = new TaiModelStore(appContext);
-        modelDownloader = new TaiModelDownloader(modelStore);
-        runtime = new StubTaiRuntime();
+        modelDownloader = new TaiModelDownloader(appContext, modelStore);
+        runtime = new LiteRtTaiRuntime(appContext);
         shellPlanner = new TaiShellPlanner();
         notificationSummarizer = new TaiNotificationSummarizer();
         actionRouter = new TaiActionRouter();
@@ -106,7 +106,7 @@ public final class TaiManager {
         data.put("model", spec.toJson());
         data.put("requiresUserApprovedPath", true);
         data.put("copiedIntoAppPrivateStorage", false);
-        data.put("message", "Model path registered. The runtime is still stubbed until LiteRT-LM integration is added.");
+        data.put("message", "Model path registered. Load it with TAI to run through the Android-side LiteRT-LM runtime when the device ABI and model format are supported.");
         return data;
     }
 
@@ -129,7 +129,8 @@ public final class TaiManager {
             url,
             request.optString("displayName", modelId),
             request.optString("license", "User accepted provider terms externally"),
-            capabilitiesFromRequest(request)
+            capabilitiesFromRequest(request),
+            request.optString("huggingFaceToken", settings.getHuggingFaceToken())
         );
         data.put("downloadsRequireExplicitUserAction", true);
         data.put("huggingFaceTokenBundled", false);
@@ -141,13 +142,16 @@ public final class TaiManager {
         TaiModelCatalog.CatalogEntry entry = TaiModelCatalog.get(modelId);
         if (entry == null) return error(404, "model_not_found", "Unknown catalog model: " + modelId);
         if (entry.gated) {
-            JSONObject error = error(403, "gated_model_requires_auth", "This model is gated on Hugging Face and needs authenticated download support.");
-            error.put("providerPageUrl", entry.providerPageUrl);
-            error.put("downloadUrl", entry.downloadUrl);
-            error.put("huggingFaceTokenBundled", false);
-            return error;
+            String token = settings.getHuggingFaceToken();
+            if (token.trim().isEmpty()) {
+                JSONObject error = error(403, "gated_model_requires_auth", "This model is gated on Hugging Face. Save a Hugging Face token after accepting the model terms.");
+                error.put("providerPageUrl", entry.providerPageUrl);
+                error.put("downloadUrl", entry.downloadUrl);
+                error.put("huggingFaceTokenBundled", false);
+                return error;
+            }
         }
-        return modelDownloader.startDownload(entry.modelId, entry.downloadUrl, entry.displayName, entry.license, entry.capabilities);
+        return modelDownloader.startDownload(entry.modelId, entry.downloadUrl, entry.displayName, entry.license, entry.capabilities, settings.getHuggingFaceToken());
     }
 
     @NonNull
@@ -175,8 +179,8 @@ public final class TaiManager {
     public JSONObject loadModel(@NonNull String body) throws JSONException {
         JSONObject request = parseBody(body);
         String modelId = request.optString("model", request.optString("modelId", settings.getDefaultAssistantModel()));
-        TaiModelSpec spec = registry.getModel(modelId);
-        if (spec == null) spec = modelStore.getUserModel(modelId);
+        TaiModelSpec spec = modelStore.getUserModel(modelId);
+        if (spec == null) spec = registry.getModel(modelId);
         if (spec == null) return error(404, "model_not_found", "Unknown TAI model: " + modelId);
         return runtime.load(spec, settings.getRuntimeOptions());
     }
@@ -339,8 +343,8 @@ public final class TaiManager {
     @NonNull
     private JSONArray currentLimitations() {
         JSONArray limitations = new JSONArray();
-        limitations.put("LiteRT-LM inference is not integrated yet.");
-        limitations.put("Model import/download registry persistence exists, but runtime loading is still stubbed.");
+        limitations.put("LiteRT-LM text inference is integrated for downloaded/imported .litertlm models on supported 64-bit ABIs.");
+        limitations.put("Streaming, token-by-token UI updates, and benchmark counters are TODO.");
         limitations.put("Image input, audio scribe, streaming, and monitored build execution are TODO.");
         limitations.put("TAI command execution is plan-only unless a future confirmed execution mode is added.");
         return limitations;
