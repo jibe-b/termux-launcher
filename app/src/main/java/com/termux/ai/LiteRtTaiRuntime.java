@@ -138,6 +138,10 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
 
     private Engine createAndInitializeEngine(@NonNull String modelPath, @NonNull TaiRuntimeOptions options, @NonNull Backend backend) {
         backendName = backend.getName();
+        File cacheDir = new File(appContext.getCacheDir(), "tai-litertlm");
+        if (!cacheDir.isDirectory() && !cacheDir.mkdirs() && !cacheDir.isDirectory()) {
+            throw new IllegalStateException("Unable to create LiteRT-LM cache directory: " + cacheDir.getAbsolutePath());
+        }
         EngineConfig config = new EngineConfig(
             modelPath,
             backend,
@@ -145,7 +149,7 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
             null,
             options.maxTokens,
             null,
-            new File(appContext.getCacheDir(), "tai-litertlm").getAbsolutePath()
+            cacheDir.getAbsolutePath()
         );
         Engine loadedEngine = new Engine(config);
         loadedEngine.initialize();

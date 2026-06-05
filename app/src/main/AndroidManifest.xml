@@ -94,6 +94,12 @@
         <uses-native-library
             android:name="libOpenCL.so"
             android:required="false" />
+        <uses-native-library
+            android:name="libcdsprpc.so"
+            android:required="false" />
+        <uses-native-library
+            android:name="libedgetpu_litert.so"
+            android:required="false" />
 
         <activity
             android:name=".app.TermuxActivity"
