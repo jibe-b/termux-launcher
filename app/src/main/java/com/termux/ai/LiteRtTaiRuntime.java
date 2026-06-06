@@ -70,6 +70,9 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
     private long lastUsedAtMs;
     private long keepWarmUntilMs;
     private long idleUnloadAtMs;
+    private boolean loading;
+    private boolean loadCancellationRequested;
+    private String loadingModelId;
 
     public LiteRtTaiRuntime(@NonNull Context context) {
         appContext = context.getApplicationContext();
@@ -100,29 +103,30 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
 
     @NonNull
     @Override
-    public synchronized JSONObject load(@NonNull TaiModelSpec modelSpec, @NonNull TaiRuntimeOptions options) throws JSONException {
-        return loadInternalLocked(modelSpec, options, 0);
+    public JSONObject load(@NonNull TaiModelSpec modelSpec, @NonNull TaiRuntimeOptions options) throws JSONException {
+        return loadInternal(modelSpec, options, 0);
     }
 
     @NonNull
     @Override
-    public synchronized JSONObject keepWarm(@NonNull TaiModelSpec modelSpec, @NonNull TaiRuntimeOptions options, int minutes) throws JSONException {
+    public JSONObject keepWarm(@NonNull TaiModelSpec modelSpec, @NonNull TaiRuntimeOptions options, int minutes) throws JSONException {
         int keepWarmMinutes = minutes > 0 ? minutes : DEFAULT_KEEP_WARM_MINUTES;
-        if (engine == null || loadedModelId == null || !loadedModelId.equals(modelSpec.id)) {
-            JSONObject loaded = loadInternalLocked(modelSpec, options, keepWarmMinutes);
-            if (!loaded.optBoolean("ok", false)) return loaded;
-        } else {
-            keepWarmUntilMs = System.currentTimeMillis() + TimeUnit.MINUTES.toMillis(keepWarmMinutes);
-            statusMessage = "Model is warm.";
-            maybeRefreshStateLocked();
-            scheduleIdleUnloadLocked();
+        synchronized (this) {
+            if (!loading && engine != null && modelSpec.id.equals(loadedModelId)) {
+                keepWarmUntilMs = System.currentTimeMillis() + TimeUnit.MINUTES.toMillis(keepWarmMinutes);
+                statusMessage = "Model is warm.";
+                maybeRefreshStateLocked();
+                scheduleIdleUnloadLocked();
+
+                JSONObject data = stateEnvelopeLocked(true);
+                data.put("keepWarm", true);
+                data.put("keepWarmMinutes", keepWarmMinutes);
+                data.put("keepWarmUntilMs", keepWarmUntilMs);
+                return data;
+            }
         }
 
-        JSONObject data = stateEnvelopeLocked(true);
-        data.put("keepWarm", true);
-        data.put("keepWarmMinutes", keepWarmMinutes);
-        data.put("keepWarmUntilMs", keepWarmUntilMs);
-        return data;
+        return loadInternal(modelSpec, options, keepWarmMinutes);
     }
 
     @NonNull
@@ -130,6 +134,17 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
     public synchronized JSONObject unload() throws JSONException {
         if (generating) {
             return error(409, "generation_active", "Cancel the active generation before unloading the LiteRT-LM runtime.");
+        }
+        if (loading) {
+            loadCancellationRequested = true;
+            runtimeState = "stopping";
+            statusMessage = "Cancelling model load. Native initialization will be discarded when it returns.";
+            JSONObject data = stateEnvelopeLocked(true);
+            data.put("unloadedModelId", JSONObject.NULL);
+            data.put("loadingModelId", loadingModelId == null ? JSONObject.NULL : loadingModelId);
+            data.put("loadCancellationRequested", true);
+            data.put("message", statusMessage);
+            return data;
         }
         String previous = loadedModelId;
         closeEngineLocked("LiteRT-LM runtime is unloaded.", "unloaded");
@@ -144,6 +159,16 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
     @NonNull
     @Override
     public synchronized JSONObject cancel() throws JSONException {
+        if (loading) {
+            loadCancellationRequested = true;
+            runtimeState = "stopping";
+            statusMessage = "Cancelling model load. Native initialization will be discarded when it returns.";
+            JSONObject data = stateEnvelopeLocked(true);
+            data.put("cancelled", true);
+            data.put("loadCancellationRequested", true);
+            data.put("message", "Model load cancellation requested.");
+            return data;
+        }
         if (!generating || conversation == null) {
             JSONObject data = stateEnvelopeLocked(true);
             data.put("cancelled", false);
@@ -305,10 +330,7 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
     }
 
     @NonNull
-    private JSONObject loadInternalLocked(@NonNull TaiModelSpec modelSpec, @NonNull TaiRuntimeOptions options, int keepWarmMinutes) throws JSONException {
-        if (generating) {
-            return error(409, "generation_active", "Cancel the active generation before loading another LiteRT-LM model.");
-        }
+    private JSONObject loadInternal(@NonNull TaiModelSpec modelSpec, @NonNull TaiRuntimeOptions options, int keepWarmMinutes) throws JSONException {
         TaiModelProfile profile = TaiModelProfile.forModel(modelSpec);
         TaiDeviceCapabilities deviceCapabilities = TaiDeviceCapabilities.detect(appContext);
         if (!deviceCapabilities.liteRtLmAbiSupported) {
@@ -347,71 +369,117 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
             return error;
         }
 
-        closeEngineLocked("Loading model.", "loading");
-        runtimeState = "loading";
-        statusMessage = "Loading model.";
+        synchronized (this) {
+            if (generating) {
+                return error(409, "generation_active", "Cancel the active generation before loading another LiteRT-LM model.");
+            }
+            if (loading) {
+                return error(409, "load_in_progress", "A LiteRT-LM model is already loading.");
+            }
+            closeEngineLocked("Loading model.", "loading");
+            loading = true;
+            loadCancellationRequested = false;
+            loadingModelId = modelSpec.id;
+            runtimeState = "loading";
+            statusMessage = "Loading " + modelSpec.id + ".";
+        }
+
+        Engine initializedEngine = null;
+        String initializedBackendName = "none";
+        String initializedFallbackReason = "";
         try {
             if (requestedAccelerator == null) {
                 String selectedAccelerator = autoAccelerators.get(0);
                 if ("gpu".equals(selectedAccelerator)) {
                     try {
-                        backendFallbackReason = AUTO_GPU_REASON;
-                        engine = createAndInitializeEngine(modelFile.getAbsolutePath(), options, profile, new Backend.GPU());
+                        throwIfLoadCancellationRequested();
+                        Backend backend = new Backend.GPU();
+                        initializedBackendName = backend.getName();
+                        initializedFallbackReason = AUTO_GPU_REASON;
+                        initializedEngine = createAndInitializeEngine(modelFile.getAbsolutePath(), options, profile, backend);
                     } catch (Exception gpuException) {
-                        closeEngineResourcesLocked();
                         if (!autoAccelerators.contains("cpu")) throw gpuException;
-                        backendFallbackReason = "Auto GPU initialization failed; selected the model's CPU fallback. GPU error: " + gpuException.getMessage();
-                        engine = createAndInitializeEngine(modelFile.getAbsolutePath(), options, profile, new Backend.CPU(null));
+                        throwIfLoadCancellationRequested();
+                        Backend backend = new Backend.CPU(null);
+                        initializedBackendName = backend.getName();
+                        initializedFallbackReason = "Auto GPU initialization failed; selected the model's CPU fallback. GPU error: " + gpuException.getMessage();
+                        initializedEngine = createAndInitializeEngine(modelFile.getAbsolutePath(), options, profile, backend);
                     }
                 } else {
-                    backendFallbackReason = deviceCapabilities.pixel10 && profile.supports("gpu")
+                    throwIfLoadCancellationRequested();
+                    Backend backend = new Backend.CPU(null);
+                    initializedBackendName = backend.getName();
+                    initializedFallbackReason = deviceCapabilities.pixel10 && profile.supports("gpu")
                         ? "Auto selected CPU because Google AI Edge Gallery disables GPU on Pixel 10 devices."
                         : AUTO_MODEL_CPU_REASON;
-                    engine = createAndInitializeEngine(modelFile.getAbsolutePath(), options, profile, new Backend.CPU(null));
+                    initializedEngine = createAndInitializeEngine(modelFile.getAbsolutePath(), options, profile, backend);
                 }
             } else {
-                backendFallbackReason = "";
+                throwIfLoadCancellationRequested();
                 Backend backend = "gpu".equals(requestedAccelerator) ? new Backend.GPU() : new Backend.CPU(null);
-                engine = createAndInitializeEngine(modelFile.getAbsolutePath(), options, profile, backend);
+                initializedBackendName = backend.getName();
+                initializedEngine = createAndInitializeEngine(modelFile.getAbsolutePath(), options, profile, backend);
             }
         } catch (Exception e) {
-            closeEngineResourcesLocked();
-            runtimeState = "failed";
-            statusMessage = "LiteRT-LM load failed: " + e.getMessage();
-            return error(500, "litert_lm_load_failed", statusMessage);
+            synchronized (this) {
+                boolean cancelled = loadCancellationRequested;
+                finishLoadingLocked();
+                runtimeState = cancelled ? "unloaded" : "failed";
+                statusMessage = cancelled
+                    ? "Model load cancelled."
+                    : "LiteRT-LM load failed: " + e.getMessage();
+                return error(cancelled ? 499 : 500,
+                    cancelled ? "model_load_cancelled" : "litert_lm_load_failed", statusMessage);
+            }
         }
 
-        loadedModelId = modelSpec.id;
-        loadedModelPath = modelFile.getAbsolutePath();
-        loadedOptions = options;
-        loadedProfile = profile;
-        loadedDeviceCapabilities = deviceCapabilities;
-        loadedAtMs = System.currentTimeMillis();
-        lastUsedAtMs = loadedAtMs;
-        keepWarmUntilMs = keepWarmMinutes > 0 ? loadedAtMs + TimeUnit.MINUTES.toMillis(keepWarmMinutes) : 0L;
-        statusMessage = keepWarmUntilMs > 0L ? "Model loaded and warm." : "Model loaded.";
-        maybeRefreshStateLocked();
-        scheduleIdleUnloadLocked();
+        synchronized (this) {
+            if (!loadCancellationRequested) {
+                engine = initializedEngine;
+                backendName = initializedBackendName;
+                backendFallbackReason = initializedFallbackReason;
+                loadedModelId = modelSpec.id;
+                loadedModelPath = modelFile.getAbsolutePath();
+                loadedOptions = options;
+                loadedProfile = profile;
+                loadedDeviceCapabilities = deviceCapabilities;
+                loadedAtMs = System.currentTimeMillis();
+                lastUsedAtMs = loadedAtMs;
+                keepWarmUntilMs = keepWarmMinutes > 0 ? loadedAtMs + TimeUnit.MINUTES.toMillis(keepWarmMinutes) : 0L;
+                finishLoadingLocked();
+                statusMessage = keepWarmUntilMs > 0L ? "Model loaded and warm." : "Model loaded.";
+                maybeRefreshStateLocked();
+                scheduleIdleUnloadLocked();
 
-        JSONObject data = stateEnvelopeLocked(true);
-        data.put("loadedModelId", loadedModelId);
-        data.put("backend", backendName);
-        data.put("backendFallbackReason", backendFallbackReason.isEmpty() ? JSONObject.NULL : backendFallbackReason);
-        data.put("modelPath", loadedModelPath);
-        data.put("options", options.toJson());
-        data.put("effectiveOptions", effectiveOptionsJson(options, profile));
-        data.put("modelProfile", profile.toJson());
-        data.put("device", deviceCapabilities.toJson());
-        JSONArray compatibilityWarnings = new JSONArray();
-        String memoryWarning = deviceCapabilities.memoryWarning(profile);
-        if (memoryWarning != null) compatibilityWarnings.put(memoryWarning);
-        data.put("compatibilityWarnings", compatibilityWarnings);
-        if (keepWarmUntilMs > 0L) {
-            data.put("keepWarm", true);
-            data.put("keepWarmMinutes", keepWarmMinutes);
-            data.put("keepWarmUntilMs", keepWarmUntilMs);
+                JSONObject data = stateEnvelopeLocked(true);
+                data.put("loadedModelId", loadedModelId);
+                data.put("backend", backendName);
+                data.put("backendFallbackReason", backendFallbackReason.isEmpty() ? JSONObject.NULL : backendFallbackReason);
+                data.put("modelPath", loadedModelPath);
+                data.put("options", options.toJson());
+                data.put("effectiveOptions", effectiveOptionsJson(options, profile));
+                data.put("modelProfile", profile.toJson());
+                data.put("device", deviceCapabilities.toJson());
+                JSONArray compatibilityWarnings = new JSONArray();
+                String memoryWarning = deviceCapabilities.memoryWarning(profile);
+                if (memoryWarning != null) compatibilityWarnings.put(memoryWarning);
+                data.put("compatibilityWarnings", compatibilityWarnings);
+                if (keepWarmUntilMs > 0L) {
+                    data.put("keepWarm", true);
+                    data.put("keepWarmMinutes", keepWarmMinutes);
+                    data.put("keepWarmUntilMs", keepWarmUntilMs);
+                }
+                return data;
+            }
         }
-        return data;
+
+        closeEngine(initializedEngine);
+        synchronized (this) {
+            finishLoadingLocked();
+            runtimeState = "unloaded";
+            statusMessage = "Model load cancelled.";
+            return error(499, "model_load_cancelled", statusMessage);
+        }
     }
 
     @Nullable
@@ -475,7 +543,6 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         @NonNull Backend backend
     ) {
         applyExperimentalFlags(options, modelPath);
-        backendName = backend.getName();
         String cacheDir = modelPath.startsWith("/data/local/tmp")
             ? appContext.getCacheDir().getAbsolutePath() : null;
         EngineConfig config = new EngineConfig(
@@ -605,6 +672,10 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
     }
 
     private void maybeRefreshStateLocked() {
+        if (loading) {
+            runtimeState = loadCancellationRequested ? "stopping" : "loading";
+            return;
+        }
         if (engine == null) {
             if (!"failed".equals(runtimeState)) runtimeState = "unloaded";
             return;
@@ -649,6 +720,26 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
             }
         }
         engine = null;
+    }
+
+    private void finishLoadingLocked() {
+        loading = false;
+        loadCancellationRequested = false;
+        loadingModelId = null;
+    }
+
+    private synchronized void throwIfLoadCancellationRequested() {
+        if (loadCancellationRequested) {
+            throw new CancellationException("Model load cancelled.");
+        }
+    }
+
+    private void closeEngine(@Nullable Engine engineToClose) {
+        if (engineToClose == null) return;
+        try {
+            engineToClose.close();
+        } catch (Exception ignored) {
+        }
     }
 
     private void closeConversationLocked() {

@@ -249,8 +249,11 @@ public final class TaiCliFormatter {
     @NonNull
     private static String formatUnload(@NonNull JSONObject data) {
         StringBuilder out = new StringBuilder();
-        out.append("Model unloaded\n");
+        out.append(data.optBoolean("loadCancellationRequested", false)
+            ? "Model load cancellation requested\n"
+            : "Model unloaded\n");
         appendValue(out, "Previous model", nullable(data, "unloadedModelId", "none"));
+        appendValue(out, "Loading model", nullable(data, "loadingModelId", ""));
         appendValue(out, "Runtime", data.optString("runtime", ""));
         return out.toString();
     }
@@ -268,7 +271,9 @@ public final class TaiCliFormatter {
     @NonNull
     private static String formatCancel(@NonNull JSONObject data) {
         StringBuilder out = new StringBuilder();
-        out.append(data.optBoolean("cancelled", false) ? "Generation cancel requested\n" : "No active generation\n");
+        out.append(data.optBoolean("loadCancellationRequested", false)
+            ? "Model load cancellation requested\n"
+            : (data.optBoolean("cancelled", false) ? "Generation cancel requested\n" : "No active generation\n"));
         appendValue(out, "Message", data.optString("message", ""));
         JSONObject state = data.optJSONObject("state");
         if (state != null) appendRuntimeState(out, state);

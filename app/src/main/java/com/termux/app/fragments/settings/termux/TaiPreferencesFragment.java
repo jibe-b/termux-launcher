@@ -37,11 +37,18 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 @Keep
 public class TaiPreferencesFragment extends PreferenceFragmentCompat {
     private static final String MODEL_ROW_PREFIX = "tai_model_row_";
     private final Handler handler = new Handler(Looper.getMainLooper());
+    private final ExecutorService runtimeActionExecutor = Executors.newFixedThreadPool(2, runnable -> {
+        Thread thread = new Thread(runnable, "tai-settings-runtime");
+        thread.setDaemon(true);
+        return thread;
+    });
     private final Runnable refreshRuntimeRunnable = new Runnable() {
         @Override
         public void run() {
@@ -84,6 +91,12 @@ public class TaiPreferencesFragment extends PreferenceFragmentCompat {
     public void onPause() {
         handler.removeCallbacks(refreshRuntimeRunnable);
         super.onPause();
+    }
+
+    @Override
+    public void onDestroy() {
+        runtimeActionExecutor.shutdownNow();
+        super.onDestroy();
     }
 
     private void setStaticSummary(String key, int summaryResId) {
@@ -194,10 +207,13 @@ public class TaiPreferencesFragment extends PreferenceFragmentCompat {
             Preference unload = findPreference("tai_runtime_unload");
             boolean activeGeneration = runtime.optBoolean("activeGeneration", false);
             boolean loaded = runtime.optBoolean("loaded", false);
-            if (load != null) load.setEnabled(!activeGeneration);
-            if (keepWarm != null) keepWarm.setEnabled(!activeGeneration);
-            if (cancel != null) cancel.setEnabled(activeGeneration);
-            if (unload != null) unload.setEnabled(loaded && !activeGeneration);
+            String state = runtime.optString("state", "unloaded");
+            boolean loading = "loading".equals(state);
+            boolean stopping = "stopping".equals(state);
+            if (load != null) load.setEnabled(!activeGeneration && !loading && !stopping);
+            if (keepWarm != null) keepWarm.setEnabled(!activeGeneration && !loading && !stopping);
+            if (cancel != null) cancel.setEnabled(activeGeneration || loading);
+            if (unload != null) unload.setEnabled((loaded || loading) && !activeGeneration && !stopping);
         } catch (JSONException e) {
             status.setSummary(R.string.termux_ai_runtime_status_summary);
         }
@@ -270,47 +286,64 @@ public class TaiPreferencesFragment extends PreferenceFragmentCompat {
     }
 
     private void loadDefaultModel(Context context) {
-        try {
-            JSONObject result = TaiManager.getInstance(context).loadModel("{}");
-            toastRuntimeResult(context, result, R.string.termux_ai_model_loaded);
-        } catch (JSONException e) {
-            Toast.makeText(context, R.string.termux_ai_runtime_action_failed, Toast.LENGTH_LONG).show();
-        }
-        refreshTaiPage(context);
+        Context appContext = context.getApplicationContext();
+        runRuntimeAction(
+            () -> TaiManager.getInstance(appContext).loadModel("{}"),
+            R.string.termux_ai_model_loaded);
     }
 
     private void keepWarmDefaultModel(Context context) {
-        try {
-            JSONObject result = TaiManager.getInstance(context).keepWarmRuntime("{}");
-            toastRuntimeResult(context, result, R.string.termux_ai_runtime_keep_warm_started);
-        } catch (JSONException e) {
-            Toast.makeText(context, R.string.termux_ai_runtime_action_failed, Toast.LENGTH_LONG).show();
-        }
-        refreshTaiPage(context);
+        Context appContext = context.getApplicationContext();
+        runRuntimeAction(
+            () -> TaiManager.getInstance(appContext).keepWarmRuntime("{}"),
+            R.string.termux_ai_runtime_keep_warm_started);
     }
 
     private void cancelGeneration(Context context) {
-        try {
-            JSONObject result = TaiManager.getInstance(context).cancelRuntime();
-            toastRuntimeResult(context, result, R.string.termux_ai_runtime_cancel_requested);
-        } catch (JSONException e) {
-            Toast.makeText(context, R.string.termux_ai_runtime_action_failed, Toast.LENGTH_LONG).show();
-        }
-        refreshTaiPage(context);
+        Context appContext = context.getApplicationContext();
+        runRuntimeAction(
+            () -> TaiManager.getInstance(appContext).cancelRuntime(),
+            R.string.termux_ai_runtime_cancel_requested);
     }
 
     private void unloadRuntime(Context context) {
-        try {
-            JSONObject result = TaiManager.getInstance(context).unloadModel();
-            toastRuntimeResult(context, result, R.string.termux_ai_runtime_unloaded);
-        } catch (JSONException e) {
-            Toast.makeText(context, R.string.termux_ai_runtime_action_failed, Toast.LENGTH_LONG).show();
-        }
-        refreshTaiPage(context);
+        Context appContext = context.getApplicationContext();
+        runRuntimeAction(
+            () -> TaiManager.getInstance(appContext).unloadModel(),
+            R.string.termux_ai_runtime_unloaded);
+    }
+
+    private void runRuntimeAction(RuntimeAction action, int successResId) {
+        runtimeActionExecutor.execute(() -> {
+            JSONObject result = null;
+            try {
+                result = action.run();
+            } catch (JSONException | RuntimeException ignored) {
+            }
+            JSONObject finalResult = result;
+            handler.post(() -> {
+                Context currentContext = getContext();
+                if (currentContext == null) return;
+                if (finalResult == null) {
+                    Toast.makeText(currentContext, R.string.termux_ai_runtime_action_failed, Toast.LENGTH_LONG).show();
+                } else {
+                    toastRuntimeResult(currentContext, finalResult, successResId);
+                }
+                refreshTaiPage(currentContext);
+            });
+        });
+    }
+
+    private interface RuntimeAction {
+        JSONObject run() throws JSONException;
     }
 
     private void toastRuntimeResult(Context context, JSONObject result, int successResId) {
-        if (result.optBoolean("ok", false)) {
+        if (result.optBoolean("loadCancellationRequested", false)) {
+            Toast.makeText(context,
+                result.optString("message", context.getString(R.string.termux_ai_runtime_cancel_requested)),
+                Toast.LENGTH_LONG).show();
+        } else if (result.optBoolean("ok", false)) {
             Toast.makeText(context, successResId, Toast.LENGTH_SHORT).show();
         } else {
             Toast.makeText(context, result.optString("message", context.getString(R.string.termux_ai_runtime_action_failed)), Toast.LENGTH_LONG).show();
