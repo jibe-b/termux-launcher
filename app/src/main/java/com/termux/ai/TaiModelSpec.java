@@ -21,6 +21,7 @@ public final class TaiModelSpec {
     public final long sizeBytes;
     public final Set<String> capabilities;
     public final boolean builtInCatalogEntry;
+    @Nullable public final TaiModelProfile runtimeProfile;
 
     public TaiModelSpec(
         @NonNull String id,
@@ -46,6 +47,22 @@ public final class TaiModelSpec {
         @NonNull Set<String> capabilities,
         boolean builtInCatalogEntry
     ) {
+        this(id, displayName, roleHint, source, localPath, license, sizeBytes, capabilities,
+            builtInCatalogEntry, null);
+    }
+
+    public TaiModelSpec(
+        @NonNull String id,
+        @NonNull String displayName,
+        @NonNull String roleHint,
+        @NonNull String source,
+        @Nullable String localPath,
+        @NonNull String license,
+        long sizeBytes,
+        @NonNull Set<String> capabilities,
+        boolean builtInCatalogEntry,
+        @Nullable TaiModelProfile runtimeProfile
+    ) {
         this.id = id;
         this.displayName = displayName;
         this.roleHint = roleHint;
@@ -55,6 +72,7 @@ public final class TaiModelSpec {
         this.sizeBytes = sizeBytes;
         this.capabilities = Collections.unmodifiableSet(new LinkedHashSet<>(capabilities));
         this.builtInCatalogEntry = builtInCatalogEntry;
+        this.runtimeProfile = runtimeProfile;
     }
 
     @NonNull
@@ -68,6 +86,7 @@ public final class TaiModelSpec {
         json.put("license", license);
         json.put("sizeBytes", sizeBytes);
         json.put("builtInCatalogEntry", builtInCatalogEntry);
+        json.put("runtimeProfile", TaiModelProfile.forModel(this).toJson());
         JSONArray capabilityArray = new JSONArray();
         for (String capability : capabilities) {
             capabilityArray.put(capability);
@@ -95,7 +114,8 @@ public final class TaiModelSpec {
             json.optString("license", "User-provided model; license accepted externally"),
             json.optLong("sizeBytes", 0L),
             capabilities,
-            json.optBoolean("builtInCatalogEntry", false)
+            json.optBoolean("builtInCatalogEntry", false),
+            json.optJSONObject("runtimeProfile") == null ? null : TaiModelProfile.fromJson(json.optJSONObject("runtimeProfile"))
         );
     }
 }

@@ -23,6 +23,8 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.termux.R;
 import com.termux.ai.TaiManager;
 import com.termux.ai.TaiModelCatalog;
+import com.termux.ai.TaiModelProfile;
+import com.termux.ai.TaiModelRegistry;
 import com.termux.ai.TaiModelSpec;
 import com.termux.ai.TaiModelStore;
 import com.termux.ai.TaiSettings;
@@ -183,8 +185,9 @@ public class TaiPreferencesFragment extends PreferenceFragmentCompat {
         Preference status = findPreference("tai_runtime_status");
         if (status == null) return;
         try {
-            JSONObject runtime = TaiManager.getInstance(context).runtimeStatus().getJSONObject("runtime");
-            status.setSummary(buildRuntimeSummary(runtime));
+            JSONObject runtimeStatus = TaiManager.getInstance(context).runtimeStatus();
+            JSONObject runtime = runtimeStatus.getJSONObject("runtime");
+            status.setSummary(buildRuntimeSummary(runtime, runtimeStatus));
             Preference load = findPreference("tai_runtime_load");
             Preference keepWarm = findPreference("tai_runtime_keep_warm");
             Preference cancel = findPreference("tai_runtime_cancel");
@@ -219,7 +222,7 @@ public class TaiPreferencesFragment extends PreferenceFragmentCompat {
         refreshTaiPage(context);
     }
 
-    private String buildRuntimeSummary(JSONObject runtime) {
+    private String buildRuntimeSummary(JSONObject runtime, JSONObject runtimeStatus) {
         StringBuilder summary = new StringBuilder();
         summary.append("State: ").append(runtime.optString("state", "unknown"));
         summary.append("\nModel: ").append(nullable(runtime, "loadedModelId", "none"));
@@ -240,6 +243,28 @@ public class TaiPreferencesFragment extends PreferenceFragmentCompat {
         String status = runtime.optString("status", "");
         if (!status.isEmpty()) {
             summary.append("\n").append(status);
+        }
+        JSONObject profile = runtimeStatus.optJSONObject("modelProfile");
+        if (profile != null) {
+            summary.append("\nCompatible: ").append(join(profile.optJSONArray("compatibleAccelerators")));
+            if (!profile.isNull("minDeviceMemoryInGb")) {
+                summary.append(" - minimum memory ").append(profile.optInt("minDeviceMemoryInGb")).append(" GiB");
+            }
+        }
+        JSONObject device = runtimeStatus.optJSONObject("device");
+        if (device != null) {
+            summary.append("\nDevice: ").append(device.optString("model", "unknown"));
+            if (!device.isNull("memoryGiB")) {
+                summary.append(" - ").append(String.format(Locale.US, "%.1f GiB", device.optDouble("memoryGiB")));
+            }
+            summary.append(" - ").append(join(device.optJSONArray("phase1Accelerators")));
+        }
+        JSONArray warnings = runtimeStatus.optJSONArray("compatibilityWarnings");
+        if (warnings != null) {
+            for (int i = 0; i < warnings.length(); i++) {
+                String warning = warnings.optString(i, "");
+                if (!warning.isEmpty()) summary.append("\nWarning: ").append(warning);
+            }
         }
         return summary.toString();
     }
@@ -370,6 +395,14 @@ public class TaiPreferencesFragment extends PreferenceFragmentCompat {
     private String buildModelSummary(TaiModelCatalog.CatalogEntry entry, TaiModelSpec installed, JSONObject download) {
         StringBuilder summary = new StringBuilder();
         summary.append(entry.roleHint).append(" - ").append(formatBytes(entry.sizeBytes));
+        TaiModelSpec catalogModel = new TaiModelRegistry().getModel(entry.modelId);
+        if (catalogModel != null) {
+            TaiModelProfile profile = TaiModelProfile.forModel(catalogModel);
+            summary.append("\nAccelerators: ").append(profile.compatibleAccelerators.toString());
+            if (profile.minDeviceMemoryInGb != null) {
+                summary.append(" - minimum memory ").append(profile.minDeviceMemoryInGb).append(" GiB");
+            }
+        }
         if (entry.gated) {
             summary.append(" - gated");
         }
@@ -393,6 +426,16 @@ public class TaiPreferencesFragment extends PreferenceFragmentCompat {
         return summary.toString();
     }
 
+    private String join(JSONArray values) {
+        if (values == null || values.length() == 0) return "none";
+        StringBuilder joined = new StringBuilder();
+        for (int i = 0; i < values.length(); i++) {
+            if (i > 0) joined.append(", ");
+            joined.append(values.optString(i, ""));
+        }
+        return joined.toString();
+    }
+
     private String buildInstalledModelSummary(TaiModelSpec model) {
         StringBuilder summary = new StringBuilder();
         summary.append(model.roleHint).append(" - ").append(model.source);
@@ -401,6 +444,16 @@ public class TaiPreferencesFragment extends PreferenceFragmentCompat {
             summary.append("\n").append(model.localPath);
         }
         summary.append("\nCapabilities: ").append(model.capabilities.toString());
+        try {
+            TaiModelProfile profile = TaiModelProfile.forModel(model);
+            summary.append("\nAccelerators: ").append(profile.compatibleAccelerators.toString());
+            if (profile.minDeviceMemoryInGb != null) {
+                summary.append(" - minimum memory ").append(profile.minDeviceMemoryInGb).append(" GiB");
+            }
+            summary.append("\nDefaults: ").append(profile.defaultMaxTokens).append(" tokens, temperature ")
+                .append(profile.defaultTemperature);
+        } catch (Exception ignored) {
+        }
         return summary.toString();
     }
 

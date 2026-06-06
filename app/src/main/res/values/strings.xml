@@ -298,7 +298,7 @@
         <string name="termux_ai_model_privacy_notice_summary">No model files are bundled in the APK. Downloads and gated/licensed imports require explicit user action. TAI only manages local models and exposes an authenticated localhost endpoint.</string>
         <string name="termux_ai_default_assistant_model_title">Default assistant model</string>
         <string name="termux_ai_auto_model_default">Auto / Gallery default</string>
-        <string name="termux_ai_accelerator_auto_gpu_preferred">Auto / GPU preferred</string>
+        <string name="termux_ai_accelerator_auto_gpu_preferred">Auto / model profile</string>
         <string name="termux_ai_enabled">Enabled</string>
         <string name="termux_ai_disabled">Disabled</string>
         <string name="termux_ai_max_tokens_title">Max tokens</string>

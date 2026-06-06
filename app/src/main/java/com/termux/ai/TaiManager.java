@@ -58,6 +58,7 @@ public final class TaiManager {
         data.put("modelsBundledInApk", false);
         data.put("downloadsRequireExplicitUserAction", true);
         data.put("limitations", currentLimitations());
+        appendDeviceCompatibility(data, runtime.getState());
         JSONArray endpoints = new JSONArray();
         endpoints.put("/v1/models");
         endpoints.put("/v1/chat/completions");
@@ -68,12 +69,14 @@ public final class TaiManager {
 
     @NonNull
     public JSONObject runtimeStatus() throws JSONException {
+        TaiRuntimeState state = runtime.getState();
         JSONObject data = new JSONObject();
         data.put("ok", true);
-        data.put("runtime", runtime.getState().toJson());
+        data.put("runtime", state.toJson());
         data.put("settings", settings.toJson());
         data.put("appProcessRuntime", true);
-        data.put("backendPolicy", "Auto loads GPU first and falls back to CPU only when GPU initialization fails.");
+        data.put("backendPolicy", "Auto follows the model's ordered Edge Gallery accelerator allowlist, applies device exclusions, and uses LiteRT-LM initialization as the final backend check.");
+        appendDeviceCompatibility(data, state);
         return data;
     }
 
@@ -83,7 +86,9 @@ public final class TaiManager {
         data.put("storageDirectory", modelStore.getModelsDirectory().getAbsolutePath());
         data.put("downloads", modelStore.getDownloads());
         data.put("catalog", catalogJson());
-        data.put("runtime", runtime.getState().toJson());
+        TaiRuntimeState state = runtime.getState();
+        data.put("runtime", state.toJson());
+        appendDeviceCompatibility(data, state);
         return data;
     }
 
@@ -101,7 +106,7 @@ public final class TaiManager {
 
         String modelId = sanitizeModelId(request.optString("modelId", request.optString("model", modelFile.getName())));
         if (modelId.isEmpty()) return error(400, "bad_request", "Missing model id");
-        TaiModelSpec spec = new TaiModelSpec(
+        TaiModelSpec baseSpec = new TaiModelSpec(
             modelId,
             request.optString("displayName", modelId),
             request.optString("roleHint", "Imported local model"),
@@ -111,6 +116,19 @@ public final class TaiManager {
             modelFile.length(),
             capabilitiesFromRequest(request),
             false
+        );
+        TaiModelProfile runtimeProfile = TaiModelProfile.fromRequest(request, TaiModelProfile.forModel(baseSpec));
+        TaiModelSpec spec = new TaiModelSpec(
+            baseSpec.id,
+            baseSpec.displayName,
+            baseSpec.roleHint,
+            baseSpec.source,
+            baseSpec.localPath,
+            baseSpec.license,
+            baseSpec.sizeBytes,
+            baseSpec.capabilities,
+            false,
+            runtimeProfile
         );
         modelStore.upsertUserModel(spec);
 
@@ -590,7 +608,7 @@ public final class TaiManager {
     private JSONArray currentLimitations() {
         JSONArray limitations = new JSONArray();
         limitations.put("LiteRT-LM text inference is integrated for downloaded/imported .litertlm models on supported 64-bit ABIs.");
-        limitations.put("Auto loads LiteRT-LM with GPU first, matching Google AI Edge Gallery, and falls back to CPU only when GPU initialization fails.");
+        limitations.put("Auto follows Edge Gallery model accelerator allowlists, minimum-memory metadata, and Pixel 10 GPU exclusion; LiteRT-LM initialization remains the final backend check.");
         limitations.put("Streaming text responses, cancellation, and keep-warm lifecycle controls are available through the localhost API.");
         limitations.put("Benchmark counters and multimodal input are TODO for a later phase.");
         limitations.put("TAI does not execute shell commands or device actions; use dedicated shell tools and future explicit Android capability APIs.");
@@ -685,12 +703,28 @@ public final class TaiManager {
             json.put("license", entry.license);
             json.put("sizeBytes", entry.sizeBytes);
             json.put("gated", entry.gated);
+            TaiModelSpec catalogSpec = registry.getModel(entry.modelId);
+            if (catalogSpec != null) json.put("runtimeProfile", TaiModelProfile.forModel(catalogSpec).toJson());
             JSONArray capabilities = new JSONArray();
             for (String capability : entry.capabilities) capabilities.put(capability);
             json.put("capabilities", capabilities);
             array.put(json);
         }
         return array;
+    }
+
+    private void appendDeviceCompatibility(@NonNull JSONObject data, @NonNull TaiRuntimeState state) throws JSONException {
+        TaiDeviceCapabilities device = TaiDeviceCapabilities.detect(appContext);
+        data.put("device", device.toJson());
+        if (state.loadedModelId == null) return;
+        TaiModelSpec model = resolveModel(state.loadedModelId);
+        if (model == null) return;
+        TaiModelProfile profile = TaiModelProfile.forModel(model);
+        data.put("modelProfile", profile.toJson());
+        JSONArray warnings = new JSONArray();
+        String memoryWarning = device.memoryWarning(profile);
+        if (memoryWarning != null) warnings.put(memoryWarning);
+        data.put("compatibilityWarnings", warnings);
     }
 
     private static final class PromptParts {

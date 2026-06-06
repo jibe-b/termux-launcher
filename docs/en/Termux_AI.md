@@ -49,7 +49,17 @@ TAI stores user overrides separately from model metadata. Runtime tunables defau
 - speculative decoding
 - idle unload / keep-warm policy
 
-Auto accelerator loads GPU first, matching Google AI Edge Gallery's fast path, and falls back to CPU only if GPU initialization fails. Other null/Auto generation values use Gallery-style defaults in the runtime: max tokens 1024, TopK 64, TopP 0.95, and temperature 1.0.
+Auto accelerator follows the ordered compatible accelerator list from Google AI Edge Gallery's model allowlist. MobileActions-270M is CPU-only with temperature 0.0, while Gemma 4 E2B/E4B prefer GPU with CPU fallback and use their Gallery defaults. TAI also applies Gallery's Pixel 10 GPU exclusion and minimum-memory metadata. Explicit `--gpu` or `--cpu` is accepted only when both the model profile and device support it.
+
+Device memory detection matches Gallery: Android 14 and newer use `ActivityManager.MemoryInfo.advertisedMem`; older versions use `totalMem`. `tai runtime` exposes the detected ABI, memory source, SoC, device model, available phase-one accelerators, active model profile, and any memory warning. A low-memory result is a warning, matching Gallery's proceed-anyway behavior, rather than an automatic load failure.
+
+Known profiles are synchronized with Edge Gallery 1.0.15:
+
+- Gemma-4-E2B-it: GPU, CPU; 8 GiB minimum; 4000 max tokens; TopK 64; TopP 0.95; temperature 1.0.
+- Gemma-4-E4B-it: GPU, CPU; 12 GiB minimum; 4000 max tokens; TopK 64; TopP 0.95; temperature 1.0.
+- MobileActions-270M: CPU only; 6 GiB minimum; 1024 max tokens; TopK 64; TopP 0.95; temperature 0.0.
+
+Unknown imported models default to CPU, matching Gallery's import dialog. The import API accepts `runtimeProfile.compatibleAccelerators`, `defaultMaxTokens`, `defaultTopK`, `defaultTopP`, `defaultTemperature`, and `minDeviceMemoryInGb` when the user knows the package's requirements.
 
 The LiteRT-LM `Engine` remains loaded after `tai load`, and TAI reuses a `Conversation` while the model, prompt mode, system prompt, and sampling options remain compatible. One generation runs at a time. Use `tai cancel` or `POST /v1/ai/runtime/cancel` to stop an active generation.
 
@@ -108,7 +118,14 @@ Implemented endpoints:
 
 Model import and download registry persistence is implemented. Downloaded or imported `.litertlm` models can be loaded through the Android-side LiteRT-LM adapter on supported 64-bit devices.
 
-The runtime supports non-streaming JSON responses and streaming `text/event-stream` responses. Streaming emits OpenAI-style chunks and finishes with `data: [DONE]`. Auto selects GPU first so normal loads follow Google AI Edge Gallery's fast path. Explicit `tai load <model> --cpu` forces CPU when needed. The app manifest declares the native OpenCL libraries required by LiteRT-LM for Android GPU backend discovery. A future isolated GPU probe/runtime process should still be added so failed native GPU initialization cannot crash the main launcher process.
+The runtime supports non-streaming JSON responses and streaming `text/event-stream` responses. Streaming emits OpenAI-style chunks and finishes with `data: [DONE]`. Auto follows the model profile and device exclusions before initializing LiteRT-LM. The app manifest declares the same optional native libraries as Edge Gallery: `libvndksupport.so`, `libOpenCL.so`, `libcdsprpc.so`, and `libedgetpu_litert.so`. LiteRT-LM's `Capabilities` API is checked before speculative decoding is enabled. A future isolated GPU probe/runtime process should still be added so failed native GPU initialization cannot crash the main launcher process.
+
+Reference implementation and metadata:
+
+- [Google AI Edge Gallery model allowlist 1.0.15](https://github.com/google-ai-edge/gallery/blob/main/model_allowlists/1_0_15.json)
+- [Gallery model allowlist/device policy](https://github.com/google-ai-edge/gallery/blob/main/Android/src/app/src/main/java/com/google/ai/edge/gallery/data/ModelAllowlist.kt)
+- [Gallery memory detection](https://github.com/google-ai-edge/gallery/blob/main/Android/src/app/src/main/java/com/google/ai/edge/gallery/ui/common/MemoryWarning.kt)
+- [Gallery LiteRT-LM runtime](https://github.com/google-ai-edge/gallery/blob/main/Android/src/app/src/main/java/com/google/ai/edge/gallery/ui/llmchat/LlmChatModelHelper.kt)
 
 ## External Clients
 

@@ -16,7 +16,8 @@ public class TaiModelRegistryTest {
 
         assertNotNull(registry.getModel(TaiModelRegistry.MODEL_GEMMA_4_E2B_IT));
         assertNotNull(registry.getModel(TaiModelRegistry.MODEL_GEMMA_4_E4B_IT));
-        assertEquals(2, registry.getBuiltInModels().size());
+        assertNotNull(registry.getModel(TaiModelRegistry.MODEL_MOBILE_ACTIONS_270M));
+        assertEquals(3, registry.getBuiltInModels().size());
     }
 
     @Test
@@ -59,6 +60,78 @@ public class TaiModelRegistryTest {
         assertTrue(!roundTrip.builtInCatalogEntry);
         assertTrue(roundTrip.capabilities.contains("text_chat"));
         assertTrue(roundTrip.capabilities.contains("tool_use"));
+    }
+
+    @Test
+    public void modelSpec_infersEdgeGalleryProfileForExistingMobileActionsMetadata() throws Exception {
+        JSONObject persisted = new JSONObject();
+        persisted.put("id", "MobileActions-270M");
+        persisted.put("displayName", "MobileActions-270M");
+        persisted.put("localPath", "/models/MobileActions-270M/mobile_actions_q8_ekv1024.litertlm");
+
+        TaiModelSpec spec = TaiModelSpec.fromJson(persisted);
+        TaiModelProfile profile = TaiModelProfile.forModel(spec);
+
+        assertEquals(java.util.Collections.singletonList("cpu"), profile.compatibleAccelerators);
+        assertEquals(1024, profile.defaultMaxTokens);
+        assertEquals(0.0d, profile.defaultTemperature, 0.001d);
+        assertEquals(Integer.valueOf(6), profile.minDeviceMemoryInGb);
+        assertEquals(TaiModelProfile.SOURCE_EDGE_GALLERY_1_0_15, profile.source);
+    }
+
+    @Test
+    public void modelSpec_usesEdgeGalleryDefaultsForGemma4Models() {
+        TaiModelProfile e2b = TaiModelProfile.forModel(
+            new TaiModelRegistry().getModel(TaiModelRegistry.MODEL_GEMMA_4_E2B_IT));
+        TaiModelProfile e4b = TaiModelProfile.forModel(
+            new TaiModelRegistry().getModel(TaiModelRegistry.MODEL_GEMMA_4_E4B_IT));
+
+        assertEquals(java.util.Arrays.asList("gpu", "cpu"), e2b.compatibleAccelerators);
+        assertEquals(4000, e2b.defaultMaxTokens);
+        assertEquals(Integer.valueOf(8), e2b.minDeviceMemoryInGb);
+        assertEquals(Integer.valueOf(12), e4b.minDeviceMemoryInGb);
+    }
+
+    @Test
+    public void importedUnknownModel_defaultsToCpuLikeEdgeGalleryImport() throws Exception {
+        TaiModelSpec imported = new TaiModelSpec(
+            "unknown-local",
+            "Unknown Local",
+            "Imported model",
+            "imported",
+            "/tmp/unknown.litertlm",
+            "user-provided",
+            100L,
+            java.util.Collections.singleton("text_chat"),
+            false
+        );
+
+        TaiModelSpec roundTrip = TaiModelSpec.fromJson(imported.toJson());
+
+        assertEquals(java.util.Collections.singletonList("cpu"),
+            TaiModelProfile.forModel(roundTrip).compatibleAccelerators);
+    }
+
+    @Test
+    public void importedModel_acceptsExplicitGalleryStyleRuntimeProfile() throws Exception {
+        JSONObject request = new JSONObject();
+        request.put("compatibleAccelerators", new JSONArray().put("gpu").put("cpu"));
+        request.put("defaultMaxTokens", 2048);
+        request.put("defaultTopK", 32);
+        request.put("defaultTopP", 0.8d);
+        request.put("defaultTemperature", 0.7d);
+        request.put("minDeviceMemoryInGb", 8);
+
+        TaiModelProfile profile = TaiModelProfile.fromRequest(request,
+            new TaiModelProfile(java.util.Collections.singletonList("cpu"), 1024, 64, 0.95d, 1.0d, null, "fallback"));
+        TaiModelProfile roundTrip = TaiModelProfile.fromJson(profile.toJson());
+
+        assertEquals(java.util.Arrays.asList("gpu", "cpu"), roundTrip.compatibleAccelerators);
+        assertEquals(2048, roundTrip.defaultMaxTokens);
+        assertEquals(32, roundTrip.defaultTopK);
+        assertEquals(0.8d, roundTrip.defaultTopP, 0.001d);
+        assertEquals(0.7d, roundTrip.defaultTemperature, 0.001d);
+        assertEquals(Integer.valueOf(8), roundTrip.minDeviceMemoryInGb);
     }
 
     @Test

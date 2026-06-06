@@ -34,22 +34,33 @@ public final class TaiModelCatalog {
             "Gemma 4 E2B IT",
             "Fast assistant",
             "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm",
-            "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm",
+            "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/6e5c4f1e395deb959c494953478fa5cec4b8008f/gemma-4-E2B-it.litertlm?download=true",
             "Apache-2.0",
             2_588_147_712L,
             false,
-            setOf("text_chat", "image_input", "tool_use")
+            setOf("text_chat", "image_input", "audio_input", "tool_use", "llm_thinking", "speculative_decoding")
         ));
         entries.put(TaiModelRegistry.MODEL_GEMMA_4_E4B_IT, new CatalogEntry(
             TaiModelRegistry.MODEL_GEMMA_4_E4B_IT,
             "Gemma 4 E4B IT",
             "Coding and reasoning",
             "https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm",
-            "https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm/resolve/main/gemma-4-E4B-it.litertlm",
+            "https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm/resolve/28299f30ee4d43294517a4ac93abd6163412f07f/gemma-4-E4B-it.litertlm?download=true",
             "Apache-2.0",
-            3_660_000_000L,
+            3_659_530_240L,
             false,
-            setOf("text_chat", "image_input", "tool_use")
+            setOf("text_chat", "image_input", "audio_input", "tool_use", "llm_thinking", "speculative_decoding")
+        ));
+        entries.put(TaiModelRegistry.MODEL_MOBILE_ACTIONS_270M, new CatalogEntry(
+            TaiModelRegistry.MODEL_MOBILE_ACTIONS_270M,
+            "Mobile Actions 270M",
+            "Mobile actions",
+            "https://huggingface.co/litert-community/functiongemma-270m-ft-mobile-actions",
+            "https://huggingface.co/litert-community/functiongemma-270m-ft-mobile-actions/resolve/38942192c9b723af836d489074823ff33d4a3e7a/mobile_actions_q8_ekv1024.litertlm?download=true",
+            "Gemma Terms of Use",
+            288_964_608L,
+            true,
+            setOf("text_chat", "tool_use", "mobile_actions")
         ));
         return Collections.unmodifiableMap(entries);
     }

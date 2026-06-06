@@ -80,6 +80,7 @@ public final class TaiCliFormatter {
             appendValue(out, "Idle unload", runtime.optLong("idleUnloadRemainingMs", 0L) > 0L ? formatDuration(runtime.optLong("idleUnloadRemainingMs", 0L)) : "off");
             appendValue(out, "State", runtime.optString("status", ""));
         }
+        appendCompatibility(out, data);
 
         JSONObject settings = data.optJSONObject("settings");
         if (settings != null) {
@@ -93,7 +94,7 @@ public final class TaiCliFormatter {
             appendValue(out, "Hugging Face token", settings.optBoolean("huggingFaceTokenConfigured", false) ? "configured" : "not configured");
             JSONObject options = settings.optJSONObject("runtimeOptions");
             if (options != null) {
-                appendValue(out, "Accelerator", nullable(options, "accelerator", "Auto / GPU preferred"));
+                appendValue(out, "Accelerator", nullable(options, "accelerator", "Auto / model profile"));
                 appendValue(out, "Max tokens", nullable(options, "maxTokens", "Auto / Gallery default"));
                 appendValue(out, "Temperature", nullable(options, "temperature", "Auto / Gallery default"));
             }
@@ -113,12 +114,13 @@ public final class TaiCliFormatter {
         out.append("TAI runtime\n");
         JSONObject runtime = data.optJSONObject("runtime");
         if (runtime != null) appendRuntimeState(out, runtime);
+        appendCompatibility(out, data);
         JSONObject settings = data.optJSONObject("settings");
         if (settings != null) {
             JSONObject options = settings.optJSONObject("runtimeOptions");
             if (options != null) {
                 out.append("\nDefaults\n");
-                appendValue(out, "Accelerator", nullable(options, "accelerator", "Auto / GPU preferred"));
+                appendValue(out, "Accelerator", nullable(options, "accelerator", "Auto / model profile"));
                 appendValue(out, "Max tokens", nullable(options, "maxTokens", "Auto / Gallery default"));
                 appendValue(out, "TopK", nullable(options, "topK", "Auto / Gallery default"));
                 appendValue(out, "TopP", nullable(options, "topP", "Auto / Gallery default"));
@@ -161,6 +163,14 @@ public final class TaiCliFormatter {
                 appendValue(out, "    Source", model.optString("source", ""));
                 appendValue(out, "    Size", model.optLong("sizeBytes", 0L) > 0 ? formatBytes(model.optLong("sizeBytes")) : "not downloaded");
                 appendValue(out, "    Capabilities", join(model.optJSONArray("capabilities")));
+                JSONObject profile = model.optJSONObject("runtimeProfile");
+                if (profile != null) {
+                    appendValue(out, "    Accelerators", join(profile.optJSONArray("compatibleAccelerators")));
+                    appendValue(out, "    Minimum memory", profile.isNull("minDeviceMemoryInGb")
+                        ? "not specified" : profile.optInt("minDeviceMemoryInGb") + " GiB");
+                    appendValue(out, "    Defaults", profile.optInt("defaultMaxTokens") + " tokens, temperature "
+                        + profile.optDouble("defaultTemperature"));
+                }
             }
         }
 
@@ -232,6 +242,7 @@ public final class TaiCliFormatter {
             appendValue(out, "Keep warm", state.optLong("keepWarmRemainingMs", 0L) > 0L ? formatDuration(state.optLong("keepWarmRemainingMs", 0L)) : "off");
             appendValue(out, "Idle unload", state.optLong("idleUnloadRemainingMs", 0L) > 0L ? formatDuration(state.optLong("idleUnloadRemainingMs", 0L)) : "off");
         }
+        appendCompatibility(out, data);
         return out.toString();
     }
 
@@ -314,6 +325,37 @@ public final class TaiCliFormatter {
         appendValue(out, "Keep warm", runtime.optLong("keepWarmRemainingMs", 0L) > 0L ? formatDuration(runtime.optLong("keepWarmRemainingMs", 0L)) : "off");
         appendValue(out, "Idle unload", runtime.optLong("idleUnloadRemainingMs", 0L) > 0L ? formatDuration(runtime.optLong("idleUnloadRemainingMs", 0L)) : "off");
         appendValue(out, "Status", runtime.optString("status", ""));
+    }
+
+    private static void appendCompatibility(@NonNull StringBuilder out, @NonNull JSONObject data) {
+        JSONObject profile = data.optJSONObject("modelProfile");
+        if (profile != null) {
+            out.append("\nModel profile\n");
+            appendValue(out, "Compatible accelerators", join(profile.optJSONArray("compatibleAccelerators")));
+            appendValue(out, "Minimum memory", profile.isNull("minDeviceMemoryInGb")
+                ? "not specified" : profile.optInt("minDeviceMemoryInGb") + " GiB");
+            appendValue(out, "Generation defaults", profile.optInt("defaultMaxTokens") + " tokens, TopK "
+                + profile.optInt("defaultTopK") + ", TopP " + profile.optDouble("defaultTopP")
+                + ", temperature " + profile.optDouble("defaultTemperature"));
+            appendValue(out, "Profile source", profile.optString("source", ""));
+        }
+        JSONObject device = data.optJSONObject("device");
+        if (device != null) {
+            out.append("\nDevice\n");
+            appendValue(out, "Model", device.optString("manufacturer", "") + " " + device.optString("model", ""));
+            appendValue(out, "SoC", device.optString("socModel", ""));
+            appendValue(out, "Android API", String.valueOf(device.optInt("sdkInt", 0)));
+            appendValue(out, "Memory", device.isNull("memoryGiB") ? "unknown"
+                : String.format(Locale.US, "%.1f GiB (%s)", device.optDouble("memoryGiB"), device.optString("memorySource", "")));
+            appendValue(out, "LiteRT-LM ABI", device.optBoolean("liteRtLmAbiSupported", false) ? "supported" : "unsupported");
+            appendValue(out, "Phase 1 accelerators", join(device.optJSONArray("phase1Accelerators")));
+            appendValue(out, "GPU policy", device.optString("gpuPolicy", ""));
+        }
+        JSONArray warnings = data.optJSONArray("compatibilityWarnings");
+        if (warnings != null && warnings.length() > 0) {
+            out.append("\nCompatibility warnings\n");
+            appendBullets(out, warnings);
+        }
     }
 
     private static void appendTransfer(@NonNull StringBuilder out, @NonNull JSONObject transfer) {

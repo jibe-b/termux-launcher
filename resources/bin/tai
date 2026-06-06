@@ -22,7 +22,7 @@ Usage:
 
 TAI is authenticated through ~/.launcherctl and runs in the Android app process.
 LiteRT-LM runs in the Android app process when a supported .litertlm model is loaded.
-Auto loads GPU first, matching Google AI Edge Gallery, then falls back to CPU if needed.
+Auto honors model compatibility profiles, otherwise tries GPU first and falls back to CPU if needed.
 Use OpenAI-compatible clients against /v1/models, /v1/chat/completions, and /v1/completions.
 Use tai --json <command> for raw API JSON.
 EOF

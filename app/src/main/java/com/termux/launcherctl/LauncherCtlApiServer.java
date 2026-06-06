@@ -1082,7 +1082,7 @@ public class LauncherCtlApiServer {
             "\n" +
             "TAI is authenticated through ~/.launcherctl and runs in the Android app process.\n" +
             "LiteRT-LM runs in the Android app process when a supported .litertlm model is loaded.\n" +
-            "Auto loads GPU first, matching Google AI Edge Gallery, then falls back to CPU if needed.\n" +
+            "Auto follows model and device compatibility metadata from Google AI Edge Gallery.\n" +
             "Use OpenAI-compatible clients against /v1/models, /v1/chat/completions, and /v1/completions.\n" +
             "Use tai --json <command> for raw API JSON.\n" +
             "EOF\n" +
