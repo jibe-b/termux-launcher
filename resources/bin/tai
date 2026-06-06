@@ -38,7 +38,7 @@ fi
 
 TOKEN=$(cat "$TOKEN_FILE")
 BASE=$(cat "$ENDPOINT_FILE")
-CURL_COMMON="-sS --connect-timeout 2 --max-time 180"
+CURL_COMMON="--fail-with-body -sS --connect-timeout 2 --max-time 180"
 
 json_escape() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
 post_json() {
