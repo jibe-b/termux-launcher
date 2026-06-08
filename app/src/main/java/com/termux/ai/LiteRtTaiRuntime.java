@@ -342,7 +342,7 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
 
         Throwable throwable = errorRef.get();
         if (throwable != null) {
-            if (throwable instanceof CancellationException) {
+            if (isCancellation(throwable)) {
                 return error(499, "generation_cancelled", "LiteRT-LM generation was cancelled.");
             }
             return error(500, "litert_lm_generation_failed", "LiteRT-LM generation failed: " + throwable.getMessage());
@@ -562,7 +562,7 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         activeGenerationId = null;
         activeGenerationStartedAtMs = 0L;
         lastUsedAtMs = System.currentTimeMillis();
-        if (throwable instanceof CancellationException) {
+        if (isCancellation(throwable)) {
             statusMessage = "Generation cancelled.";
             runtimeState = "loaded";
         } else if (throwable != null) {
@@ -801,6 +801,15 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         if (loadCancellationRequested) {
             throw new CancellationException("Model load cancelled.");
         }
+    }
+
+    static boolean isCancellation(@Nullable Throwable throwable) {
+        for (Throwable current = throwable; current != null; current = current.getCause()) {
+            if (current instanceof CancellationException) return true;
+            String message = current.getMessage();
+            if (message != null && message.toUpperCase(Locale.ROOT).contains("CANCELLED")) return true;
+        }
+        return false;
     }
 
     private void closeEngine(@Nullable Engine engineToClose) {

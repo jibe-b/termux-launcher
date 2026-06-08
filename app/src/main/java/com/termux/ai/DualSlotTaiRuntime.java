@@ -80,6 +80,7 @@ public final class DualSlotTaiRuntime implements TaiRuntime {
         JSONObject assistantResult = assistantRuntime.unload();
         JSONObject mobileActionsResult = mobileActionsRuntime.unload();
         JSONObject data = envelope(true);
+        data.put("unloadedModelId", combinedLoadedModelId(assistant, mobileActions));
         data.put("assistant", assistantResult);
         data.put("mobileActions", mobileActionsResult);
         return data;

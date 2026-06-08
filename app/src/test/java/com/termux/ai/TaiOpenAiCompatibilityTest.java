@@ -64,4 +64,13 @@ public class TaiOpenAiCompatibilityTest {
         assertTrue(request.initialMessages.isEmpty());
         assertEquals("hello", request.message.toString());
     }
+
+    @Test
+    public void cancellationDetection_acceptsLiteRtJniCancellationMessage() {
+        RuntimeException error = new RuntimeException(
+            "Failed to call nativeSendMessage: CANCELLED: Process cancelled.");
+
+        assertTrue(LiteRtTaiRuntime.isCancellation(error));
+        assertFalse(LiteRtTaiRuntime.isCancellation(new RuntimeException("GPU initialization failed")));
+    }
 }
