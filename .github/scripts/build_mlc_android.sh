@@ -17,7 +17,7 @@ export TVM_NDK_CC="$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch6
 if [[ ! -f "$source_dir/build/libmlc_llm.so" ]]; then
   mkdir -p "$source_dir/build"
   (cd "$source_dir/build" && printf '\nn\nn\nn\nn\nn\n' | python ../cmake/gen_cmake_config.py)
-  cmake -S "$source_dir" -B "$source_dir/build" -G Ninja
+  cmake -S "$source_dir" -B "$source_dir/build" -G Ninja -DCMAKE_POLICY_VERSION_MINIMUM=3.5
   cmake --build "$source_dir/build" --parallel 2
 fi
 python -m pip install -e "$source_dir/python"
