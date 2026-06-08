@@ -33,7 +33,7 @@ public class TaiModelRegistryTest {
         assertEquals("Q4_K_M", gguf.quantization);
         assertEquals(TaiModelSpec.BACKEND_MLC, mlc.backend);
         assertEquals(TaiModelSpec.FORMAT_MLC_PACKAGE, mlc.format);
-        assertEquals("tai_qwen2_5_coder_1_5b_q4f16_1", mlc.runtimeLibrary);
+        assertEquals("qwen2_q4f16_1_2e221f430380225c03990ad24c3d030e", mlc.runtimeLibrary);
     }
 
     @Test

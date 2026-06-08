@@ -75,7 +75,7 @@ public final class TaiModelCatalog {
             TaiModelRegistry.MODEL_QWEN_CODER_1_5B_MLC, "Qwen2.5 Coder 1.5B (MLC)", "GPU coding and terminal tasks",
             "mlc-ai/Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC", "30184a4f713a9aaf6c548ace1290615d0ea041ff",
             "Apache-2.0", 880_289_173L, "qwen2", "q4f16_1", 4096, 6,
-            "tai_qwen2_5_coder_1_5b_q4f16_1", setOf("text_chat", "text_completion", "code")));
+            "qwen2_q4f16_1_2e221f430380225c03990ad24c3d030e", setOf("text_chat", "text_completion", "code")));
         return Collections.unmodifiableMap(entries);
     }
 

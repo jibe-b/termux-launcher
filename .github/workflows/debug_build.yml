@@ -38,37 +38,17 @@ jobs:
           git lfs install
           python -m pip install -U cmake ninja setuptools wheel
 
-      - name: Restore compiled MLC host tools
-        id: mlc-host-cache
-        uses: actions/cache/restore@v5
-        with:
-          path: third-party/mlc-llm/build
-          key: mlc-host-v3-${{ runner.os }}-${{ hashFiles('.git/modules/third-party/mlc-llm/HEAD') }}
-
-      - name: Build MLC host tools
-        shell: bash {0}
-        env:
-          MLC_HOST_ONLY: "1"
-        run: ./.github/scripts/build_mlc_android.sh
-
-      - name: Save compiled MLC host tools
-        if: steps.mlc-host-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v5
-        with:
-          path: third-party/mlc-llm/build
-          key: ${{ steps.mlc-host-cache.outputs.cache-primary-key }}
-
       - name: Cache packaged MLC Android runtime
         uses: actions/cache@v5
         with:
           path: mlc-package/dist
-          key: mlc-android-v3-${{ runner.os }}-${{ hashFiles('mlc-package/mlc-package-config.json', '.git/modules/third-party/mlc-llm/HEAD') }}
+          key: mlc-android-v4-${{ runner.os }}-${{ hashFiles('.github/scripts/prepare_mlc_android.sh', '.git/modules/third-party/mlc-llm/HEAD') }}
 
       - name: Build MLC Android runtime
         shell: bash {0}
         run: |
           if ! test -f mlc-package/dist/lib/mlc4j/output/arm64-v8a/libtvm4j_runtime_packed.so; then
-            ./.github/scripts/build_mlc_android.sh
+            ./.github/scripts/prepare_mlc_android.sh
           fi
 
       - name: Run unit tests
