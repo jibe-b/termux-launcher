@@ -29,7 +29,7 @@ if [[ ! -f "$host_marker" ]]; then
   cmake -S "$source_dir" -B "$source_dir/build" -G Ninja \
     -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
     -DTOKENIZERS_CPP_RUST_FLAGS="-A dangerous_implicit_autorefs"
-  cmake --build "$source_dir/build" --parallel 2
+  cmake --build "$source_dir/build" --parallel "${MLC_BUILD_JOBS:-4}"
   touch "$host_marker"
 fi
 if [[ "${MLC_HOST_ONLY:-0}" == "1" ]]; then
