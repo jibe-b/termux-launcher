@@ -70,15 +70,15 @@ public class TaiOpenAiCompatibilityTest {
         JSONObject taiModels = new JSONObject()
             .put("ok", true)
             .put("models", new JSONArray()
-                .put(new JSONObject().put("id", "qwen").put("backend", "llama-cpp"))
-                .put(new JSONObject().put("id", "qwen").put("backend", "mlc"))
+                .put(new JSONObject().put("id", "gemma").put("backend", "litert-lm"))
+                .put(new JSONObject().put("id", "gemma").put("backend", "litert-lm"))
                 .put(new JSONObject().put("id", "gemma")));
 
         JSONObject response = TaiManager.openAiModelsFromTaiModels(taiModels);
 
         assertEquals("list", response.getString("object"));
         assertEquals(2, response.getJSONArray("data").length());
-        assertEquals("qwen", response.getJSONArray("data").getJSONObject(0).getString("id"));
+        assertEquals("gemma", response.getJSONArray("data").getJSONObject(0).getString("id"));
         assertEquals("model", response.getJSONArray("data").getJSONObject(0).getString("object"));
         assertFalse(response.has("tai"));
         assertFalse(response.getJSONArray("data").getJSONObject(0).has("tai"));

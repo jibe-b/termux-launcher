@@ -14,8 +14,6 @@ public final class TaiModelRegistry {
     public static final String MODEL_GEMMA_4_E2B_IT = "Gemma-4-E2B-it";
     public static final String MODEL_GEMMA_4_E4B_IT = "Gemma-4-E4B-it";
     public static final String MODEL_MOBILE_ACTIONS_270M = "MobileActions-270M";
-    public static final String MODEL_QWEN_CODER_1_5B_GGUF = "Qwen2.5-Coder-1.5B-GGUF";
-    public static final String MODEL_QWEN_CODER_1_5B_MLC = "Qwen2.5-Coder-1.5B-MLC";
 
     public static final String ROLE_DEFAULT_ASSISTANT = "defaultAssistant";
 
@@ -40,8 +38,7 @@ public final class TaiModelRegistry {
                 entry.quantization,
                 entry.contextWindow,
                 entry.recommendedRamGb,
-                entry.sha256,
-                entry.runtimeLibrary
+                entry.sha256
             ));
         }
     }

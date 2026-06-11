@@ -13,11 +13,7 @@ import java.util.Set;
 
 public final class TaiModelSpec {
     public static final String BACKEND_LITERT_LM = "litert-lm";
-    public static final String BACKEND_LLAMA_CPP = "llama-cpp";
-    public static final String BACKEND_MLC = "mlc";
     public static final String FORMAT_LITERTLM = "litertlm";
-    public static final String FORMAT_GGUF = "gguf";
-    public static final String FORMAT_MLC_PACKAGE = "mlc-package";
 
     public final String id;
     public final String displayName;
@@ -36,7 +32,6 @@ public final class TaiModelSpec {
     public final int contextWindow;
     public final int recommendedRamGb;
     @Nullable public final String sha256;
-    @Nullable public final String runtimeLibrary;
 
     public TaiModelSpec(
         @NonNull String id,
@@ -80,7 +75,7 @@ public final class TaiModelSpec {
     ) {
         this(id, displayName, roleHint, source, localPath, license, sizeBytes, capabilities,
             builtInCatalogEntry, runtimeProfile, inferBackend(localPath), inferFormat(localPath),
-            null, null, 4096, 0, null, null);
+            null, null, 4096, 0, null);
     }
 
     public TaiModelSpec(
@@ -100,8 +95,7 @@ public final class TaiModelSpec {
         @Nullable String quantization,
         int contextWindow,
         int recommendedRamGb,
-        @Nullable String sha256,
-        @Nullable String runtimeLibrary
+        @Nullable String sha256
     ) {
         this.id = id;
         this.displayName = displayName;
@@ -120,7 +114,6 @@ public final class TaiModelSpec {
         this.contextWindow = contextWindow > 0 ? contextWindow : 4096;
         this.recommendedRamGb = Math.max(0, recommendedRamGb);
         this.sha256 = sha256;
-        this.runtimeLibrary = runtimeLibrary;
     }
 
     @NonNull
@@ -142,7 +135,6 @@ public final class TaiModelSpec {
         json.put("contextWindow", contextWindow);
         json.put("recommendedRamGb", recommendedRamGb);
         json.put("sha256", sha256 == null ? JSONObject.NULL : sha256);
-        json.put("runtimeLibrary", runtimeLibrary == null ? JSONObject.NULL : runtimeLibrary);
         JSONArray capabilityArray = new JSONArray();
         for (String capability : capabilities) {
             capabilityArray.put(capability);
@@ -178,16 +170,12 @@ public final class TaiModelSpec {
             json.isNull("quantization") ? null : json.optString("quantization", null),
             json.optInt("contextWindow", 4096),
             json.optInt("recommendedRamGb", 0),
-            json.isNull("sha256") ? null : json.optString("sha256", null),
-            json.isNull("runtimeLibrary") ? null : json.optString("runtimeLibrary", null)
+            json.isNull("sha256") ? null : json.optString("sha256", null)
         );
     }
 
     @NonNull
     public static String inferBackend(@Nullable String path) {
-        String format = inferFormat(path);
-        if (FORMAT_GGUF.equals(format)) return BACKEND_LLAMA_CPP;
-        if (FORMAT_MLC_PACKAGE.equals(format)) return BACKEND_MLC;
         return BACKEND_LITERT_LM;
     }
 
@@ -196,8 +184,6 @@ public final class TaiModelSpec {
         String value = path == null ? "" : path.toLowerCase(java.util.Locale.ROOT);
         int query = value.indexOf('?');
         if (query >= 0) value = value.substring(0, query);
-        if (value.endsWith(".gguf")) return FORMAT_GGUF;
-        if (value.endsWith(".mlc-package")) return FORMAT_MLC_PACKAGE;
         return FORMAT_LITERTLM;
     }
 }

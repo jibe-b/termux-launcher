@@ -1167,7 +1167,7 @@ public class LauncherCtlApiServer {
             "  tai doctor\n" +
             "\n" +
             "TAI is authenticated through ~/.launcherctl and runs in the Android app process.\n" +
-            "LiteRT-LM, MLC OpenCL, and llama.cpp run in the Android app process when supported by the installed APK.\n" +
+            "LiteRT-LM runs in the Android app process when supported by the installed APK.\n" +
             "Auto uses backend-specific GPU-first behavior with CPU fallback where available.\n" +
             "Use OpenAI-compatible clients against /v1/models, /v1/chat/completions, and /v1/completions.\n" +
             "Use tai --json <command> for raw API JSON.\n" +

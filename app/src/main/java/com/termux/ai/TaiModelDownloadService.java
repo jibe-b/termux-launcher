@@ -42,9 +42,6 @@ public final class TaiModelDownloadService extends Service {
     public static final String EXTRA_CONTEXT_WINDOW = "context_window";
     public static final String EXTRA_RECOMMENDED_RAM_GB = "recommended_ram_gb";
     public static final String EXTRA_SHA256 = "sha256";
-    public static final String EXTRA_RUNTIME_LIBRARY = "runtime_library";
-    public static final String EXTRA_REPOSITORY_ID = "repository_id";
-    public static final String EXTRA_REVISION = "revision";
 
     private static final String CHANNEL_ID = "termux_ai_model_downloads";
     private static final int NOTIFICATION_ID = 24100;
@@ -107,29 +104,6 @@ public final class TaiModelDownloadService extends Service {
 
         TaiModelStore store = new TaiModelStore(this);
         TaiModelDownloader downloader = new TaiModelDownloader(this, store);
-        String repositoryId = intent.getStringExtra(EXTRA_REPOSITORY_ID);
-        if (repositoryId != null && !repositoryId.trim().isEmpty()) {
-            downloader.runCatalogDownload(
-                transferId,
-                modelId,
-                repositoryId,
-                valueOrEmpty(intent.getStringExtra(EXTRA_REVISION)),
-                new File(outputPath),
-                valueOrEmpty(intent.getStringExtra(EXTRA_DISPLAY_NAME)),
-                valueOrEmpty(intent.getStringExtra(EXTRA_LICENSE)),
-                capabilities,
-                valueOrEmpty(intent.getStringExtra(EXTRA_BACKEND)),
-                valueOrEmpty(intent.getStringExtra(EXTRA_FORMAT)),
-                valueOrEmpty(intent.getStringExtra(EXTRA_ARCHITECTURE)),
-                valueOrEmpty(intent.getStringExtra(EXTRA_QUANTIZATION)),
-                intent.getIntExtra(EXTRA_CONTEXT_WINDOW, 4096),
-                intent.getIntExtra(EXTRA_RECOMMENDED_RAM_GB, 0),
-                valueOrEmpty(intent.getStringExtra(EXTRA_RUNTIME_LIBRARY)),
-                intent.getStringExtra(EXTRA_AUTH_TOKEN),
-                this::updateProgressNotification
-            );
-            return;
-        }
         downloader.runDownload(
             transferId,
             modelId,
@@ -145,7 +119,6 @@ public final class TaiModelDownloadService extends Service {
             intent.getIntExtra(EXTRA_CONTEXT_WINDOW, 4096),
             intent.getIntExtra(EXTRA_RECOMMENDED_RAM_GB, 0),
             valueOrEmpty(intent.getStringExtra(EXTRA_SHA256)),
-            valueOrEmpty(intent.getStringExtra(EXTRA_RUNTIME_LIBRARY)),
             intent.getStringExtra(EXTRA_AUTH_TOKEN),
             this::updateProgressNotification
         );

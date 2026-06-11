@@ -24,8 +24,6 @@ android {
     def releaseStorePassword = System.getenv("TERMUX_RELEASE_STORE_PASSWORD")
     def releaseKeyAlias = System.getenv("TERMUX_RELEASE_KEY_ALIAS")
     def releaseKeyPassword = System.getenv("TERMUX_RELEASE_KEY_PASSWORD")
-    def spirvHeadersDir = System.getenv("SPIRV_HEADERS_DIR")
-    def vulkanHeadersDir = System.getenv("VULKAN_HEADERS_DIR")
     def hasReleaseSigningConfig = releaseStoreFilePath && releaseStorePassword && releaseKeyAlias && releaseKeyPassword
 
     defaultConfig {
@@ -34,15 +32,6 @@ android {
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         versionCode 1020 // Always keep the same versionCode as Termux Upstream to allow users to swap between termux installations.
         versionName "0.2.22"
-
-        externalNativeBuild {
-            cmake {
-                cppFlags "-std=c++17 -O3"
-                arguments "-DANDROID_STL=c++_shared"
-                if (spirvHeadersDir) arguments "-DSPIRV-Headers_DIR=" + spirvHeadersDir
-                if (vulkanHeadersDir) arguments "-DVULKAN_HEADERS_DIR=" + vulkanHeadersDir
-            }
-        }
 
         if (appVersionName) versionName = appVersionName
         validateVersionName(versionName)
@@ -72,13 +61,6 @@ android {
                 include 'x86', 'x86_64', 'armeabi-v7a', 'arm64-v8a'
                 universalApk true
             }
-        }
-    }
-
-    externalNativeBuild {
-        cmake {
-            path file("src/main/cpp/CMakeLists.txt")
-            version "3.22.1"
         }
     }
 
@@ -177,9 +159,6 @@ dependencies {
     implementation 'com.google.guava:listenablefuture:9999.0-empty-to-avoid-conflict-with-guava'
     implementation "me.xdrop:fuzzywuzzy:1.4.0"
     implementation "com.google.ai.edge.litertlm:litertlm-android:0.12.0"
-    if (findProject(":mlc4j") != null) {
-        implementation project(":mlc4j")
-    }
     implementation project(":terminal-view")
     implementation project(":termux-shared")
     // Shizuku dependencies for privileged operations

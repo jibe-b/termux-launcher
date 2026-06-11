@@ -338,8 +338,7 @@ public class TaiPreferencesFragment extends PreferenceFragmentCompat {
 
         String current = preference.getValue();
         if (current != null && !current.isEmpty() && !seen.contains(current)) {
-            entries.add(current);
-            values.add(current);
+            preference.setValue(TaiModelRegistry.MODEL_GEMMA_4_E2B_IT);
         }
         preference.setEntries(entries.toArray(new CharSequence[0]));
         preference.setEntryValues(values.toArray(new CharSequence[0]));
@@ -635,12 +634,6 @@ public class TaiPreferencesFragment extends PreferenceFragmentCompat {
         }
         summary.append("\nCapabilities: ").append(model.capabilities.toString());
         try {
-            if (!TaiModelSpec.BACKEND_LITERT_LM.equals(model.backend)) {
-                summary.append("\nAccelerators: ").append(TaiModelSpec.BACKEND_MLC.equals(model.backend)
-                    ? "OpenCL GPU" : "Vulkan GPU, CPU fallback");
-                summary.append("\nContext: ").append(model.contextWindow).append(" tokens");
-                return summary.toString();
-            }
             TaiModelProfile profile = TaiModelProfile.forModel(model);
             summary.append("\nAccelerators: ").append(profile.compatibleAccelerators.toString());
             if (profile.minDeviceMemoryInGb != null) {

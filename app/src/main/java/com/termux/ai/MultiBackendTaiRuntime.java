@@ -9,14 +9,10 @@ import org.json.JSONObject;
 
 public final class MultiBackendTaiRuntime implements TaiRuntime {
     private final DualSlotTaiRuntime liteRt;
-    private final LlamaCppTaiRuntime llamaCpp;
-    private final MlcTaiRuntime mlc;
     private TaiRuntime activeAssistant;
 
     public MultiBackendTaiRuntime(@NonNull Context context) {
         liteRt = new DualSlotTaiRuntime(context);
-        llamaCpp = new LlamaCppTaiRuntime();
-        mlc = new MlcTaiRuntime();
         activeAssistant = liteRt;
     }
 
@@ -93,8 +89,6 @@ public final class MultiBackendTaiRuntime implements TaiRuntime {
     }
 
     private TaiRuntime runtimeForModel(TaiModelSpec model) {
-        if (TaiModelSpec.BACKEND_LLAMA_CPP.equals(model.backend)) return llamaCpp;
-        if (TaiModelSpec.BACKEND_MLC.equals(model.backend)) return mlc;
         return liteRt;
     }
 

@@ -22,7 +22,7 @@ Usage:
   tai doctor
 
 TAI is authenticated through ~/.launcherctl and runs in the Android app process.
-LiteRT-LM, MLC OpenCL, and llama.cpp run in the Android app process when supported by the installed APK.
+LiteRT-LM runs in the Android app process when supported by the installed APK.
 Auto honors model compatibility profiles and uses backend-specific GPU-first behavior with CPU fallback where available.
 Use OpenAI-compatible clients against /v1/models, /v1/chat/completions, and /v1/completions.
 Use tai --json <command> for raw API JSON.

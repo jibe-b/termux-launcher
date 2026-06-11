@@ -39,7 +39,11 @@ public final class TaiModelStore {
             JSONObject json = array.optJSONObject(i);
             if (json == null) continue;
             TaiModelSpec spec = TaiModelSpec.fromJson(json);
-            if (!spec.id.isEmpty()) models.put(spec.id, spec);
+            if (!spec.id.isEmpty()
+                && TaiModelSpec.BACKEND_LITERT_LM.equals(spec.backend)
+                && TaiModelSpec.FORMAT_LITERTLM.equals(spec.format)) {
+                models.put(spec.id, spec);
+            }
         }
         return models;
     }

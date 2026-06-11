@@ -38,7 +38,7 @@ public final class TaiModelImporter {
         DocumentMetadata metadata = readMetadata(uri);
         String fileName = sanitizeFileName(metadata.displayName);
         if (!isSupportedFileName(fileName)) {
-            return error(400, "unsupported_model_file", "Select a .litertlm, .task, or .gguf model file.");
+            return error(400, "unsupported_model_file", "Select a .litertlm or .task model file.");
         }
 
         String inferredId = stripModelExtension(fileName);
@@ -99,10 +99,9 @@ public final class TaiModelImporter {
                 TaiModelSpec.inferBackend(output.getAbsolutePath()),
                 format,
                 null,
-                format.equals(TaiModelSpec.FORMAT_GGUF) ? "user-provided" : null,
+                null,
                 4096,
                 0,
-                null,
                 null
             );
             store.upsertUserModel(spec);
@@ -175,9 +174,6 @@ public final class TaiModelImporter {
             byte[] buffer = new byte[256];
             int read = input.read(buffer);
             if (read <= 0) return false;
-            if (originalName.toLowerCase(Locale.ROOT).endsWith(".gguf")) {
-                return read >= 4 && buffer[0] == 'G' && buffer[1] == 'G' && buffer[2] == 'U' && buffer[3] == 'F';
-            }
             String prefix = new String(buffer, 0, read, StandardCharsets.UTF_8).trim().toLowerCase(Locale.ROOT);
             return !(prefix.startsWith("<!doctype html") || prefix.startsWith("<html") || prefix.contains("<head"));
         } catch (Exception e) {
@@ -187,7 +183,7 @@ public final class TaiModelImporter {
 
     public static boolean isSupportedFileName(@NonNull String fileName) {
         String lower = fileName.toLowerCase(Locale.ROOT);
-        return lower.endsWith(".litertlm") || lower.endsWith(".task") || lower.endsWith(".gguf");
+        return lower.endsWith(".litertlm") || lower.endsWith(".task");
     }
 
     @NonNull
@@ -196,7 +192,6 @@ public final class TaiModelImporter {
         String lower = value.toLowerCase(Locale.ROOT);
         if (lower.endsWith(".litertlm")) return value.substring(0, value.length() - ".litertlm".length());
         if (lower.endsWith(".task")) return value.substring(0, value.length() - ".task".length());
-        if (lower.endsWith(".gguf")) return value.substring(0, value.length() - ".gguf".length());
         return value;
     }
 

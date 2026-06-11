@@ -93,7 +93,7 @@ public final class TaiManager {
         data.put("runtime", state.toJson());
         data.put("settings", settings.toJson());
         data.put("appProcessRuntime", true);
-        data.put("backendPolicy", "Model metadata selects LiteRT-LM, MLC OpenCL, or llama.cpp. Auto uses each backend's GPU-first policy and llama.cpp may fall back to CPU.");
+        data.put("backendPolicy", "LiteRT-LM uses the selected accelerator policy with runtime fallback where supported.");
         appendDeviceCompatibility(data, state);
         return data;
     }
@@ -745,7 +745,7 @@ public final class TaiManager {
     @NonNull
     private JSONArray currentLimitations() {
         JSONArray limitations = new JSONArray();
-        limitations.put("LiteRT-LM, MLC OpenCL, and llama.cpp GGUF inference are available when included by the device ABI build.");
+        limitations.put("LiteRT-LM inference is available on supported device ABI builds.");
         limitations.put("Auto follows Edge Gallery model accelerator allowlists, minimum-memory metadata, and Pixel 10 GPU exclusion; LiteRT-LM initialization remains the final backend check.");
         limitations.put("Streaming text responses, cancellation, and keep-warm lifecycle controls are available through the localhost API.");
         limitations.put("Benchmark counters and multimodal input are TODO for a later phase.");
@@ -1029,8 +1029,6 @@ public final class TaiManager {
             && device.memoryBytes < model.recommendedRamGb * 1024L * 1024L * 1024L) {
             warnings.put("Device memory is below this model's recommendation of " + model.recommendedRamGb + " GiB.");
         }
-        if (TaiModelSpec.BACKEND_LLAMA_CPP.equals(model.backend) && !device.llamaCppAvailable) warnings.put("llama.cpp is not packaged for this device ABI.");
-        if (TaiModelSpec.BACKEND_MLC.equals(model.backend) && (!device.mlcAvailable || !device.openClLikelyAvailable)) warnings.put("MLC OpenCL is not available or could not be detected on this device.");
         data.put("compatibilityWarnings", warnings);
     }
 

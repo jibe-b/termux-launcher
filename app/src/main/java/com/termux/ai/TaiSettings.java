@@ -36,17 +36,24 @@ public final class TaiSettings {
 
     private static final String AUTO = "auto";
 
+    private final Context appContext;
     private final SharedPreferences preferences;
 
     public TaiSettings(@NonNull Context context) {
-        preferences = context.getApplicationContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        appContext = context.getApplicationContext();
+        preferences = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
     }
 
     @NonNull
     public String getDefaultAssistantModel() {
-        return preferences.getString(KEY_ROLE_DEFAULT_ASSISTANT, TaiModelRegistry.MODEL_GEMMA_4_E2B_IT);
+        String modelId = preferences.getString(KEY_ROLE_DEFAULT_ASSISTANT, TaiModelRegistry.MODEL_GEMMA_4_E2B_IT);
+        if (modelId == null) modelId = TaiModelRegistry.MODEL_GEMMA_4_E2B_IT;
+        if (new TaiModelRegistry().getModel(modelId) != null || new TaiModelStore(appContext).getUserModel(modelId) != null) {
+            return modelId;
+        }
+        preferences.edit().putString(KEY_ROLE_DEFAULT_ASSISTANT, TaiModelRegistry.MODEL_GEMMA_4_E2B_IT).apply();
+        return TaiModelRegistry.MODEL_GEMMA_4_E2B_IT;
     }
-
     @NonNull
     public TaiRuntimeOptions getRuntimeOptions() {
         return new TaiRuntimeOptions(

@@ -3,7 +3,6 @@ package com.termux.ai;
 import android.app.ActivityManager;
 import android.content.Context;
 import android.os.Build;
-import android.content.pm.PackageManager;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -30,10 +29,6 @@ public final class TaiDeviceCapabilities {
     public final String memorySource;
     public final boolean pixel10;
     public final boolean liteRtLmAbiSupported;
-    public final boolean llamaCppAvailable;
-    public final boolean vulkanAvailable;
-    public final boolean mlcAvailable;
-    public final boolean openClLikelyAvailable;
 
     private TaiDeviceCapabilities(
         @NonNull String model,
@@ -43,9 +38,7 @@ public final class TaiDeviceCapabilities {
         @NonNull List<String> supportedAbis,
         long memoryBytes,
         @NonNull String memorySource,
-        boolean pixel10,
-        boolean contextVulkanAvailable,
-        boolean likelyOpenCl
+        boolean pixel10
     ) {
         this.model = model;
         this.manufacturer = manufacturer;
@@ -56,10 +49,6 @@ public final class TaiDeviceCapabilities {
         this.memorySource = memorySource;
         this.pixel10 = pixel10;
         this.liteRtLmAbiSupported = containsSupportedAbi(supportedAbis);
-        this.llamaCppAvailable = containsArm64(supportedAbis) && LlamaCppTaiRuntime.isNativeAvailable();
-        this.vulkanAvailable = contextVulkanAvailable;
-        this.mlcAvailable = containsArm64(supportedAbis) && MlcTaiRuntime.isPackaged();
-        this.openClLikelyAvailable = likelyOpenCl;
     }
 
     @NonNull
@@ -79,13 +68,6 @@ public final class TaiDeviceCapabilities {
         }
         String model = Build.MODEL == null ? "" : Build.MODEL;
         String soc = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && Build.SOC_MODEL != null ? Build.SOC_MODEL : "";
-        PackageManager packageManager = context.getPackageManager();
-        boolean vulkan = packageManager != null
-            && packageManager.hasSystemFeature(PackageManager.FEATURE_VULKAN_HARDWARE_LEVEL);
-        String hardware = Build.HARDWARE == null ? "" : Build.HARDWARE.toLowerCase(Locale.ROOT);
-        String socLower = soc.toLowerCase(Locale.ROOT);
-        boolean likelyOpenCl = hardware.contains("qcom") || hardware.contains("mt") || hardware.contains("exynos")
-            || socLower.contains("snapdragon") || socLower.contains("mediatek") || socLower.contains("exynos");
         return new TaiDeviceCapabilities(
             model,
             Build.MANUFACTURER == null ? "" : Build.MANUFACTURER,
@@ -94,9 +76,7 @@ public final class TaiDeviceCapabilities {
             Arrays.asList(Build.SUPPORTED_ABIS),
             memoryBytes,
             memorySource,
-            model.toLowerCase(Locale.ROOT).contains("pixel 10"),
-            vulkan,
-            likelyOpenCl
+            model.toLowerCase(Locale.ROOT).contains("pixel 10")
         );
     }
 
@@ -140,14 +120,8 @@ public final class TaiDeviceCapabilities {
         json.put("memorySource", memorySource);
         json.put("pixel10", pixel10);
         json.put("liteRtLmAbiSupported", liteRtLmAbiSupported);
-        json.put("llamaCppAvailable", llamaCppAvailable);
-        json.put("vulkanAvailable", vulkanAvailable);
-        json.put("mlcAvailable", mlcAvailable);
-        json.put("openClLikelyAvailable", openClLikelyAvailable);
         JSONObject backends = new JSONObject();
         backends.put(TaiModelSpec.BACKEND_LITERT_LM, liteRtLmAbiSupported);
-        backends.put(TaiModelSpec.BACKEND_LLAMA_CPP, llamaCppAvailable);
-        backends.put(TaiModelSpec.BACKEND_MLC, mlcAvailable && openClLikelyAvailable);
         json.put("backends", backends);
         JSONArray accelerators = new JSONArray();
         if (supportsAccelerator("cpu")) accelerators.put("cpu");
@@ -166,8 +140,4 @@ public final class TaiDeviceCapabilities {
         return false;
     }
 
-    private static boolean containsArm64(@NonNull List<String> abis) {
-        for (String abi : abis) if ("arm64-v8a".equals(abi)) return true;
-        return false;
-    }
 }

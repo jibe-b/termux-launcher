@@ -17,23 +17,7 @@ public class TaiModelRegistryTest {
         assertNotNull(registry.getModel(TaiModelRegistry.MODEL_GEMMA_4_E2B_IT));
         assertNotNull(registry.getModel(TaiModelRegistry.MODEL_GEMMA_4_E4B_IT));
         assertNotNull(registry.getModel(TaiModelRegistry.MODEL_MOBILE_ACTIONS_270M));
-        assertNotNull(registry.getModel(TaiModelRegistry.MODEL_QWEN_CODER_1_5B_GGUF));
-        assertNotNull(registry.getModel(TaiModelRegistry.MODEL_QWEN_CODER_1_5B_MLC));
-        assertEquals(5, registry.getBuiltInModels().size());
-    }
-
-    @Test
-    public void catalogModels_exposeBackendAndFormat() throws Exception {
-        TaiModelRegistry registry = new TaiModelRegistry();
-        TaiModelSpec gguf = registry.getModel(TaiModelRegistry.MODEL_QWEN_CODER_1_5B_GGUF);
-        TaiModelSpec mlc = registry.getModel(TaiModelRegistry.MODEL_QWEN_CODER_1_5B_MLC);
-
-        assertEquals(TaiModelSpec.BACKEND_LLAMA_CPP, gguf.backend);
-        assertEquals(TaiModelSpec.FORMAT_GGUF, gguf.format);
-        assertEquals("Q4_K_M", gguf.quantization);
-        assertEquals(TaiModelSpec.BACKEND_MLC, mlc.backend);
-        assertEquals(TaiModelSpec.FORMAT_MLC_PACKAGE, mlc.format);
-        assertEquals("qwen2_q4f16_1_2e221f430380225c03990ad24c3d030e", mlc.runtimeLibrary);
+        assertEquals(3, registry.getBuiltInModels().size());
     }
 
     @Test
