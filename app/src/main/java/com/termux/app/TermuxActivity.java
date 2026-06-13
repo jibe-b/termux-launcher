@@ -1200,7 +1200,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             0,
             Gravity.BOTTOM
         );
-        decorRoot.addView(surfaceOverlay, overlayParams);
+        decorRoot.addView(surfaceOverlay, 0, overlayParams);
 
         mDecorNavBarSurfaceOverlay = surfaceOverlay;
         mDecorNavBarBlurBackdrop = blurBackdrop;
@@ -1237,7 +1237,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
         FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) layoutParams;
-        int targetHeight = visible ? Math.max(0, mNavBarHeight) : 0;
+        int targetHeight = visible ? resolveDecorNavBarSurfaceHeightPx() : 0;
         if (params.width != ViewGroup.LayoutParams.MATCH_PARENT ||
             params.height != targetHeight ||
             params.gravity != Gravity.BOTTOM) {
@@ -1276,12 +1276,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         overlay.setVisibility(View.VISIBLE);
-        overlay.bringToFront();
     }
 
     @Nullable
     private Rect buildDecorNavBarBackdropTargetRect() {
-        if (getWindow() == null || getWindow().getDecorView() == null || mNavBarHeight <= 0) {
+        if (getWindow() == null || getWindow().getDecorView() == null || resolveDecorNavBarSurfaceHeightPx() <= 0) {
             return null;
         }
         View decorView = getWindow().getDecorView();
@@ -1292,14 +1291,23 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         decorView.getLocationOnScreen(mTmpParentLocation);
-        int navHeight = Math.min(Math.max(1, mNavBarHeight), decorHeight);
+        int surfaceHeight = Math.min(Math.max(1, resolveDecorNavBarSurfaceHeightPx()), decorHeight);
         int bottom = mTmpParentLocation[1] + decorHeight;
         return new Rect(
             mTmpParentLocation[0],
-            bottom - navHeight,
+            bottom - surfaceHeight,
             mTmpParentLocation[0] + decorWidth,
             bottom
         );
+    }
+
+    private int resolveDecorNavBarSurfaceHeightPx() {
+        if (mNavBarHeight <= 0) {
+            return 0;
+        }
+        View accessoryContainer = findViewById(R.id.accessory_stack_container);
+        int dockHeight = accessoryContainer != null ? Math.max(0, accessoryContainer.getHeight()) : 0;
+        return mNavBarHeight + dockHeight;
     }
 
     private void clearDecorNavBarBackdrop() {
@@ -1483,19 +1491,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         boolean useRenderEffectBlur = shouldUseAccessoryRenderEffectBlur(state);
         if (useRenderEffectBlur) {
-            ImageView backdrop = findViewById(R.id.accessory_blur_backdrop);
-            boolean accessoryBackdropHealthy = backdrop != null
-                && backdrop.getVisibility() == View.VISIBLE
-                && backdrop.getDrawable() != null;
-            if (!accessoryBackdropHealthy) {
-                return false;
-            }
             if (shouldShowDecorNavBarSurface(state)) {
                 return mDecorNavBarBlurBackdrop != null
                     && mDecorNavBarBlurBackdrop.getVisibility() == View.VISIBLE
                     && mDecorNavBarBlurBackdrop.getDrawable() != null;
             }
-            return true;
+            ImageView backdrop = findViewById(R.id.accessory_blur_backdrop);
+            return backdrop != null
+                && backdrop.getVisibility() == View.VISIBLE
+                && backdrop.getDrawable() != null;
         }
         View realtimeBlur = findViewById(R.id.extrakeys_backgroundblur);
         return realtimeBlur != null
@@ -1696,6 +1700,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean usingManagedWallpaperSource = shouldUseManagedWallpaperBlurSource();
         View wallpaperFrame = findViewById(R.id.activity_termux_root_view);
         applyAccessoryLayerBounds(R.id.accessory_surface_host, null);
+        if (shouldShowDecorNavBarSurface(state)) {
+            clearAccessoryRenderEffectBackdrop();
+            return;
+        }
         if (backdrop == null || surfaceHost == null || accessoryContainer == null || wallpaperFrame == null ||
             accessoryContainer.getWidth() <= 0 || accessoryContainer.getHeight() <= 0) {
             if (backdrop != null && backdrop.getDrawable() != null && shouldUseAccessoryRenderEffectBlur(state)) {
@@ -1773,8 +1781,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View azFxOverlay = findViewById(R.id.apps_bar_az_fx_overlay);
         View azLabelOverlay = findViewById(R.id.apps_bar_az_label_overlay);
         boolean useRenderEffectBlur = shouldUseAccessoryRenderEffectBlur(state);
+        boolean useDecorSurface = shouldShowDecorNavBarSurface(state);
 
-        if (extraKeysBackgroundBlur != null && !useRenderEffectBlur) {
+        if (extraKeysBackgroundBlur != null && !useRenderEffectBlur && !useDecorSurface) {
             applyRealtimeBlurRadius(extraKeysBackgroundBlur, state.blurRadiusDp);
             applyRealtimeBlurDownsampleFactor(extraKeysBackgroundBlur, ACCESSORY_BLUR_DOWNSAMPLE_FACTOR);
             applyRealtimeBlurOverlayColor(
@@ -1856,16 +1865,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         if (extraKeysBackground != null) {
-            extraKeysBackground.setVisibility(View.VISIBLE);
+            extraKeysBackground.setVisibility(useDecorSurface ? View.GONE : View.VISIBLE);
             extraKeysBackground.setAlpha(state.barAlpha);
         }
 
         if (extraKeysBackgroundBlur != null) {
-            extraKeysBackgroundBlur.setVisibility(state.blurEnabled && !useRenderEffectBlur ? View.VISIBLE : View.GONE);
+            extraKeysBackgroundBlur.setVisibility(
+                state.blurEnabled && !useRenderEffectBlur && !useDecorSurface ? View.VISIBLE : View.GONE
+            );
         }
         configureAccessoryTopEdgeFx(true, state.barAlpha);
-        updateAccessoryRenderEffectBackdrop(state);
         applyDecorNavBarSurfaceState(state);
+        updateAccessoryRenderEffectBackdrop(state);
         updateAzOverflowAffordance();
     }
 
