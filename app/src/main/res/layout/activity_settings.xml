@@ -9,17 +9,17 @@
     <com.google.android.material.appbar.MaterialToolbar
         android:id="@+id/toolbar"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="80dp"
         android:background="?attr/termuxColorSurfaceBase"
         android:gravity="center_vertical"
-        android:minHeight="72dp"
+        android:minHeight="80dp"
         android:paddingStart="4dp"
-        android:paddingTop="12dp"
         android:paddingEnd="20dp"
-        android:paddingBottom="12dp"
         app:contentInsetStartWithNavigation="0dp"
         app:navigationIconTint="?attr/termuxColorOnSurface"
         app:popupTheme="@style/ThemeOverlay.AppCompat.DayNight"
+        app:titleMarginTop="0dp"
+        app:titleMarginBottom="0dp"
         app:titleTextAppearance="@style/TextAppearance.Termux.Settings.ToolbarTitle" />
 
     <FrameLayout

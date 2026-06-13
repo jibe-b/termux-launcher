@@ -15,23 +15,6 @@
     <!-- TermuxApp DayNight NoActionBar theme. -->
     <style name="Theme.TermuxApp.DayNight.NoActionBar" parent="Theme.BaseActivity.DayNight.NoActionBar"/>
 
-    <!-- Settings activity theme: rounded Material dialogs for preference popups
-         (ListPreference / EditTextPreference) across all settings screens. -->
-    <style name="Theme.TermuxApp.Settings" parent="Theme.TermuxApp.DayNight.NoActionBar">
-        <item name="alertDialogTheme">@style/ThemeOverlay.Termux.Settings.Dialog</item>
-        <item name="android:dialogCornerRadius">24dp</item>
-    </style>
-
-    <style name="ThemeOverlay.Termux.Settings.Dialog" parent="ThemeOverlay.Material3.MaterialAlertDialog">
-        <item name="colorPrimary">?attr/termuxColorPrimary</item>
-        <item name="colorOnPrimary">?attr/termuxColorOnPrimary</item>
-        <item name="colorSurface">?attr/termuxColorSurfacePanelHigh</item>
-        <item name="colorOnSurface">?attr/termuxColorOnSurface</item>
-        <item name="colorOnSurfaceVariant">?attr/termuxColorOnSurfaceVariant</item>
-        <item name="android:dialogCornerRadius">24dp</item>
-        <item name="android:windowBackground">@drawable/settings_dialog_background</item>
-    </style>
-
 
     <!-- TermuxActivity DayNight NoActionBar theme. -->
     <style name="Theme.TermuxActivity.DayNight.NoActionBar" parent="Theme.TermuxApp.DayNight.NoActionBar">
