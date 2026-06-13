@@ -2,6 +2,9 @@ name: Build nightly
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - experimental
 
 
 concurrency:
