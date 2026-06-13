@@ -2,42 +2,49 @@
 
     <Preference
         app:key="termux"
+        app:icon="@drawable/ic_settings_terminal"
         app:title="@string/termux_preferences_title"
         app:summary="@string/termux_preferences_summary"
         app:fragment="com.termux.app.fragments.settings.TermuxPreferencesFragment"/>
 
     <Preference
         app:key="look_and_feel"
+        app:icon="@drawable/ic_settings_palette"
         app:title="@string/termux_style_preferences_title"
         app:summary="@string/termux_style_preferences_summary"
         app:fragment="com.termux.app.fragments.settings.termux.TermuxStylePreferencesFragment"/>
 
     <Preference
         app:key="shizuku"
+        app:icon="@drawable/ic_settings_shield"
         app:title="@string/termux_privileged_access_preferences_title"
         app:summary="@string/termux_privileged_access_preferences_summary"
         app:fragment="com.termux.app.fragments.settings.termux.PrivilegedAccessPreferencesFragment"/>
 
     <Preference
         app:key="termux_ai"
+        app:icon="@drawable/ic_settings_ai"
         app:title="@string/termux_ai_preferences_title"
         app:summary="@string/termux_ai_preferences_summary"
         app:fragment="com.termux.app.fragments.settings.termux.TaiPreferencesFragment"/>
 
     <Preference
         app:key="apps_bar"
+        app:icon="@drawable/ic_settings_grid"
         app:title="@string/termux_launcher_preferences_title"
         app:summary="@string/termux_launcher_preferences_summary"
         app:fragment="com.termux.app.fragments.settings.termux.LauncherPreferencesFragment"/>
 
     <Preference
         app:key="permissions"
+        app:icon="@drawable/ic_settings_lock"
         app:title="@string/termux_app_launcher_permissions_title"
         app:summary="@string/termux_app_launcher_permissions_summary"
         app:fragment="com.termux.app.fragments.settings.termux.LauncherPermissionsPreferencesFragment"/>
 
     <Preference
         app:key="termux_api"
+        app:icon="@drawable/ic_settings_plug"
         app:title="@string/termux_api_preferences_title"
         app:summary="@string/termux_api_preferences_summary"
         app:isPreferenceVisible="false"
@@ -73,12 +80,14 @@
 
     <Preference
         app:key="about"
+        app:icon="@drawable/ic_settings_info"
         app:title="@string/about_preference_title"
         app:summary="@string/about_preference_summary"
         app:persistent="false"/>
 
     <Preference
         app:key="donate"
+        app:icon="@drawable/ic_settings_heart"
         app:title="@string/donate_preference_title"
         app:summary="@string/donate_preference_summary"
         app:persistent="false"

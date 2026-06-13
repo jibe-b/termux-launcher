@@ -18,6 +18,7 @@ import androidx.preference.SwitchPreferenceCompat;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.termux.R;
+import com.termux.app.fragments.settings.SettingsLayoutUtils;
 import com.termux.app.launcher.LauncherLockAccessibilityAccess;
 import com.termux.app.launcher.data.LauncherUsageStatsStore;
 import com.termux.app.launcher.notifications.LauncherNotificationAccess;
@@ -33,6 +34,7 @@ public class LauncherPreferencesFragment extends PreferenceFragmentCompat {
         PreferenceManager preferenceManager = getPreferenceManager();
         preferenceManager.setPreferenceDataStore(TermuxStylePreferencesDataStore.getInstance(context));
         setPreferencesFromResource(R.xml.launcher_preferences, rootKey);
+        SettingsLayoutUtils.applyScreenLayout(this);
         LauncherIconPackPreferenceController.configure(this, context);
 
         SwitchPreferenceCompat appsRowPreference = findPreference("app_launcher_apps_row_enabled");

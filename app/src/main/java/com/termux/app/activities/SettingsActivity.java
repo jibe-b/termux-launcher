@@ -4,12 +4,14 @@ import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
 import android.os.Environment;
+import android.view.Window;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.fragment.app.Fragment;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceFragmentCompat;
 import com.termux.R;
+import com.termux.app.fragments.settings.SettingsLayoutUtils;
 import com.termux.app.theme.TermuxThemeManager;
 import com.termux.shared.activities.ReportActivity;
 import com.termux.shared.file.FileUtils;
@@ -28,6 +30,7 @@ import com.termux.shared.termux.TermuxUtils;
 import com.termux.shared.termux.theme.TermuxThemeUtils;
 import com.termux.shared.activity.media.AppCompatActivityUtils;
 import com.termux.shared.theme.NightMode;
+import com.termux.shared.theme.ThemeUtils;
 
 public class SettingsActivity extends AppCompatActivity {
 
@@ -51,6 +54,7 @@ public class SettingsActivity extends AppCompatActivity {
         TermuxThemeManager.applyThemeOverlays(this);
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_settings);
+        applySettingsSystemBars();
         if (savedInstanceState == null) {
             Fragment initialFragment = buildInitialFragment();
             getSupportFragmentManager().beginTransaction().replace(R.id.settings, initialFragment).commit();
@@ -59,6 +63,13 @@ public class SettingsActivity extends AppCompatActivity {
         AppCompatActivityUtils.setShowBackButtonInActionBar(this, true);
         int titleResId = getIntent().getIntExtra(EXTRA_INITIAL_TITLE_RES, R.string.title_activity_termux_settings);
         setTitle(titleResId);
+    }
+
+    private void applySettingsSystemBars() {
+        Window window = getWindow();
+        int surface = ThemeUtils.getSystemAttrColor(this, com.termux.shared.R.attr.termuxColorSurfaceBase, android.graphics.Color.BLACK);
+        window.setStatusBarColor(surface);
+        window.setNavigationBarColor(surface);
     }
 
     @NonNull
@@ -84,6 +95,7 @@ public class SettingsActivity extends AppCompatActivity {
             if (context == null)
                 return;
             setPreferencesFromResource(R.xml.root_preferences, rootKey);
+            SettingsLayoutUtils.applyRootLayout(this);
             configureTermuxAPIPreference(context);
             configureTermuxGUIPreference(context);
             configureTermuxFloatPreference(context);

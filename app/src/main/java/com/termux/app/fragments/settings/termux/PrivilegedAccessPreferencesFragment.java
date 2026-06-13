@@ -13,6 +13,7 @@ import androidx.preference.PreferenceFragmentCompat;
 import androidx.preference.PreferenceManager;
 
 import com.termux.R;
+import com.termux.app.fragments.settings.SettingsLayoutUtils;
 import com.termux.privileged.PrivilegedBackendManager;
 import com.termux.privileged.PrivilegedPolicyStore;
 import com.termux.privileged.ShizukuBackend;
@@ -35,6 +36,7 @@ public class PrivilegedAccessPreferencesFragment extends PreferenceFragmentCompa
         PreferenceManager preferenceManager = getPreferenceManager();
         preferenceManager.setPreferenceDataStore(PrivilegedAccessPreferencesDataStore.getInstance(context));
         setPreferencesFromResource(R.xml.termux_privileged_access_preferences, rootKey);
+        SettingsLayoutUtils.applyScreenLayout(this);
 
         configurePermissionRequestAction(context);
         configureBackendToggleRefresh(context, KEY_MASTER);

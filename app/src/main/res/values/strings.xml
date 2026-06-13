@@ -143,7 +143,7 @@
 
 
     <!-- Termux Settings -->
-    <string name="title_activity_termux_settings">&TERMUX_APP_NAME; Settings</string>
+    <string name="title_activity_termux_settings">&TERMUX_APP_NAME;</string>
 
     <!-- Termux App Preferences -->
     <string name="termux_preferences_title">Termux</string>
@@ -247,7 +247,7 @@
         <string name="termux_privileged_access_preferences_title">Shizuku</string>
         <string name="termux_privileged_access_preferences_summary">Shizuku backend controls</string>
 
-        <string name="termux_ai_preferences_title">TAI / Termux AI</string>
+        <string name="termux_ai_preferences_title">TAI · Termux AI</string>
         <string name="termux_ai_preferences_summary">Local LiteRT-LM hosting, model management, runtime controls, and endpoint settings</string>
         <string name="termux_ai_overview_header">Overview</string>
         <string name="termux_ai_runtime_control_header">Runtime Control</string>

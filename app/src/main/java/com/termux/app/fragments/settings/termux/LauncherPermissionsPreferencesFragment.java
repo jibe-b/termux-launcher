@@ -16,6 +16,7 @@ import androidx.preference.PreferenceFragmentCompat;
 
 import com.termux.R;
 import com.termux.app.TermuxActivity;
+import com.termux.app.fragments.settings.SettingsLayoutUtils;
 import com.termux.app.launcher.LauncherLockAccessibilityAccess;
 import com.termux.app.launcher.notifications.LauncherNotificationAccess;
 import com.termux.shared.android.PermissionUtils;
@@ -37,6 +38,7 @@ public class LauncherPermissionsPreferencesFragment extends PreferenceFragmentCo
             return;
         }
         setPreferencesFromResource(R.xml.launcher_permissions_preferences, rootKey);
+        SettingsLayoutUtils.applyScreenLayout(this);
         configureActions(context);
         updateSummaries(context);
     }

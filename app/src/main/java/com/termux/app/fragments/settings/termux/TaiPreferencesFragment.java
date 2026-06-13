@@ -25,6 +25,7 @@ import androidx.preference.PreferenceManager;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.termux.R;
+import com.termux.app.fragments.settings.SettingsLayoutUtils;
 import com.termux.ai.TaiManager;
 import com.termux.ai.TaiModelCatalog;
 import com.termux.ai.TaiModelImporter;
@@ -79,6 +80,7 @@ public class TaiPreferencesFragment extends PreferenceFragmentCompat {
         PreferenceManager preferenceManager = getPreferenceManager();
         preferenceManager.setSharedPreferencesName(TaiSettings.PREFS_NAME);
         setPreferencesFromResource(R.xml.termux_ai_preferences, rootKey);
+        SettingsLayoutUtils.applyScreenLayout(this);
         setStaticSummary("tai_model_privacy_notice", R.string.termux_ai_model_privacy_notice_summary);
         configureRuntimeControls(context);
         configureHuggingFaceToken();

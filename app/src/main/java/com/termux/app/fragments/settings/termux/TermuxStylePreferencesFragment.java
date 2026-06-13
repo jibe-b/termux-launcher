@@ -18,6 +18,7 @@ import androidx.preference.PreferenceManager;
 import androidx.preference.SeekBarPreference;
 import com.termux.R;
 import com.termux.app.TermuxActivity;
+import com.termux.app.fragments.settings.SettingsLayoutUtils;
 import com.termux.shared.data.DataUtils;
 import com.termux.shared.file.FileUtils;
 import com.termux.shared.logger.Logger;
@@ -51,6 +52,7 @@ public class TermuxStylePreferencesFragment extends PreferenceFragmentCompat {
         PreferenceManager preferenceManager = getPreferenceManager();
         preferenceManager.setPreferenceDataStore(TermuxStylePreferencesDataStore.getInstance(context));
         setPreferencesFromResource(R.xml.termux_style_preferences, rootKey);
+        SettingsLayoutUtils.applyScreenLayout(this);
         configureDockPreferencePresentation();
         updateDockBlurAvailability();
     }
