@@ -147,10 +147,10 @@
 
     <!-- Termux App Preferences -->
     <string name="termux_preferences_title">Termux</string>
-    <string name="termux_preferences_summary">Core terminal and debugging settings</string>
+    <string name="termux_preferences_summary">Core terminal, input, and debugging settings</string>
 
     <string name="termux_launcher_preferences_title">Apps Bar</string>
-    <string name="termux_launcher_preferences_summary">Search, icons, and visual settings for the apps bar</string>
+    <string name="termux_launcher_preferences_summary">Apps row behavior, search, icon packs, and app ordering</string>
     <string name="termux_app_launcher_empty_pinned_hint">Long-press here to pin your apps</string>
     <string name="termux_launcher_search_preferences_summary">Configure launcher search behavior and default pinned apps</string>
     <string name="termux_launcher_layout_preferences_summary">Configure launcher bar layout and sizing</string>
@@ -159,10 +159,12 @@
     <string name="termux_themes_header">Theme</string>
     <string name="termux_terminal_background_header">Terminal</string>
     <string name="termux_extrakeys_appsbar_header">Dock</string>
+    <string name="apps_bar_behavior_header">Behavior</string>
     <string name="apps_bar_search_header">Search</string>
     <string name="apps_bar_soft_keyboard_header">Soft Keyboard Behavior</string>
     <string name="apps_bar_icons_header">Icons</string>
     <string name="apps_bar_visual_header">Visual</string>
+    <string name="apps_bar_maintenance_header">App order</string>
 
         <!-- Debugging Preferences -->
         <string name="termux_debugging_preferences_title">Debugging</string>
@@ -235,7 +237,7 @@
 
         <!-- Termux Style Preferences -->
         <string name="termux_style_preferences_title">Appearance</string>
-        <string name="termux_style_preferences_summary">Theme, wallpaper, terminal, dock, and sessions menu settings</string>
+        <string name="termux_style_preferences_summary">Theme, wallpaper, terminal surface, dock, and sessions menu</string>
 
         <string name="termux_theme_mode_title">Mode</string>
         <string name="termux_theme_mode_system">System</string>
@@ -358,6 +360,7 @@
             <!-- Background Category -->
             <string name="termux_background_header">Wallpaper</string>
             <string name="termux_use_system_wallpaper_title">Wallpaper</string>
+            <string name="termux_use_system_wallpaper_summary">Use the launcher-managed wallpaper behind Termux.</string>
                 
                 <string name="termux_terminal_background_opacity_title">Opacity</string>
             <!-- Extra Keys Category -->
@@ -367,10 +370,10 @@
                 <string name="termux_app_bar_opacity_title">Opacity</string>
 
             <!-- App Launcher Category -->
-            <string name="termux_app_launcher_header">Launcher: Settings</string>
-            <string name="termux_app_launcher_search_header">Launcher: Search</string>
-            <string name="termux_app_launcher_layout_header">Launcher: Layout</string>
-            <string name="termux_app_launcher_appearance_header">Launcher: Appearance</string>
+            <string name="termux_app_launcher_header">Behavior</string>
+            <string name="termux_app_launcher_search_header">Search</string>
+            <string name="termux_app_launcher_layout_header">Dock layout</string>
+            <string name="termux_app_launcher_appearance_header">Icons</string>
 
                 <string name="termux_app_launcher_button_count_title">Icon count</string>
                 <string name="termux_app_launcher_button_count_summary">Set the number of icons shown in the app launcher bar.</string>
@@ -413,7 +416,7 @@
                 <string name="termux_app_launcher_permission_settings_unavailable">Permission settings are unavailable on this device.</string>
                 <string name="termux_app_launcher_az_row_enabled_title">Alphabets row</string>
                 <string name="termux_app_launcher_az_row_enabled_summary">Shows an alphabet strip between apps bar and extra keys for quick launch scrubbing.</string>
-                <string name="termux_app_launcher_az_double_tap_lock_title">Double tap alphabets row lockscreen</string>
+                <string name="termux_app_launcher_az_double_tap_lock_title">Double tap alphabets row</string>
                 <string name="termux_app_launcher_az_double_tap_lock_summary">Choose what double tapping the alphabets row does.</string>
                 <string name="termux_app_launcher_az_lock_method_off">Off</string>
                 <string name="termux_app_launcher_az_lock_method_shizuku">Shizuku</string>
@@ -424,7 +427,7 @@
                 <string name="termux_app_launcher_accessibility_lock_prompt_title">Enable accessibility lock</string>
                 <string name="termux_app_launcher_accessibility_lock_prompt_message">Enable Termux Launcher Lock Service to lock the screen from the alphabets row.</string>
                 <string name="termux_app_launcher_accessibility_lock_prompt_enable">Enable</string>
-                <string name="termux_app_launcher_reset_usage_ranking_title">Reset App Order</string>
+                <string name="termux_app_launcher_reset_usage_ranking_title">Reset app order</string>
                 <string name="termux_app_launcher_reset_usage_ranking_summary">Apps are ordered based on how often you use them. Tap to reset this order.</string>
                 <string name="termux_app_launcher_bar_height_title">Dock size</string>
                 <string name="termux_app_launcher_bar_height_summary">Choose the overall dock size.</string>
@@ -508,8 +511,10 @@
 
     <!-- About Preference -->
     <string name="about_preference_title">About</string>
+    <string name="about_preference_summary">Version, build, device details, licenses, and links</string>
 
     <!-- Donate Preference -->
     <string name="donate_preference_title">Donate</string>
+    <string name="donate_preference_summary">Support Termux development</string>
 
 </resources>
