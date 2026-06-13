@@ -307,7 +307,7 @@
         <string name="termux_ai_prompts_header">Prompt</string>
         <string name="termux_ai_capabilities_header">Local endpoint</string>
         <string name="termux_ai_model_privacy_notice_title">Model downloads and imports</string>
-        <string name="termux_ai_model_privacy_notice_summary">No model files are bundled in the APK. Downloads and gated/licensed imports require explicit user action. TAI only manages local models and exposes an authenticated localhost endpoint.</string>
+        <string name="termux_ai_model_privacy_notice_summary">No models ship with the app. You choose what to download or import — gated models need your own Hugging Face token. Everything runs on-device and is served only over an authenticated localhost endpoint; nothing is sent to the cloud.</string>
         <string name="termux_ai_default_assistant_model_title">Default assistant</string>
         <string name="termux_ai_auto_model_default">Auto / Gallery default</string>
         <string name="termux_ai_accelerator_auto_gpu_preferred">Auto / model profile</string>
@@ -334,6 +334,11 @@
         <string name="termux_ai_api_token_rotate_title">Recreate API token</string>
         <string name="termux_ai_api_token_rotate_summary">Generate a new bearer token and update ~/.launcherctl/token</string>
         <string name="termux_ai_api_token_rotated">API token recreated</string>
+        <string name="termux_ai_api_token_copied">API bearer token copied</string>
+        <string name="termux_ai_base_url_copied">OpenAI base URL copied</string>
+        <string name="termux_ai_api_port_dialog_header">OpenAI base URL\n%1$s</string>
+        <string name="termux_ai_dialog_save">Save</string>
+        <string name="termux_ai_dialog_copy">Copy</string>
         <string name="termux_ai_endpoint_update_failed">Endpoint setting update failed</string>
         <string name="termux_ai_endpoint_notice_title">OpenAI-compatible endpoint</string>
         <string name="termux_ai_endpoint_notice_summary">External tools use ~/.launcherctl/endpoint and ~/.launcherctl/token with /v1/models, /v1/chat/completions, /v1/completions, and /v1/ai/runtime.</string>

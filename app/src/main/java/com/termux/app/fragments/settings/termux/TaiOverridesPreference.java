@@ -4,7 +4,7 @@ import android.content.Context;
 import android.util.AttributeSet;
 import android.view.LayoutInflater;
 import android.view.View;
-import android.widget.GridLayout;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.annotation.Keep;
@@ -18,9 +18,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Two-column grid of runtime override key/value cells, matching the TL handoff
+ * Two-column list of runtime override key/value cells, matching the TL handoff
  * "Runtime overrides" design. Each cell is tappable; persistence is handled by
- * the hosting fragment.
+ * the hosting fragment. Rendered as rows of two weighted cells (rather than a
+ * GridLayout) so the columns reliably stretch to fill the row.
  */
 @Keep
 public class TaiOverridesPreference extends Preference {
@@ -75,27 +76,44 @@ public class TaiOverridesPreference extends Preference {
         holder.itemView.setClickable(false);
         holder.itemView.setFocusable(false);
 
-        GridLayout grid = (GridLayout) holder.findViewById(R.id.tai_overrides_grid);
-        if (grid == null) return;
-        grid.removeAllViews();
+        View root = holder.findViewById(R.id.tai_overrides_container);
+        if (!(root instanceof LinearLayout)) return;
+        LinearLayout container = (LinearLayout) root;
+        container.removeAllViews();
+
         LayoutInflater inflater = LayoutInflater.from(getContext());
-        for (int i = 0; i < mItems.size(); i++) {
-            Item item = mItems.get(i);
-            View cell = inflater.inflate(R.layout.preference_tai_override_cell, grid, false);
-            GridLayout.LayoutParams params = new GridLayout.LayoutParams(
-                GridLayout.spec(GridLayout.UNDEFINED),
-                GridLayout.spec(GridLayout.UNDEFINED, 1f));
-            params.width = 0;
-            cell.setLayoutParams(params);
-            TextView key = cell.findViewById(R.id.tai_override_key);
-            if (key != null) key.setText(item.label);
-            TextView value = cell.findViewById(R.id.tai_override_value);
-            if (value != null) value.setText(item.valueLabel);
-            final int index = i;
-            cell.setOnClickListener(v -> {
-                if (mListener != null) mListener.onOverrideClick(index);
-            });
-            grid.addView(cell);
+        for (int i = 0; i < mItems.size(); i += 2) {
+            LinearLayout row = new LinearLayout(getContext());
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setLayoutParams(new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+            addCell(inflater, row, i);
+            if (i + 1 < mItems.size()) {
+                addCell(inflater, row, i + 1);
+            } else {
+                // Keep the single trailing cell at half width.
+                View spacer = new View(getContext());
+                spacer.setLayoutParams(new LinearLayout.LayoutParams(0,
+                    LinearLayout.LayoutParams.MATCH_PARENT, 1f));
+                row.addView(spacer);
+            }
+            container.addView(row);
         }
+    }
+
+    private void addCell(@NonNull LayoutInflater inflater, @NonNull LinearLayout row, int index) {
+        Item item = mItems.get(index);
+        View cell = inflater.inflate(R.layout.preference_tai_override_cell, row, false);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0,
+            LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        cell.setLayoutParams(params);
+        TextView key = cell.findViewById(R.id.tai_override_key);
+        if (key != null) key.setText(item.label);
+        TextView value = cell.findViewById(R.id.tai_override_value);
+        if (value != null) value.setText(item.valueLabel);
+        cell.setOnClickListener(v -> {
+            if (mListener != null) mListener.onOverrideClick(index);
+        });
+        row.addView(cell);
     }
 }

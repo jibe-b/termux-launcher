@@ -13,6 +13,7 @@ import androidx.preference.PreferenceDataStore;
 import androidx.preference.PreferenceFragmentCompat;
 import androidx.preference.PreferenceManager;
 import com.termux.R;
+import com.termux.app.fragments.settings.SettingsLayoutUtils;
 import com.termux.privileged.PrivilegedBackend;
 import com.termux.privileged.PrivilegedBackendManager;
 import com.termux.privileged.ShizukuBackend;
@@ -33,6 +34,7 @@ public class DebuggingPreferencesFragment extends PreferenceFragmentCompat {
         setPreferencesFromResource(R.xml.termux_debugging_preferences, rootKey);
         configureLoggingPreferences(context);
         configurePrivilegedBackendSmokeTestPreference(context);
+        SettingsLayoutUtils.applyScreenLayout(this);
     }
 
     private void configureLoggingPreferences(@NonNull Context context) {

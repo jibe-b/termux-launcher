@@ -54,10 +54,10 @@ public class SettingsActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         TermuxThemeUtils.setAppNightMode(this);
         AppCompatActivityUtils.setNightMode(this, NightMode.getAppNightMode().getName(), true);
-        setTheme(R.style.Theme_TermuxApp_DayNight_NoActionBar);
+        setTheme(R.style.Theme_TermuxApp_Settings);
         TermuxThemeManager.applyThemeOverlays(this);
         super.onCreate(savedInstanceState);
-        registerSettingsDividerCallbacks();
+        registerSettingsStyleCallbacks();
         setContentView(R.layout.activity_settings);
         applySettingsSystemBars();
         if (savedInstanceState == null) {
@@ -71,14 +71,33 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     /**
-     * Applies the TL handoff divider style to every settings page: inset, icon-aligned
-     * dividers between the root rows, and no inter-row dividers on sub-screens (sections
-     * there are separated by the category hairline instead). Done centrally so individual
-     * fragments do not each need to override onViewCreated.
+     * Applies the TL handoff styling to every settings page so individual fragments do not
+     * each need to opt in:
+     * <ul>
+     *   <li>Row/category/card layouts (applied in onFragmentCreated, before the list adapter
+     *       is built, so older sub-screens such as Debugging / Terminal IO / Terminal view
+     *       pick up the redesigned rows too).</li>
+     *   <li>Dividers (applied in onFragmentViewCreated, once the list exists): inset,
+     *       icon-aligned dividers between root rows, and none on sub-screens where sections
+     *       are separated by the category hairline instead.</li>
+     * </ul>
      */
-    private void registerSettingsDividerCallbacks() {
+    private void registerSettingsStyleCallbacks() {
         getSupportFragmentManager().registerFragmentLifecycleCallbacks(
             new androidx.fragment.app.FragmentManager.FragmentLifecycleCallbacks() {
+                @Override
+                public void onFragmentCreated(@NonNull androidx.fragment.app.FragmentManager fm,
+                                              @NonNull Fragment fragment, Bundle savedInstanceState) {
+                    if (!(fragment instanceof PreferenceFragmentCompat)) return;
+                    PreferenceFragmentCompat preferenceFragment = (PreferenceFragmentCompat) fragment;
+                    if (preferenceFragment.getPreferenceScreen() == null) return;
+                    if (fragment instanceof RootPreferencesFragment) {
+                        SettingsLayoutUtils.applyRootLayout(preferenceFragment);
+                    } else {
+                        SettingsLayoutUtils.applyScreenLayout(preferenceFragment);
+                    }
+                }
+
                 @Override
                 public void onFragmentViewCreated(@NonNull androidx.fragment.app.FragmentManager fm,
                                                   @NonNull Fragment fragment, @NonNull View view,

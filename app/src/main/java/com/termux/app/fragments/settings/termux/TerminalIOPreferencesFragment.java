@@ -7,6 +7,7 @@ import androidx.preference.PreferenceDataStore;
 import androidx.preference.PreferenceFragmentCompat;
 import androidx.preference.PreferenceManager;
 import com.termux.R;
+import com.termux.app.fragments.settings.SettingsLayoutUtils;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 @Keep
@@ -20,6 +21,7 @@ public class TerminalIOPreferencesFragment extends PreferenceFragmentCompat {
         PreferenceManager preferenceManager = getPreferenceManager();
         preferenceManager.setPreferenceDataStore(TerminalIOPreferencesDataStore.getInstance(context));
         setPreferencesFromResource(R.xml.termux_terminal_io_preferences, rootKey);
+        SettingsLayoutUtils.applyScreenLayout(this);
     }
 }
 

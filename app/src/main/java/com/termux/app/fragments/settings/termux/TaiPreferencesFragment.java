@@ -5,6 +5,7 @@ import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
@@ -14,8 +15,11 @@ import android.text.SpannableStringBuilder;
 import android.text.Spanned;
 import android.text.style.ForegroundColorSpan;
 import android.util.TypedValue;
+import android.view.Gravity;
+import android.view.View;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.Keep;
@@ -127,6 +131,7 @@ public class TaiPreferencesFragment extends PreferenceFragmentCompat {
         configureRuntimeControls(context);
         configureOverrides(context);
         configureHuggingFaceToken();
+        configureGeneralPrompt();
         configureEndpointPreferences(context);
         configureModelManager(context);
     }
@@ -291,80 +296,143 @@ public class TaiPreferencesFragment extends PreferenceFragmentCompat {
                 return true;
             });
         }
-
-        Preference endpoint = findPreference("tai_endpoint_notice");
-        if (endpoint != null) {
-            endpoint.setOnPreferenceClickListener(preference -> {
-                Context currentContext = getContext();
-                if (currentContext != null) {
-                    String message = buildEndpointDetailMessage(currentContext);
-                    new MaterialAlertDialogBuilder(currentContext)
-                        .setTitle(R.string.termux_ai_endpoint_detail_title)
-                        .setMessage(message)
-                        .setNeutralButton(R.string.termux_ai_endpoint_copy_action, (dialog, which) -> copyEndpointDetails(currentContext, message))
-                        .setPositiveButton(android.R.string.ok, null)
-                        .show();
-                }
-                return true;
-            });
-        }
     }
 
     private void configureApiPortPreference(Context context) {
         EditTextPreference port = findPreference(TaiSettings.KEY_API_PORT);
         if (port == null) return;
-        TaiSettings settings = new TaiSettings(context);
-        port.setText(String.valueOf(settings.getApiPort()));
-        port.setOnBindEditTextListener(editText -> {
-            editText.setSingleLine(true);
-            editText.setInputType(InputType.TYPE_CLASS_NUMBER);
-        });
-        port.setOnPreferenceChangeListener((preference, newValue) -> {
-            String rawValue = String.valueOf(newValue);
-            if (!TaiSettings.isValidApiPort(rawValue)) {
-                Toast.makeText(context, R.string.termux_ai_endpoint_update_failed, Toast.LENGTH_LONG).show();
-                return false;
-            }
-            int normalized = TaiSettings.normalizeApiPort(rawValue);
-            new TaiSettings(context).setApiPort(normalized);
-            ((EditTextPreference) preference).setText(String.valueOf(normalized));
-            try {
-                LauncherCtlApiServer.getInstance().applyEndpointSettings(context);
-                refreshEndpointPreferences(context);
-                Toast.makeText(context, R.string.termux_ai_api_port_saved, Toast.LENGTH_SHORT).show();
-            } catch (JSONException e) {
-                Toast.makeText(context, R.string.termux_ai_endpoint_update_failed, Toast.LENGTH_LONG).show();
-            }
-            return false;
+        port.setText(String.valueOf(new TaiSettings(context).getApiPort()));
+        port.setOnPreferenceClickListener(preference -> {
+            showApiPortDialog(context, port);
+            return true;
         });
     }
 
     private void configureApiTokenPreference(Context context) {
         EditTextPreference token = findPreference(TaiSettings.KEY_API_TOKEN);
         if (token == null) return;
-        TaiSettings settings = new TaiSettings(context);
-        token.setText(settings.getOrCreateApiToken());
-        token.setOnBindEditTextListener(editText -> {
-            editText.setSingleLine(true);
-            editText.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
+        token.setText(new TaiSettings(context).getOrCreateApiToken());
+        token.setOnPreferenceClickListener(preference -> {
+            showApiTokenDialog(context, token);
+            return true;
         });
-        token.setOnPreferenceChangeListener((preference, newValue) -> {
-            String normalized = TaiSettings.normalizeApiToken(String.valueOf(newValue));
-            if (normalized.isEmpty()) {
-                Toast.makeText(context, R.string.termux_ai_api_token_invalid, Toast.LENGTH_LONG).show();
-                return false;
-            }
-            new TaiSettings(context).setApiToken(normalized);
-            ((EditTextPreference) preference).setText(normalized);
-            try {
-                LauncherCtlApiServer.getInstance().applyEndpointSettings(context);
-                refreshEndpointPreferences(context);
-                Toast.makeText(context, R.string.termux_ai_api_token_saved, Toast.LENGTH_SHORT).show();
-            } catch (JSONException e) {
-                Toast.makeText(context, R.string.termux_ai_endpoint_update_failed, Toast.LENGTH_LONG).show();
-            }
-            return false;
-        });
+    }
+
+    private void showApiPortDialog(Context context, EditTextPreference preference) {
+        String baseUrl = currentOpenAiBaseUrl(context);
+        EditText input = buildDialogEditText(context, preference.getText(), InputType.TYPE_CLASS_NUMBER, false);
+        LinearLayout view = wrapDialogView(context,
+            getString(R.string.termux_ai_api_port_dialog_header, baseUrl), input);
+        new MaterialAlertDialogBuilder(context)
+            .setTitle(R.string.termux_ai_api_port_title)
+            .setView(view)
+            .setNeutralButton(R.string.termux_ai_dialog_copy, (dialog, which) ->
+                copyToClipboard(context, baseUrl, R.string.termux_ai_base_url_copied))
+            .setPositiveButton(R.string.termux_ai_dialog_save, (dialog, which) ->
+                saveApiPort(context, preference, input.getText().toString()))
+            .setNegativeButton(android.R.string.cancel, null)
+            .show();
+    }
+
+    private void saveApiPort(Context context, EditTextPreference preference, String rawValue) {
+        if (!TaiSettings.isValidApiPort(rawValue)) {
+            Toast.makeText(context, R.string.termux_ai_endpoint_update_failed, Toast.LENGTH_LONG).show();
+            return;
+        }
+        int normalized = TaiSettings.normalizeApiPort(rawValue);
+        new TaiSettings(context).setApiPort(normalized);
+        preference.setText(String.valueOf(normalized));
+        try {
+            LauncherCtlApiServer.getInstance().applyEndpointSettings(context);
+            refreshEndpointPreferences(context);
+            Toast.makeText(context, R.string.termux_ai_api_port_saved, Toast.LENGTH_SHORT).show();
+        } catch (JSONException e) {
+            Toast.makeText(context, R.string.termux_ai_endpoint_update_failed, Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void showApiTokenDialog(Context context, EditTextPreference preference) {
+        String currentToken = preference.getText();
+        if (currentToken == null || currentToken.isEmpty()) {
+            currentToken = new TaiSettings(context).getOrCreateApiToken();
+        }
+        EditText input = buildDialogEditText(context, currentToken,
+            InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD, false);
+        new MaterialAlertDialogBuilder(context)
+            .setTitle(R.string.termux_ai_api_token_title)
+            .setView(wrapDialogView(context, null, input))
+            .setNeutralButton(R.string.termux_ai_dialog_copy, (dialog, which) ->
+                copyToClipboard(context, input.getText().toString(), R.string.termux_ai_api_token_copied))
+            .setPositiveButton(R.string.termux_ai_dialog_save, (dialog, which) ->
+                saveApiToken(context, preference, input.getText().toString()))
+            .setNegativeButton(android.R.string.cancel, null)
+            .show();
+    }
+
+    private void saveApiToken(Context context, EditTextPreference preference, String rawValue) {
+        String normalized = TaiSettings.normalizeApiToken(rawValue);
+        if (normalized.isEmpty()) {
+            Toast.makeText(context, R.string.termux_ai_api_token_invalid, Toast.LENGTH_LONG).show();
+            return;
+        }
+        new TaiSettings(context).setApiToken(normalized);
+        preference.setText(normalized);
+        try {
+            LauncherCtlApiServer.getInstance().applyEndpointSettings(context);
+            refreshEndpointPreferences(context);
+            Toast.makeText(context, R.string.termux_ai_api_token_saved, Toast.LENGTH_SHORT).show();
+        } catch (JSONException e) {
+            Toast.makeText(context, R.string.termux_ai_endpoint_update_failed, Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private String currentOpenAiBaseUrl(Context context) {
+        try {
+            return LauncherCtlApiServer.getInstance().endpointSettings(context).optString("openAiBaseUrl", "");
+        } catch (JSONException e) {
+            return "";
+        }
+    }
+
+    private void copyToClipboard(Context context, String text, int toastResId) {
+        ClipboardManager clipboard = (ClipboardManager) context.getSystemService(Context.CLIPBOARD_SERVICE);
+        if (clipboard == null) return;
+        clipboard.setPrimaryClip(ClipData.newPlainText("Termux Launcher", text));
+        Toast.makeText(context, toastResId, Toast.LENGTH_SHORT).show();
+    }
+
+    private EditText buildDialogEditText(Context context, String value, int inputType, boolean multiline) {
+        EditText input = new EditText(context);
+        input.setInputType(inputType | (multiline ? InputType.TYPE_TEXT_FLAG_MULTI_LINE : 0));
+        input.setSingleLine(!multiline);
+        if (multiline) {
+            input.setMinLines(3);
+            input.setGravity(Gravity.TOP | Gravity.START);
+        }
+        if (value != null) {
+            input.setText(value);
+            input.setSelection(value.length());
+        }
+        return input;
+    }
+
+    private LinearLayout wrapDialogView(Context context, CharSequence header, View input) {
+        float density = context.getResources().getDisplayMetrics().density;
+        LinearLayout layout = new LinearLayout(context);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        int padH = Math.round(24 * density);
+        layout.setPadding(padH, Math.round(8 * density), padH, 0);
+        if (header != null) {
+            TextView headerView = new TextView(context);
+            headerView.setText(header);
+            headerView.setTextIsSelectable(true);
+            headerView.setTypeface(Typeface.MONOSPACE);
+            headerView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+            headerView.setPadding(0, 0, 0, Math.round(12 * density));
+            layout.addView(headerView);
+        }
+        layout.addView(input);
+        return layout;
     }
 
     private void refreshEndpointPreferences(Context context) {
@@ -381,37 +449,27 @@ public class TaiPreferencesFragment extends PreferenceFragmentCompat {
                 token.setText(endpoint.optString("token", new TaiSettings(context).getOrCreateApiToken()));
                 token.setSummary(endpoint.optString("token", ""));
             }
-            Preference endpointNotice = findPreference("tai_endpoint_notice");
-            if (endpointNotice != null) {
-                endpointNotice.setSummary(context.getString(R.string.termux_ai_endpoint_notice_summary_dynamic,
-                    endpoint.optString("openAiBaseUrl", ""),
-                    endpoint.optString("tokenFile", "")));
-            }
         } catch (JSONException e) {
-            Preference endpointNotice = findPreference("tai_endpoint_notice");
-            if (endpointNotice != null) endpointNotice.setSummary(R.string.termux_ai_endpoint_notice_summary);
+            // Endpoint settings unavailable; leave existing summaries in place.
         }
     }
 
-    private void copyEndpointDetails(Context context, String message) {
-        ClipboardManager clipboard = (ClipboardManager) context.getSystemService(Context.CLIPBOARD_SERVICE);
-        if (clipboard == null) return;
-        clipboard.setPrimaryClip(ClipData.newPlainText(context.getString(R.string.termux_ai_endpoint_detail_title), message));
-        Toast.makeText(context, R.string.termux_ai_endpoint_copied, Toast.LENGTH_SHORT).show();
-    }
-
-    private String buildEndpointDetailMessage(Context context) {
-        try {
-            JSONObject endpoint = LauncherCtlApiServer.getInstance().endpointSettings(context);
-            return context.getString(R.string.termux_ai_endpoint_detail_message_dynamic,
-                endpoint.optString("baseUrl", ""),
-                endpoint.optString("openAiBaseUrl", ""),
-                endpoint.optString("token", ""),
-                endpoint.optString("endpointFile", ""),
-                endpoint.optString("tokenFile", ""));
-        } catch (JSONException e) {
-            return context.getString(R.string.termux_ai_endpoint_detail_message);
-        }
+    private void configureGeneralPrompt() {
+        EditTextPreference prompt = findPreference(TaiSettings.KEY_SYSTEM_PROMPT_GENERAL);
+        if (prompt == null) return;
+        prompt.setOnPreferenceClickListener(preference -> {
+            Context context = getContext();
+            if (context == null) return true;
+            EditText input = buildDialogEditText(context, prompt.getText(), InputType.TYPE_CLASS_TEXT, true);
+            new MaterialAlertDialogBuilder(context)
+                .setTitle(R.string.termux_ai_general_prompt_title)
+                .setView(wrapDialogView(context, null, input))
+                .setPositiveButton(R.string.termux_ai_dialog_save, (dialog, which) ->
+                    prompt.setText(input.getText().toString()))
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
+            return true;
+        });
     }
 
     private void configureDefaultModelSelector(Context context) {
@@ -442,6 +500,25 @@ public class TaiPreferencesFragment extends PreferenceFragmentCompat {
         }
         preference.setEntries(entries.toArray(new CharSequence[0]));
         preference.setEntryValues(values.toArray(new CharSequence[0]));
+        preference.setOnPreferenceClickListener(clicked -> {
+            showDefaultAssistantDialog(context, preference);
+            return true;
+        });
+    }
+
+    private void showDefaultAssistantDialog(Context context, ListPreference preference) {
+        CharSequence[] entries = preference.getEntries();
+        CharSequence[] values = preference.getEntryValues();
+        if (entries == null || values == null || entries.length == 0) return;
+        int checked = preference.findIndexOfValue(preference.getValue());
+        new MaterialAlertDialogBuilder(context)
+            .setTitle(R.string.termux_ai_default_assistant_model_title)
+            .setSingleChoiceItems(entries, checked, (dialog, which) -> {
+                preference.setValue(values[which].toString());
+                dialog.dismiss();
+            })
+            .setNegativeButton(android.R.string.cancel, null)
+            .show();
     }
 
     private void updateRuntimeStatus(Context context) {
@@ -461,7 +538,7 @@ public class TaiPreferencesFragment extends PreferenceFragmentCompat {
                     ((StatusCardPreference) status).setStatus(
                         "RUNTIME · " + state.toUpperCase(Locale.US), loaded || activeGeneration);
                 }
-                status.setSummary(buildRuntimeCardBody(runtime, runtimeStatus));
+                status.setSummary(buildRuntimeCardBody(context, runtime, runtimeStatus));
             }
             if (actions != null) {
                 actions.setLoadSub(getDefaultAssistantDisplayName(context));
@@ -485,7 +562,7 @@ public class TaiPreferencesFragment extends PreferenceFragmentCompat {
         return spec != null ? spec.displayName : modelId;
     }
 
-    private String buildRuntimeCardBody(JSONObject runtime, JSONObject runtimeStatus) {
+    private String buildRuntimeCardBody(Context context, JSONObject runtime, JSONObject runtimeStatus) {
         StringBuilder body = new StringBuilder();
         JSONObject device = runtimeStatus.optJSONObject("device");
         if (device != null) {
@@ -521,6 +598,14 @@ public class TaiPreferencesFragment extends PreferenceFragmentCompat {
                 String warning = warnings.optString(i, "");
                 if (!warning.isEmpty()) appendKv(body, "warning", warning);
             }
+        }
+        try {
+            JSONObject endpoint = LauncherCtlApiServer.getInstance().endpointSettings(context);
+            String baseUrl = endpoint.optString("openAiBaseUrl", "");
+            String token = endpoint.optString("token", "");
+            if (!baseUrl.isEmpty()) appendKv(body, "endpoint", baseUrl);
+            if (!token.isEmpty()) appendKv(body, "token", token);
+        } catch (JSONException ignored) {
         }
         return body.toString().trim();
     }
@@ -616,15 +701,25 @@ public class TaiPreferencesFragment extends PreferenceFragmentCompat {
     private void configureHuggingFaceToken() {
         EditTextPreference token = findPreference(TaiSettings.KEY_HUGGINGFACE_TOKEN);
         if (token == null) return;
-        token.setOnBindEditTextListener(editText -> {
-            editText.setSingleLine(true);
-            editText.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
-        });
         token.setSummaryProvider(preference -> {
             String value = ((EditTextPreference) preference).getText();
             return value == null || value.trim().isEmpty()
                 ? getString(R.string.termux_ai_huggingface_token_summary)
                 : getString(R.string.termux_ai_huggingface_token_set_summary);
+        });
+        token.setOnPreferenceClickListener(preference -> {
+            Context context = getContext();
+            if (context == null) return true;
+            EditText input = buildDialogEditText(context, token.getText(),
+                InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD, false);
+            new MaterialAlertDialogBuilder(context)
+                .setTitle(R.string.termux_ai_huggingface_token_title)
+                .setView(wrapDialogView(context, null, input))
+                .setPositiveButton(R.string.termux_ai_dialog_save, (dialog, which) ->
+                    token.setText(input.getText().toString().trim()))
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
+            return true;
         });
     }
 

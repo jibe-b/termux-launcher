@@ -96,9 +96,7 @@ public final class SettingsLayoutUtils {
     }
 
     private static boolean usesCardLayout(@NonNull Preference preference) {
-        String key = preference.getKey();
-        return "tai_model_privacy_notice".equals(key)
-            || "tai_endpoint_notice".equals(key);
+        return "tai_model_privacy_notice".equals(preference.getKey());
     }
 
     private static boolean usesValueRowLayout(@NonNull Preference preference) {
