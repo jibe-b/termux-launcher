@@ -566,7 +566,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         content.setOnApplyWindowInsetsListener((v, insets) -> {
             WindowInsetsCompat insetsCompat = WindowInsetsCompat.toWindowInsetsCompat(insets, v);
             mNavBarHeight = insetsCompat.getInsets(Type.systemBars()).bottom;
+            updateViewHeight(R.id.activity_termux_bottom_space_view, mNavBarHeight);
             applyTerminalOverlayInsets(insetsCompat);
+            configureExtraKeysBackground();
             return insetsCompat.toWindowInsets();
         });
         applySeamlessStatusBackgroundModeIfNeeded();
@@ -1519,6 +1521,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 state.blurEnabled ? resolveAccessorySurfaceColor(state.barAlpha) : Color.TRANSPARENT
             );
         }
+        if (bottomSpaceBlur != null) {
+            applyRealtimeBlurRadius(bottomSpaceBlur, state.blurRadiusDp);
+            applyRealtimeBlurDownsampleFactor(bottomSpaceBlur, ACCESSORY_BLUR_DOWNSAMPLE_FACTOR);
+            applyRealtimeBlurOverlayColor(
+                bottomSpaceBlur,
+                state.blurEnabled ? resolveAccessorySurfaceColor(state.barAlpha) : Color.TRANSPARENT
+            );
+        }
         if (!state.toolbarShown) {
             if (accessoryContainer != null) {
                 accessoryContainer.setVisibility(View.GONE);
@@ -1602,17 +1612,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             extraKeysBackground.setAlpha(state.barAlpha);
         }
         if (bottomSpaceBackground != null) {
-            bottomSpaceBackground.setVisibility(View.GONE);
+            bottomSpaceBackground.setVisibility(mNavBarHeight > 0 && !mLastImeVisible ? View.VISIBLE : View.GONE);
+            bottomSpaceBackground.setAlpha(state.barAlpha);
         }
 
         if (extraKeysBackgroundBlur != null) {
             extraKeysBackgroundBlur.setVisibility(state.blurEnabled && !useRenderEffectBlur ? View.VISIBLE : View.GONE);
         }
-        if (bottomSpaceBackground != null) {
-            bottomSpaceBackground.setVisibility(View.GONE);
-        }
         if (bottomSpaceBlur != null) {
-            bottomSpaceBlur.setVisibility(View.GONE);
+            bottomSpaceBlur.setVisibility(
+                mNavBarHeight > 0 && !mLastImeVisible && state.blurEnabled
+                    ? View.VISIBLE
+                    : View.GONE
+            );
         }
         configureAccessoryTopEdgeFx(true, state.barAlpha);
         updateAccessoryRenderEffectBackdrop(state);
@@ -1978,6 +1990,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
         getWindow().clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS);
         getWindow().setStatusBarColor(Color.TRANSPARENT);
+        getWindow().setNavigationBarColor(Color.TRANSPARENT);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            getWindow().setNavigationBarContrastEnforced(false);
+        }
     }
 
     private void setMargins() {
