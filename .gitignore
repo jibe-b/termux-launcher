@@ -62,3 +62,6 @@ AGENTS.md
 
 # Reference repos
 reference-repos/
+
+# Design handoff bundle (reference only, not part of the app source)
+/TL-handoff/

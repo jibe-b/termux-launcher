@@ -4,11 +4,16 @@ import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.InputType;
+import android.text.SpannableStringBuilder;
+import android.text.Spanned;
+import android.text.style.ForegroundColorSpan;
+import android.util.TypedValue;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.Toast;
@@ -26,6 +31,7 @@ import androidx.preference.PreferenceManager;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.termux.R;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
+import com.termux.app.fragments.settings.StatusCardPreference;
 import com.termux.ai.TaiManager;
 import com.termux.ai.TaiModelCatalog;
 import com.termux.ai.TaiModelImporter;
@@ -42,6 +48,7 @@ import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
@@ -50,6 +57,41 @@ import java.util.concurrent.Executors;
 @Keep
 public class TaiPreferencesFragment extends PreferenceFragmentCompat {
     private static final String MODEL_ROW_PREFIX = "tai_model_row_";
+
+    private static final class OverrideSpec {
+        final String key;
+        final int titleRes;
+        final int entriesRes;
+        final int valuesRes;
+        final String defaultValue;
+
+        OverrideSpec(String key, int titleRes, int entriesRes, int valuesRes, String defaultValue) {
+            this.key = key;
+            this.titleRes = titleRes;
+            this.entriesRes = entriesRes;
+            this.valuesRes = valuesRes;
+            this.defaultValue = defaultValue;
+        }
+    }
+
+    private static final OverrideSpec[] OVERRIDE_SPECS = {
+        new OverrideSpec("tai_max_tokens", R.string.termux_ai_max_tokens_title,
+            R.array.termux_ai_max_tokens_entries, R.array.termux_ai_max_tokens_values, "auto"),
+        new OverrideSpec("tai_top_k", R.string.termux_ai_top_k_title,
+            R.array.termux_ai_top_k_entries, R.array.termux_ai_top_k_values, "auto"),
+        new OverrideSpec("tai_top_p", R.string.termux_ai_top_p_title,
+            R.array.termux_ai_top_p_entries, R.array.termux_ai_top_p_values, "auto"),
+        new OverrideSpec("tai_temperature", R.string.termux_ai_temperature_title,
+            R.array.termux_ai_temperature_entries, R.array.termux_ai_temperature_values, "auto"),
+        new OverrideSpec("tai_accelerator", R.string.termux_ai_accelerator_title,
+            R.array.termux_ai_accelerator_entries, R.array.termux_ai_accelerator_values, "auto"),
+        new OverrideSpec("tai_thinking", R.string.termux_ai_thinking_title,
+            R.array.termux_ai_auto_boolean_entries, R.array.termux_ai_auto_boolean_values, "auto"),
+        new OverrideSpec("tai_speculative_decoding", R.string.termux_ai_speculative_decoding_title,
+            R.array.termux_ai_auto_boolean_entries, R.array.termux_ai_auto_boolean_values, "auto"),
+        new OverrideSpec("tai_idle_unload_minutes", R.string.termux_ai_idle_unload_title,
+            R.array.termux_ai_idle_unload_entries, R.array.termux_ai_idle_unload_values, "10"),
+    };
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final ActivityResultLauncher<String[]> modelPicker = registerForActivityResult(
         new ActivityResultContracts.OpenDocument(),
@@ -83,6 +125,7 @@ public class TaiPreferencesFragment extends PreferenceFragmentCompat {
         SettingsLayoutUtils.applyScreenLayout(this);
         setStaticSummary("tai_model_privacy_notice", R.string.termux_ai_model_privacy_notice_summary);
         configureRuntimeControls(context);
+        configureOverrides(context);
         configureHuggingFaceToken();
         configureEndpointPreferences(context);
         configureModelManager(context);
@@ -120,42 +163,97 @@ public class TaiPreferencesFragment extends PreferenceFragmentCompat {
     private void refreshTaiPage(Context context) {
         configureDefaultModelSelector(context);
         updateRuntimeStatus(context);
+        refreshOverrides();
         refreshEndpointPreferences(context);
         populateModelRows(context);
     }
 
     private void configureRuntimeControls(Context context) {
-        Preference load = findPreference("tai_runtime_load");
-        if (load != null) {
-            load.setOnPreferenceClickListener(preference -> {
+        TaiRuntimeActionsPreference actions = findPreference("tai_runtime_actions");
+        if (actions == null) return;
+        actions.setOnActionClickListener(new TaiRuntimeActionsPreference.OnActionClickListener() {
+            @Override
+            public void onLoad() {
                 loadDefaultModel(context);
-                return true;
-            });
-        }
+            }
 
-        Preference keepWarm = findPreference("tai_runtime_keep_warm");
-        if (keepWarm != null) {
-            keepWarm.setOnPreferenceClickListener(preference -> {
+            @Override
+            public void onKeepWarm() {
                 keepWarmDefaultModel(context);
-                return true;
-            });
-        }
+            }
 
-        Preference cancel = findPreference("tai_runtime_cancel");
-        if (cancel != null) {
-            cancel.setOnPreferenceClickListener(preference -> {
+            @Override
+            public void onCancel() {
                 cancelGeneration(context);
-                return true;
-            });
-        }
+            }
 
-        Preference unload = findPreference("tai_runtime_unload");
-        if (unload != null) {
-            unload.setOnPreferenceClickListener(preference -> {
+            @Override
+            public void onUnload() {
                 unloadRuntime(context);
-                return true;
-            });
+            }
+        });
+    }
+
+    private void configureOverrides(Context context) {
+        TaiOverridesPreference overrides = findPreference("tai_runtime_overrides");
+        if (overrides == null) return;
+        overrides.setOnOverrideClickListener(index -> showOverrideDialog(context, index));
+        refreshOverrides();
+    }
+
+    private void refreshOverrides() {
+        TaiOverridesPreference overrides = findPreference("tai_runtime_overrides");
+        if (overrides == null) return;
+        SharedPreferences preferences = getPreferenceManager().getSharedPreferences();
+        if (preferences == null) return;
+        List<TaiOverridesPreference.Item> items = new ArrayList<>();
+        for (OverrideSpec spec : OVERRIDE_SPECS) {
+            String value = preferences.getString(spec.key, spec.defaultValue);
+            items.add(new TaiOverridesPreference.Item(getString(spec.titleRes), overrideValueLabel(spec.key, value)));
         }
+        overrides.setItems(items);
+    }
+
+    private String overrideValueLabel(String key, String value) {
+        if (value == null || value.isEmpty()) return "auto";
+        if ("tai_accelerator".equals(key)) {
+            return "auto".equals(value) ? "profile" : value;
+        }
+        if ("tai_idle_unload_minutes".equals(key)) {
+            return "0".equals(value) ? "off" : value + " min";
+        }
+        if ("tai_thinking".equals(key) || "tai_speculative_decoding".equals(key)) {
+            if ("true".equals(value)) return "on";
+            if ("false".equals(value)) return "off";
+            return "auto";
+        }
+        return value;
+    }
+
+    private void showOverrideDialog(Context context, int index) {
+        if (index < 0 || index >= OVERRIDE_SPECS.length) return;
+        OverrideSpec spec = OVERRIDE_SPECS[index];
+        SharedPreferences preferences = getPreferenceManager().getSharedPreferences();
+        if (preferences == null) return;
+        String[] entries = getResources().getStringArray(spec.entriesRes);
+        String[] values = getResources().getStringArray(spec.valuesRes);
+        String current = preferences.getString(spec.key, spec.defaultValue);
+        int checked = -1;
+        for (int i = 0; i < values.length; i++) {
+            if (values[i].equals(current)) {
+                checked = i;
+                break;
+            }
+        }
+        new MaterialAlertDialogBuilder(context)
+            .setTitle(spec.titleRes)
+            .setSingleChoiceItems(entries, checked, (dialog, which) -> {
+                preferences.edit().putString(spec.key, values[which]).apply();
+                dialog.dismiss();
+                refreshOverrides();
+            })
+            .setNegativeButton(android.R.string.cancel, null)
+            .show();
     }
 
     private void configureEndpointPreferences(Context context) {
@@ -348,27 +446,87 @@ public class TaiPreferencesFragment extends PreferenceFragmentCompat {
 
     private void updateRuntimeStatus(Context context) {
         Preference status = findPreference("tai_runtime_status");
-        if (status == null) return;
+        TaiRuntimeActionsPreference actions = findPreference("tai_runtime_actions");
+        if (status == null && actions == null) return;
         try {
             JSONObject runtimeStatus = TaiManager.getInstance(context).runtimeStatus();
             JSONObject runtime = runtimeStatus.getJSONObject("runtime");
-            status.setSummary(buildRuntimeSummary(runtime, runtimeStatus));
-            Preference load = findPreference("tai_runtime_load");
-            Preference keepWarm = findPreference("tai_runtime_keep_warm");
-            Preference cancel = findPreference("tai_runtime_cancel");
-            Preference unload = findPreference("tai_runtime_unload");
             boolean activeGeneration = runtime.optBoolean("activeGeneration", false);
             boolean loaded = runtime.optBoolean("loaded", false);
             String state = runtime.optString("state", "unloaded");
             boolean loading = "loading".equals(state);
             boolean stopping = "stopping".equals(state);
-            if (load != null) load.setEnabled(!activeGeneration && !loading && !stopping);
-            if (keepWarm != null) keepWarm.setEnabled(!activeGeneration && !loading && !stopping);
-            if (cancel != null) cancel.setEnabled(activeGeneration || loading);
-            if (unload != null) unload.setEnabled((loaded || loading) && !activeGeneration && !stopping);
+            if (status != null) {
+                if (status instanceof StatusCardPreference) {
+                    ((StatusCardPreference) status).setStatus(
+                        "RUNTIME · " + state.toUpperCase(Locale.US), loaded || activeGeneration);
+                }
+                status.setSummary(buildRuntimeCardBody(runtime, runtimeStatus));
+            }
+            if (actions != null) {
+                actions.setLoadSub(getDefaultAssistantDisplayName(context));
+                actions.setActionStates(
+                    !activeGeneration && !loading && !stopping,
+                    !activeGeneration && !loading && !stopping,
+                    activeGeneration || loading,
+                    (loaded || loading) && !activeGeneration && !stopping);
+            }
         } catch (JSONException e) {
-            status.setSummary(R.string.termux_ai_runtime_status_summary);
+            if (status != null) status.setSummary(R.string.termux_ai_runtime_status_summary);
         }
+    }
+
+    private String getDefaultAssistantDisplayName(Context context) {
+        String modelId = new TaiSettings(context).getDefaultAssistantModel();
+        for (TaiModelCatalog.CatalogEntry entry : TaiModelCatalog.entries().values()) {
+            if (entry.modelId.equals(modelId)) return entry.displayName;
+        }
+        TaiModelSpec spec = new TaiModelStore(context).getUserModels().get(modelId);
+        return spec != null ? spec.displayName : modelId;
+    }
+
+    private String buildRuntimeCardBody(JSONObject runtime, JSONObject runtimeStatus) {
+        StringBuilder body = new StringBuilder();
+        JSONObject device = runtimeStatus.optJSONObject("device");
+        if (device != null) {
+            StringBuilder deviceLine = new StringBuilder(device.optString("model", "unknown"));
+            if (!device.isNull("memoryGiB")) {
+                deviceLine.append(" · ").append(String.format(Locale.US, "%.1f GiB", device.optDouble("memoryGiB")));
+            }
+            appendKv(body, "device", deviceLine.toString());
+            appendKv(body, "accel", join(device.optJSONArray("phase1Accelerators")));
+        }
+        appendKv(body, "model", nullable(runtime, "loadedModelId", "none"));
+        appendKv(body, "backend", runtime.optString("backend", "none"));
+        String fallback = nullable(runtime, "backendFallbackReason", "");
+        if (!fallback.isEmpty()) appendKv(body, "fallback", fallback);
+        if (runtime.optBoolean("activeGeneration", false)) appendKv(body, "generate", "active");
+        long keepWarmRemaining = runtime.optLong("keepWarmRemainingMs", 0L);
+        if (keepWarmRemaining > 0L) appendKv(body, "warm", formatDuration(keepWarmRemaining));
+        long idleRemaining = runtime.optLong("idleUnloadRemainingMs", 0L);
+        if (idleRemaining > 0L) appendKv(body, "idle", formatDuration(idleRemaining));
+        String statusMessage = runtime.optString("status", "");
+        if (!statusMessage.isEmpty()) appendKv(body, "status", statusMessage);
+        JSONObject profile = runtimeStatus.optJSONObject("modelProfile");
+        if (profile != null) {
+            StringBuilder compat = new StringBuilder(join(profile.optJSONArray("compatibleAccelerators")));
+            if (!profile.isNull("minDeviceMemoryInGb")) {
+                compat.append(" · min ").append(profile.optInt("minDeviceMemoryInGb")).append(" GiB");
+            }
+            appendKv(body, "compat", compat.toString());
+        }
+        JSONArray warnings = runtimeStatus.optJSONArray("compatibilityWarnings");
+        if (warnings != null) {
+            for (int i = 0; i < warnings.length(); i++) {
+                String warning = warnings.optString(i, "");
+                if (!warning.isEmpty()) appendKv(body, "warning", warning);
+            }
+        }
+        return body.toString().trim();
+    }
+
+    private void appendKv(StringBuilder builder, String key, String value) {
+        builder.append(String.format(Locale.US, "%-9s", key)).append(value).append('\n');
     }
 
     private void configureModelManager(Context context) {
@@ -388,53 +546,6 @@ public class TaiPreferencesFragment extends PreferenceFragmentCompat {
             });
         }
         refreshTaiPage(context);
-    }
-
-    private String buildRuntimeSummary(JSONObject runtime, JSONObject runtimeStatus) {
-        StringBuilder summary = new StringBuilder();
-        summary.append("State: ").append(runtime.optString("state", "unknown"));
-        summary.append("\nModel: ").append(nullable(runtime, "loadedModelId", "none"));
-        summary.append("\nBackend: ").append(runtime.optString("backend", "none"));
-        String fallback = nullable(runtime, "backendFallbackReason", "");
-        if (!fallback.isEmpty()) summary.append("\n").append(fallback);
-        if (runtime.optBoolean("activeGeneration", false)) {
-            summary.append("\nGeneration: active");
-        }
-        long keepWarmRemaining = runtime.optLong("keepWarmRemainingMs", 0L);
-        if (keepWarmRemaining > 0L) {
-            summary.append("\nKeep warm: ").append(formatDuration(keepWarmRemaining));
-        }
-        long idleRemaining = runtime.optLong("idleUnloadRemainingMs", 0L);
-        if (idleRemaining > 0L) {
-            summary.append("\nIdle unload: ").append(formatDuration(idleRemaining));
-        }
-        String status = runtime.optString("status", "");
-        if (!status.isEmpty()) {
-            summary.append("\n").append(status);
-        }
-        JSONObject profile = runtimeStatus.optJSONObject("modelProfile");
-        if (profile != null) {
-            summary.append("\nCompatible: ").append(join(profile.optJSONArray("compatibleAccelerators")));
-            if (!profile.isNull("minDeviceMemoryInGb")) {
-                summary.append(" - minimum memory ").append(profile.optInt("minDeviceMemoryInGb")).append(" GiB");
-            }
-        }
-        JSONObject device = runtimeStatus.optJSONObject("device");
-        if (device != null) {
-            summary.append("\nDevice: ").append(device.optString("model", "unknown"));
-            if (!device.isNull("memoryGiB")) {
-                summary.append(" - ").append(String.format(Locale.US, "%.1f GiB", device.optDouble("memoryGiB")));
-            }
-            summary.append(" - ").append(join(device.optJSONArray("phase1Accelerators")));
-        }
-        JSONArray warnings = runtimeStatus.optJSONArray("compatibilityWarnings");
-        if (warnings != null) {
-            for (int i = 0; i < warnings.length(); i++) {
-                String warning = warnings.optString(i, "");
-                if (!warning.isEmpty()) summary.append("\nWarning: ").append(warning);
-            }
-        }
-        return summary.toString();
     }
 
     private void loadDefaultModel(Context context) {
@@ -537,9 +648,12 @@ public class TaiPreferencesFragment extends PreferenceFragmentCompat {
             catalogIds.add(entry.modelId);
             TaiModelPreference row = new TaiModelPreference(context);
             JSONObject download = findDownload(downloads, entry.modelId);
+            TaiModelSpec installed = installedModels.get(entry.modelId);
             row.setKey(MODEL_ROW_PREFIX + entry.modelId);
             row.setTitle(entry.displayName);
-            row.setSummary(buildModelSummary(entry, installedModels.get(entry.modelId), download));
+            row.setSummary(entry.roleHint);
+            row.setMetaLine(buildCatalogMetaLine(context, entry));
+            configureModelPill(row, installed, download, entry.gated);
             configureProgress(row, download);
             row.setPersistent(false);
             row.setOnPreferenceClickListener(preference -> {
@@ -554,7 +668,9 @@ public class TaiPreferencesFragment extends PreferenceFragmentCompat {
             TaiModelPreference row = new TaiModelPreference(context);
             row.setKey(MODEL_ROW_PREFIX + model.id);
             row.setTitle(model.displayName);
-            row.setSummary(buildInstalledModelSummary(model));
+            row.setSummary(model.roleHint + " · " + model.source);
+            row.setMetaLine(buildInstalledMetaLine(context, model));
+            row.setPill(getString(R.string.termux_ai_model_pill_installed), true);
             configureProgress(row, null);
             row.setPersistent(false);
             row.setOnPreferenceClickListener(preference -> {
@@ -563,6 +679,95 @@ public class TaiPreferencesFragment extends PreferenceFragmentCompat {
             });
             category.addPreference(row);
         }
+    }
+
+    private void configureModelPill(TaiModelPreference row, TaiModelSpec installed, JSONObject download, boolean gated) {
+        if (installed != null && installed.localPath != null) {
+            row.setPill(getString(R.string.termux_ai_model_pill_installed), true);
+            return;
+        }
+        if (download != null) {
+            String status = download.optString("status", "");
+            if ("queued".equals(status) || "running".equals(status)) {
+                row.setPill(getString(R.string.termux_ai_model_pill_downloading), false);
+                return;
+            }
+        }
+        if (gated) {
+            row.setPill(getString(R.string.termux_ai_model_pill_gated), false);
+            return;
+        }
+        row.setPill(null, false);
+    }
+
+    private CharSequence buildCatalogMetaLine(Context context, TaiModelCatalog.CatalogEntry entry) {
+        String accel = null;
+        Integer minMemGb = entry.recommendedRamGb > 0 ? entry.recommendedRamGb : null;
+        try {
+            TaiModelSpec catalogModel = new TaiModelRegistry().getModel(entry.modelId);
+            if (catalogModel != null && TaiModelSpec.BACKEND_LITERT_LM.equals(entry.backend)) {
+                TaiModelProfile profile = TaiModelProfile.forModel(catalogModel);
+                accel = joinAccelerators(profile.compatibleAccelerators);
+                if (profile.minDeviceMemoryInGb != null) minMemGb = profile.minDeviceMemoryInGb;
+            }
+        } catch (Exception ignored) {
+        }
+        return buildMetaLine(context, entry.sizeBytes, accel, minMemGb);
+    }
+
+    private CharSequence buildInstalledMetaLine(Context context, TaiModelSpec model) {
+        String accel = null;
+        Integer minMemGb = model.recommendedRamGb > 0 ? model.recommendedRamGb : null;
+        try {
+            TaiModelProfile profile = TaiModelProfile.forModel(model);
+            accel = joinAccelerators(profile.compatibleAccelerators);
+            if (profile.minDeviceMemoryInGb != null) minMemGb = profile.minDeviceMemoryInGb;
+        } catch (Exception ignored) {
+        }
+        return buildMetaLine(context, model.sizeBytes, accel, minMemGb);
+    }
+
+    private CharSequence buildMetaLine(Context context, long sizeBytes, String accel, Integer minMemGb) {
+        int keyColor = resolveAttrColor(context, com.termux.shared.R.attr.termuxColorOnSurfaceVariant);
+        int valueColor = resolveAttrColor(context, com.termux.shared.R.attr.termuxColorOnSurface);
+        SpannableStringBuilder builder = new SpannableStringBuilder();
+        appendMeta(builder, "size ", formatBytes(sizeBytes), keyColor, valueColor);
+        if (accel != null && !accel.isEmpty()) {
+            builder.append("   ");
+            appendMeta(builder, "accel ", accel, keyColor, valueColor);
+        }
+        if (minMemGb != null) {
+            builder.append("   ");
+            appendMeta(builder, "min mem ", minMemGb + " GiB", keyColor, valueColor);
+        }
+        return builder;
+    }
+
+    private void appendMeta(SpannableStringBuilder builder, String key, String value, int keyColor, int valueColor) {
+        int start = builder.length();
+        builder.append(key);
+        builder.setSpan(new ForegroundColorSpan(keyColor), start, builder.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        start = builder.length();
+        builder.append(value);
+        builder.setSpan(new ForegroundColorSpan(valueColor), start, builder.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+    }
+
+    private String joinAccelerators(List<String> accelerators) {
+        if (accelerators == null || accelerators.isEmpty()) return null;
+        StringBuilder joined = new StringBuilder();
+        for (int i = 0; i < accelerators.size(); i++) {
+            if (i > 0) joined.append(" · ");
+            joined.append(String.valueOf(accelerators.get(i)).toLowerCase(Locale.US));
+        }
+        return joined.toString();
+    }
+
+    private int resolveAttrColor(Context context, int attr) {
+        TypedValue value = new TypedValue();
+        if (context.getTheme().resolveAttribute(attr, value, true)) {
+            return value.data;
+        }
+        return 0xFF888888;
     }
 
     private void configureProgress(TaiModelPreference row, JSONObject download) {

@@ -13,13 +13,13 @@
             app:entries="@array/termux_theme_mode_entries"
             app:entryValues="@array/termux_theme_mode_values"
             app:useSimpleSummaryProvider="true" />
-    </PreferenceCategory>
 
-    <SwitchPreferenceCompat
-        app:key="use_system_wallpaper"
-        app:title="@string/termux_use_system_wallpaper_title"
-        app:summary="@string/termux_use_system_wallpaper_summary"
-        android:defaultValue="true" />
+        <SwitchPreferenceCompat
+            app:key="use_system_wallpaper"
+            app:title="@string/termux_use_system_wallpaper_title"
+            app:summary="@string/termux_use_system_wallpaper_summary"
+            android:defaultValue="true" />
+    </PreferenceCategory>
 
     <PreferenceCategory
         app:key="termux_terminal_background"

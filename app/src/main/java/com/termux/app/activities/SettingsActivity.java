@@ -4,14 +4,18 @@ import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
 import android.os.Environment;
+import android.view.View;
 import android.view.Window;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.content.res.AppCompatResources;
 import androidx.fragment.app.Fragment;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceFragmentCompat;
 import com.termux.R;
+import com.termux.app.fragments.settings.PillPreference;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
+import com.termux.privileged.PrivilegedBackendManager;
 import com.termux.app.theme.TermuxThemeManager;
 import com.termux.shared.activities.ReportActivity;
 import com.termux.shared.file.FileUtils;
@@ -53,6 +57,7 @@ public class SettingsActivity extends AppCompatActivity {
         setTheme(R.style.Theme_TermuxApp_DayNight_NoActionBar);
         TermuxThemeManager.applyThemeOverlays(this);
         super.onCreate(savedInstanceState);
+        registerSettingsDividerCallbacks();
         setContentView(R.layout.activity_settings);
         applySettingsSystemBars();
         if (savedInstanceState == null) {
@@ -63,6 +68,34 @@ public class SettingsActivity extends AppCompatActivity {
         AppCompatActivityUtils.setShowBackButtonInActionBar(this, true);
         int titleResId = getIntent().getIntExtra(EXTRA_INITIAL_TITLE_RES, R.string.title_activity_termux_settings);
         setTitle(titleResId);
+    }
+
+    /**
+     * Applies the TL handoff divider style to every settings page: inset, icon-aligned
+     * dividers between the root rows, and no inter-row dividers on sub-screens (sections
+     * there are separated by the category hairline instead). Done centrally so individual
+     * fragments do not each need to override onViewCreated.
+     */
+    private void registerSettingsDividerCallbacks() {
+        getSupportFragmentManager().registerFragmentLifecycleCallbacks(
+            new androidx.fragment.app.FragmentManager.FragmentLifecycleCallbacks() {
+                @Override
+                public void onFragmentViewCreated(@NonNull androidx.fragment.app.FragmentManager fm,
+                                                  @NonNull Fragment fragment, @NonNull View view,
+                                                  Bundle savedInstanceState) {
+                    if (!(fragment instanceof PreferenceFragmentCompat)) return;
+                    PreferenceFragmentCompat preferenceFragment = (PreferenceFragmentCompat) fragment;
+                    if (fragment instanceof RootPreferencesFragment) {
+                        preferenceFragment.setDivider(
+                            AppCompatResources.getDrawable(SettingsActivity.this, R.drawable.settings_divider_inset));
+                        preferenceFragment.setDividerHeight(
+                            Math.max(1, Math.round(getResources().getDisplayMetrics().density)));
+                    } else {
+                        preferenceFragment.setDivider(null);
+                        preferenceFragment.setDividerHeight(0);
+                    }
+                }
+            }, true);
     }
 
     private void applySettingsSystemBars() {
@@ -103,6 +136,34 @@ public class SettingsActivity extends AppCompatActivity {
             configureTermuxWidgetPreference(context);
             configureAboutPreference(context);
             configureDonatePreference(context);
+        }
+
+        @Override
+        public void onResume() {
+            super.onResume();
+            updateShizukuPill();
+        }
+
+        private void updateShizukuPill() {
+            Preference preference = findPreference("shizuku");
+            if (!(preference instanceof PillPreference))
+                return;
+            PillPreference pillPreference = (PillPreference) preference;
+            PrivilegedBackendManager.BackendState state = PrivilegedBackendManager.getInstance().getBackendState();
+            switch (state) {
+                case READY:
+                    pillPreference.setPill("READY", PillPreference.Tone.POSITIVE);
+                    break;
+                case FALLBACK_SHELL:
+                    pillPreference.setPill("SHELL", PillPreference.Tone.POSITIVE);
+                    break;
+                case PERMISSION_DENIED:
+                    pillPreference.setPill("DENIED", PillPreference.Tone.NEGATIVE);
+                    break;
+                default:
+                    pillPreference.setPill("OFF", PillPreference.Tone.NEUTRAL);
+                    break;
+            }
         }
 
         private void configureTermuxAPIPreference(@NonNull Context context) {

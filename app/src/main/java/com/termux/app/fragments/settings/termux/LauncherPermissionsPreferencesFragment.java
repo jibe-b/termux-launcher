@@ -16,6 +16,7 @@ import androidx.preference.PreferenceFragmentCompat;
 
 import com.termux.R;
 import com.termux.app.TermuxActivity;
+import com.termux.app.fragments.settings.PillPreference;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
 import com.termux.app.launcher.LauncherLockAccessibilityAccess;
 import com.termux.app.launcher.notifications.LauncherNotificationAccess;
@@ -85,18 +86,24 @@ public class LauncherPermissionsPreferencesFragment extends PreferenceFragmentCo
     }
 
     private void updateSummaries(@NonNull Context context) {
-        setStatusSummary(
+        setStatusPill(
             KEY_STORAGE,
             PermissionUtils.checkAndRequestLegacyOrManageExternalStoragePermission(context, -1, true, false)
         );
-        setStatusSummary(KEY_NOTIFICATION_ACCESS, LauncherNotificationAccess.isEnabled(context));
-        setStatusSummary(KEY_ACCESSIBILITY_LOCK, LauncherLockAccessibilityAccess.isEnabled(context));
-        setStatusSummary(KEY_NOTIFICATION_SETTINGS, NotificationManagerCompat.from(context).areNotificationsEnabled());
+        setStatusPill(KEY_NOTIFICATION_ACCESS, LauncherNotificationAccess.isEnabled(context));
+        setStatusPill(KEY_ACCESSIBILITY_LOCK, LauncherLockAccessibilityAccess.isEnabled(context));
+        setStatusPill(KEY_NOTIFICATION_SETTINGS, NotificationManagerCompat.from(context).areNotificationsEnabled());
     }
 
-    private void setStatusSummary(String key, boolean enabled) {
+    private void setStatusPill(String key, boolean enabled) {
         Preference preference = findPreference(key);
-        if (preference != null) {
+        if (preference instanceof PillPreference) {
+            ((PillPreference) preference).setPill(
+                getString(enabled
+                    ? R.string.termux_app_launcher_access_status_on
+                    : R.string.termux_app_launcher_access_status_off),
+                enabled ? PillPreference.Tone.POSITIVE : PillPreference.Tone.NEGATIVE);
+        } else if (preference != null) {
             preference.setSummary(enabled
                 ? R.string.termux_app_launcher_access_status_on
                 : R.string.termux_app_launcher_access_status_off);

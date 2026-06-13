@@ -11,6 +11,8 @@ import androidx.preference.SwitchPreferenceCompat;
 
 import com.termux.R;
 import com.termux.app.fragments.settings.termux.TaiModelPreference;
+import com.termux.app.fragments.settings.termux.TaiOverridesPreference;
+import com.termux.app.fragments.settings.termux.TaiRuntimeActionsPreference;
 
 public final class SettingsLayoutUtils {
 
@@ -28,38 +30,79 @@ public final class SettingsLayoutUtils {
         applyLayouts(screen, false);
     }
 
-    private static void applyLayouts(@NonNull PreferenceGroup group, boolean rootRows) {
+    private static void applyLayouts(@NonNull PreferenceGroup screen, boolean rootRows) {
+        boolean seenCategory = false;
+        for (int i = 0; i < screen.getPreferenceCount(); i++) {
+            Preference preference = screen.getPreference(i);
+            if (preference instanceof PreferenceCategory) {
+                preference.setIconSpaceReserved(false);
+                // The first section header on a page has no hairline divider above it.
+                preference.setLayoutResource(seenCategory
+                    ? R.layout.preference_settings_category
+                    : R.layout.preference_settings_category_first);
+                seenCategory = true;
+                applyChildLayouts((PreferenceGroup) preference, rootRows);
+            } else {
+                applyItemLayout(preference, rootRows);
+            }
+        }
+    }
+
+    private static void applyChildLayouts(@NonNull PreferenceGroup group, boolean rootRows) {
         for (int i = 0; i < group.getPreferenceCount(); i++) {
             Preference preference = group.getPreference(i);
-            preference.setIconSpaceReserved(false);
-
-            if (preference instanceof PreferenceCategory) {
-                preference.setLayoutResource(R.layout.preference_settings_category);
-            } else if (preference instanceof SeekBarPreference || preference instanceof TaiModelPreference) {
-                preference.setIconSpaceReserved(false);
-            } else if (usesCardLayout(preference)) {
-                preference.setLayoutResource(R.layout.preference_settings_card);
-            } else {
-                preference.setLayoutResource(rootRows
-                    ? R.layout.preference_settings_root_row
-                    : R.layout.preference_settings_row);
-                if (usesChevron(preference)) {
-                    preference.setWidgetLayoutResource(R.layout.preference_widget_chevron);
-                }
-            }
-
+            applyItemLayout(preference, rootRows);
             if (preference instanceof PreferenceGroup) {
-                applyLayouts((PreferenceGroup) preference, false);
+                applyChildLayouts((PreferenceGroup) preference, rootRows);
             }
+        }
+    }
+
+    private static void applyItemLayout(@NonNull Preference preference, boolean rootRows) {
+        preference.setIconSpaceReserved(false);
+
+        // Preferences that fully own their layout.
+        if (preference instanceof StatusCardPreference
+            || preference instanceof TaiRuntimeActionsPreference
+            || preference instanceof TaiOverridesPreference
+            || preference instanceof TaiModelPreference) {
+            return;
+        }
+
+        if (preference instanceof SeekBarPreference) {
+            preference.setLayoutResource(R.layout.preference_settings_seekbar);
+            return;
+        }
+
+        if (usesCardLayout(preference)) {
+            preference.setLayoutResource(R.layout.preference_settings_card);
+            return;
+        }
+
+        if (usesValueRowLayout(preference)) {
+            preference.setLayoutResource(R.layout.preference_settings_value_row);
+        } else {
+            preference.setLayoutResource(rootRows
+                ? R.layout.preference_settings_root_row
+                : R.layout.preference_settings_row);
+        }
+
+        // PillPreference keeps its own trailing pill widget.
+        if (preference instanceof PillPreference) return;
+
+        if (usesChevron(preference)) {
+            preference.setWidgetLayoutResource(R.layout.preference_widget_chevron);
         }
     }
 
     private static boolean usesCardLayout(@NonNull Preference preference) {
         String key = preference.getKey();
-        return "privileged_backend_status".equals(key)
-            || "tai_runtime_status".equals(key)
-            || "tai_model_privacy_notice".equals(key)
+        return "tai_model_privacy_notice".equals(key)
             || "tai_endpoint_notice".equals(key);
+    }
+
+    private static boolean usesValueRowLayout(@NonNull Preference preference) {
+        return "tai_role_default_assistant".equals(preference.getKey());
     }
 
     private static boolean usesChevron(@NonNull Preference preference) {

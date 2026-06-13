@@ -14,6 +14,7 @@ import androidx.preference.PreferenceManager;
 
 import com.termux.R;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
+import com.termux.app.fragments.settings.StatusCardPreference;
 import com.termux.privileged.PrivilegedBackendManager;
 import com.termux.privileged.PrivilegedPolicyStore;
 import com.termux.privileged.ShizukuBackend;
@@ -122,7 +123,27 @@ public class PrivilegedAccessPreferencesFragment extends PreferenceFragmentCompa
             return;
 
         PrivilegedBackendManager manager = PrivilegedBackendManager.getInstance();
-        statusPreference.setSummary(manager.getStatusDescription());
+        PrivilegedBackendManager.BackendState state = manager.getBackendState();
+        boolean permission = manager.getBackend() != null && manager.getBackend().hasPermission();
+
+        if (statusPreference instanceof StatusCardPreference) {
+            boolean active = state == PrivilegedBackendManager.BackendState.READY
+                || state == PrivilegedBackendManager.BackendState.FALLBACK_SHELL;
+            ((StatusCardPreference) statusPreference).setStatus(
+                manager.getBackendType() + " · " + state, active);
+            StringBuilder body = new StringBuilder();
+            appendStatusLine(body, "state", String.valueOf(state));
+            appendStatusLine(body, "reason", String.valueOf(manager.getStatusReason()));
+            appendStatusLine(body, "permission", String.valueOf(permission));
+            appendStatusLine(body, "message", manager.getStatusMessage());
+            statusPreference.setSummary(body.toString().trim());
+        } else {
+            statusPreference.setSummary(manager.getStatusDescription());
+        }
+    }
+
+    private void appendStatusLine(@NonNull StringBuilder builder, @NonNull String key, String value) {
+        builder.append(String.format(java.util.Locale.US, "%-11s", key)).append(value).append('\n');
     }
 }
 
