@@ -215,9 +215,9 @@
 
                 <View
                     android:id="@+id/accessory_specular_fx"
-                    android:layout_width="280dp"
-                    android:layout_height="match_parent"
-                    android:layout_gravity="top|center_horizontal"
+                    android:layout_width="300dp"
+                    android:layout_height="300dp"
+                    android:layout_gravity="center"
                     android:visibility="gone" />
             </FrameLayout>
 
@@ -261,6 +261,13 @@
                 android:layout_height="37.5dp"
                 android:layout_alignParentBottom="true"
                 android:background="@android:color/transparent"/>
+
+            <View
+                android:id="@+id/extrakeys_divider"
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_alignTop="@+id/terminal_toolbar_view_pager"
+                android:visibility="gone" />
 
             <com.termux.app.LauncherAzGestureFxView
                 android:id="@+id/apps_bar_az_fx_overlay"

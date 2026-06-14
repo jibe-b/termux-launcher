@@ -1070,11 +1070,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         GradientDrawable specular = new GradientDrawable();
         specular.setShape(GradientDrawable.RECTANGLE);
         specular.setGradientType(GradientDrawable.RADIAL_GRADIENT);
-        specular.setGradientCenter(0.5f, 0f);
-        specular.setGradientRadius(dpToPx(110));
+        specular.setGradientCenter(0.5f, 0.5f);
+        specular.setGradientRadius(dpToPx(100));
         specular.setColors(new int[] {
-            withAlphaComponent(accent, 150),
-            withAlphaComponent(Color.WHITE, 46),
+            withAlphaComponent(accent, 140),
+            withAlphaComponent(Color.WHITE, 42),
             withAlphaComponent(accent, 0)
         });
         specular.setDither(true);
@@ -1369,6 +1369,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         edgeFx.setVisibility(View.VISIBLE);
     }
 
+    /** The subtle hairline between the A–Z row and the extra-keys (3rd) row, per the design. */
+    private void configureExtraKeysDivider(boolean visible) {
+        View divider = findViewById(R.id.extrakeys_divider);
+        if (divider == null) {
+            return;
+        }
+        if (!visible) {
+            divider.setVisibility(View.GONE);
+            return;
+        }
+        divider.setBackgroundColor(withAlphaComponent(resolveAccessoryOutlineColor(), 175));
+        divider.setVisibility(View.VISIBLE);
+    }
+
     private void configureBackgroundBlur(int blurViewId, int backgroundViewId, boolean isBlurEnabled, float surfaceAlpha, int blurRadiusDp) {
         View blurView = findViewById(blurViewId);
         View backgroundView = findViewById(backgroundViewId);
@@ -1482,16 +1496,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private boolean shouldShowDecorNavBarSurface(@NonNull AccessoryRenderState state) {
-        // The Valarie capsule floats: it must not have a full-width band behind/under it. That band
-        // doesn't tilt with the plank (so it reads as a static "frame" behind the dock during the
-        // physics) and its square, full-width edges clash with the floating rounded capsule. The
-        // under-pill area instead shows the unified full-screen background. Only the edge-to-edge
-        // "normal" style keeps the decor surface so its glass can flow under the gesture pill.
-        return state.toolbarShown
-            && mNavBarHeight > 0
-            && !mLastImeVisible
-            && !isImeVisible()
-            && !isValarieDockStyle();
+        // Retired for both dock styles. The dock no longer paints a surface behind/under the gesture
+        // pill — that band rendered at the app-bar opacity, so the under-pill strip never matched the
+        // terminal. The under-pill area now shows the unified full-screen background dim (terminal
+        // opacity), with the dock floating above it, so the whole background reads as one surface.
+        return false;
     }
 
     private void ensureDecorNavBarSurfaceOverlay() {
@@ -2178,6 +2187,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             clearAccessoryRenderEffectBackdrop();
             applyDecorNavBarSurfaceState(state);
             configureAccessoryTopEdgeFx(false, state.barAlpha);
+            configureExtraKeysDivider(false);
             resetAzOverflowAffordanceState();
             if (mDockPlankController != null) {
                 mDockPlankController.setEnabled(false);
@@ -2230,6 +2240,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             );
         }
         configureAccessoryTopEdgeFx(true, state.barAlpha);
+        configureExtraKeysDivider(state.appsRowEnabled);
         applyDecorNavBarSurfaceState(state);
         updateAccessoryRenderEffectBackdrop(state);
         updateAzOverflowAffordance();
@@ -3897,9 +3908,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         updateViewHorizontalMargins(R.id.apps_bar_indicator_band, contentInset);
         updateViewHorizontalMargins(R.id.apps_bar_az_row, contentInset);
         updateViewHorizontalMargins(R.id.terminal_toolbar_view_pager, extraKeysInset);
+        updateViewHorizontalMargins(R.id.extrakeys_divider, extraKeysInset);
         updateViewPadding(R.id.apps_bar_viewpager, 0, appsTopPadding, 0, appsBottomPadding);
         updateViewHorizontalMargins(R.id.apps_bar_az_fx_underlay, surfaceInset);
         updateViewHorizontalMargins(R.id.apps_bar_az_fx_overlay, surfaceInset);
+
+        // Keep the extra-keys ViewPager clipping its own pages. In capsule mode the pager is inset
+        // from the dock edges, which would otherwise let the adjacent (text-input) page peek into
+        // the visible page through the parent's non-clipping container.
+        View toolbarPager = findViewById(R.id.terminal_toolbar_view_pager);
+        if (toolbarPager instanceof ViewGroup) {
+            ((ViewGroup) toolbarPager).setClipChildren(true);
+            ((ViewGroup) toolbarPager).setClipToPadding(true);
+        }
     }
 
     private int resolveDockAppsBarHeightHintPx(int appsBarHeightPx) {

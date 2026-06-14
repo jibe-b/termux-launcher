@@ -40,6 +40,7 @@ final class DockPlankController implements Choreographer.FrameCallback {
     private final Spring mPress = new Spring(0f, 320f, 22f);
     private final Spring mGlowLevel = new Spring(0f, 130f, 24f);
     private final Spring mLightX = new Spring(0.5f, 210f, 23f);
+    private final Spring mLightY = new Spring(0.5f, 210f, 23f);
 
     DockPlankController(View plank, View specular, View glow) {
         mPlank = plank;
@@ -121,6 +122,7 @@ final class DockPlankController implements Choreographer.FrameCallback {
         mPress.reset(0f);
         mGlowLevel.reset(0f);
         mLightX.reset(0.5f);
+        mLightY.reset(0.5f);
         applyToViews();
         if (mGlow != null) {
             mGlow.setVisibility(View.GONE);
@@ -133,8 +135,9 @@ final class DockPlankController implements Choreographer.FrameCallback {
     private void aim(float nx, float ny) {
         nx = clamp01(nx);
         ny = clamp01(ny);
-        // The specular always tracks the finger; the slab only tilts when motion is enabled.
+        // The specular always tracks the finger (both axes); the slab only tilts when motion is on.
         mLightX.target = nx;
+        mLightY.target = ny;
         if (mMotionEnabled) {
             mRy.target = (nx - 0.5f) * 2f * MAX_TILT_DEG;
             mRx.target = -(ny - 0.5f) * 2f * MAX_TILT_DEG;
@@ -160,6 +163,7 @@ final class DockPlankController implements Choreographer.FrameCallback {
         moving |= mPress.tick(mReducedMotion);
         moving |= mGlowLevel.tick(mReducedMotion);
         moving |= mLightX.tick(mReducedMotion);
+        moving |= mLightY.tick(mReducedMotion);
         applyToViews();
         if (moving) {
             kick();
@@ -196,8 +200,13 @@ final class DockPlankController implements Choreographer.FrameCallback {
             mGlow.setAlpha(clamp01(mGlowLevel.value));
         }
         if (mSpecular != null) {
-            float plankW = mPlank != null ? mPlank.getWidth() : 0f;
-            mSpecular.setTranslationX((mLightX.value - 0.5f) * plankW);
+            // Track the touch point in both axes within the specular's own parent (the glass host),
+            // so the highlight sits under the finger rather than pinned to the top edge.
+            View host = mSpecular.getParent() instanceof View ? (View) mSpecular.getParent() : mPlank;
+            float hw = host != null ? host.getWidth() : 0f;
+            float hh = host != null ? host.getHeight() : 0f;
+            mSpecular.setTranslationX((mLightX.value - 0.5f) * hw);
+            mSpecular.setTranslationY((mLightY.value - 0.5f) * hh);
             mSpecular.setAlpha(clamp01(0.07f + mGlowLevel.value * 0.22f + mPress.value * 0.12f));
         }
     }
