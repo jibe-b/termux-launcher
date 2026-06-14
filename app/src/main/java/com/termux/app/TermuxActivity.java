@@ -1343,10 +1343,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private void applyDockSurfaceShape(@NonNull View surface, boolean capsule, int surfaceHeightPx) {
         if (!capsule) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                surface.setClipToOutline(false);
-            }
             surface.setBackground(null);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                // Clip the normal dock to its own rectangular bounds so the reactive edge-glow's
+                // outward blur can't spill past the dock edges and make it look wider.
+                surface.setOutlineProvider(ViewOutlineProvider.BOUNDS);
+                surface.setClipToOutline(true);
+            }
             return;
         }
 
@@ -1356,6 +1359,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         outline.setStroke(Math.max(1, Math.round(dpToPx(1))), withAlphaComponent(resolveAccessoryOutlineColor(), 54));
         surface.setBackground(outline);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            surface.setOutlineProvider(ViewOutlineProvider.BACKGROUND);
             surface.setClipToOutline(true);
         }
     }
@@ -3975,6 +3979,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int appsBarHeightPx = appsRowEnabled
             ? Math.max(0, Math.round(getDockBaseToolbarHeightPx() * (1.00f + (normalizedScale * 0.52f))) + Math.max(0, additionalAppsBarHeightPx))
             : 0;
+        // The floating capsule reads smaller than the edge-to-edge dock at the same scale, so trim
+        // its apps row ~10% — this sizes the capsule's icons down proportionally so they sit with
+        // breathing room inside the pill. The default (normal) dock keeps the full size.
+        if (appsRowEnabled && isValarieDockStyle()) {
+            appsBarHeightPx = Math.round(appsBarHeightPx * 0.90f);
+        }
 
         boolean azEnabled = appsRowEnabled && mPreferences.isAppLauncherAzRowEnabled();
         boolean compactDock = mPreferences.isAppLauncherCompactDockEnabled();
