@@ -3688,7 +3688,7 @@ public final class SuggestionBarView extends GridLayout {
         if (folderSource) {
             PinnedAppItem folderApp = findFolderApp(context.sourceFolder, context.folderEntryRef);
             boolean folderHasCustomIcon = folderApp != null
-                && folderApp.iconOverride != null && folderApp.iconOverride.isValid();
+                && getIconResolver().loadOverride(folderApp.iconOverride) != null;
             TextView changeIconRow = addPopupActionRow(shell, "Change icon", R.drawable.ic_dock_menu_change_icon, false, tintBase, () -> {
                 dismissAppContextPopup();
                 changeFolderAppIcon(context);
@@ -3730,7 +3730,7 @@ public final class SuggestionBarView extends GridLayout {
             final int targetPinnedIndex = topPinnedIndex;
             PinnedAppItem topPinnedApp = pinnedAppAt(targetPinnedIndex);
             boolean pinnedHasCustomIcon = topPinnedApp != null
-                && topPinnedApp.iconOverride != null && topPinnedApp.iconOverride.isValid();
+                && getIconResolver().loadOverride(topPinnedApp.iconOverride) != null;
             TextView changeIconRow = addPopupActionRow(shell, "Change icon", R.drawable.ic_dock_menu_change_icon, false, tintBase, () -> {
                 dismissAppContextPopup();
                 PinnedAppItem pinnedApp = pinnedAppAt(targetPinnedIndex);

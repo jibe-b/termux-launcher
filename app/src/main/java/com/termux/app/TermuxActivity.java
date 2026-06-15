@@ -1314,16 +1314,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private int resolveDockCapsuleContentInsetPx() {
-        // 16dp inner padding between the capsule border and the row content (design redline).
-        return resolveDockCapsuleHorizontalMarginPx() + Math.round(dpToPx(16));
+        // Inner padding between the capsule border and the row content. Trimmed slightly from the
+        // 16dp redline so the rows (and the 2-row extra keys) sit a touch closer to the edges.
+        return resolveDockCapsuleHorizontalMarginPx() + Math.round(dpToPx(14));
     }
 
     private int resolveDockCapsuleExtraKeysInsetPx() {
-        return resolveDockCapsuleContentInsetPx() + Math.round(dpToPx(4));
+        return resolveDockCapsuleContentInsetPx() + Math.round(dpToPx(2));
     }
 
     private int resolveDockCapsuleAppsTopPaddingPx() {
-        return Math.round(dpToPx(5));
+        // Push the icons down so they sit roughly equidistant between the top-edge page indicator
+        // and the A-Z row below.
+        return Math.round(dpToPx(9));
     }
 
     private int resolveDockCapsuleAppsBottomPaddingPx() {

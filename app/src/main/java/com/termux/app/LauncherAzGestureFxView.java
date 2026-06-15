@@ -888,7 +888,7 @@ public final class LauncherAzGestureFxView extends View {
 
         // Faint continuous tube.
         pageIndicatorPaint.setStyle(Paint.Style.FILL);
-        pageIndicatorPaint.setColor(withAlpha(glow, Math.round(lerp(22f, 60f, bright))));
+        pageIndicatorPaint.setColor(withAlpha(glow, Math.round(lerp(12f, 52f, bright))));
         tmpRect.set(left, cy - coreR, right, cy + coreR);
         canvas.drawRoundRect(tmpRect, coreR, coreR, pageIndicatorPaint);
 
@@ -899,8 +899,8 @@ public final class LauncherAzGestureFxView extends View {
         for (int i = 2; i >= 0; i--) {
             float grow = dp(i * 1.5f);
             int alpha = i == 0
-                ? Math.round(lerp(150f, 240f, bright))
-                : Math.round(lerp(20f, 70f, bright) / i);
+                ? Math.round(lerp(64f, 236f, bright))
+                : Math.round(lerp(12f, 60f, bright) / i);
             pageIndicatorPaint.setColor(withAlpha(glow, alpha));
             tmpRect.set(nodeCx - (nodeW * 0.5f) - grow, cy - coreR - grow,
                 nodeCx + (nodeW * 0.5f) + grow, cy + coreR + grow);
@@ -949,9 +949,9 @@ public final class LauncherAzGestureFxView extends View {
             / Math.max(0.001f, 1f - PINNED_INDICATOR_IDLE_ATTENTION));
         int accentColor = boostColor(edgeTintColor, 1.24f, 1.10f);
         int inactiveFill = boostColor(glassTintColor, 1.10f, 1.02f);
-        int activeAlpha = Math.round(lerp(92f, 238f, bright));
-        int inactiveAlpha = Math.round(lerp(26f, 82f, bright));
-        int strokeAlpha = Math.round(lerp(16f, 58f, bright));
+        int activeAlpha = Math.round(lerp(60f, 236f, bright));
+        int inactiveAlpha = Math.round(lerp(16f, 76f, bright));
+        int strokeAlpha = Math.round(lerp(10f, 50f, bright));
         int strokeColor = boostColor(edgeTintColor, 1.05f, 1.0f);
 
         for (int i = 0; i < totalPages; i++) {

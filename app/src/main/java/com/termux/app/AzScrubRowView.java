@@ -138,10 +138,11 @@ public final class AzScrubRowView extends AppCompatTextView {
             railBottom = cy + dp(6);
         }
         float railHeight = railBottom - railTop;
-        // Capsule dock: wrap within the pill with extra side padding and fully rounded ends.
-        // Default (edge-to-edge) dock: a rounded rectangle that reads as an inset track.
-        float sidePad = capsuleDock ? dp(6) : dp(8);
-        float radius = capsuleDock ? (railHeight * 0.5f) : dp(7);
+        // Generous side padding so the rail's rounded corners pull inward, clear of the first/last
+        // letters (otherwise the ☆/# glyphs collide with the rounded ends and look clipped).
+        // Capsule: fully-rounded pill ends; Default (edge-to-edge): a softer rounded rectangle.
+        float sidePad = capsuleDock ? dp(12) : dp(12);
+        float radius = capsuleDock ? (railHeight * 0.5f) : dp(8);
         railRect.set(sidePad, railTop, width - sidePad, railBottom);
 
         // Darker glass on interaction: at rest a faint light frosting; while scrubbing it deepens
