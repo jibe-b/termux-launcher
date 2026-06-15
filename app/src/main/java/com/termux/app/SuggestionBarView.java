@@ -3780,6 +3780,17 @@ public final class SuggestionBarView extends GridLayout {
                 dismissAppContextPopup();
                 pinEntryToTopLevel(context.entry);
             }, false));
+
+            // Change icon is available on every app. For a not-yet-pinned app, choosing an icon
+            // pins it with that override (the override is stored on the pinned entry).
+            TextView changeIconRow = addPopupActionRow(shell, "Change icon", R.drawable.ic_dock_menu_change_icon, false, tintBase, () -> {
+                dismissAppContextPopup();
+                changeIconForEntry(context.entry);
+            });
+            appContextRows.add(new MenuActionRow(changeIconRow, () -> {
+                dismissAppContextPopup();
+                changeIconForEntry(context.entry);
+            }, false));
         }
 
         if (hasShortcuts) {
@@ -4127,6 +4138,26 @@ public final class SuggestionBarView extends GridLayout {
         if (findPinnedAppIndex(entry.appRef) >= 0) return;
         pinnedItems.add(new PinnedAppItem(resolveForSelectionRef(entry.appRef)));
         persistPinsAndReload();
+    }
+
+    /**
+     * Change-icon entry point for any app, pinned or not. Opens the icon-pack picker; applying an
+     * icon pins the app with that override (updating it in place if it is already pinned), since the
+     * override is persisted on the pinned entry.
+     */
+    private void changeIconForEntry(@NonNull LauncherAppEntry entry) {
+        AppRef ref = resolveForSelectionRef(entry.appRef);
+        showIconPackPicker(new PinnedAppItem(ref), override -> {
+            int existing = findPinnedAppIndex(entry.appRef);
+            if (existing >= 0) {
+                PinnedAppItem current = pinnedAppAt(existing);
+                AppRef pinnedRef = current != null ? current.appRef : ref;
+                pinnedItems.set(existing, new PinnedAppItem(pinnedRef, override));
+            } else {
+                pinnedItems.add(new PinnedAppItem(ref, override));
+            }
+            persistPinsAndReload();
+        });
     }
 
     private TextView addPopupActionRow(@NonNull LinearLayout shell, @NonNull String title, int tintBase, @NonNull Runnable action) {

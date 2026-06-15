@@ -4,15 +4,16 @@ import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.LinearGradient;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.RectF;
+import android.graphics.Shader;
 import android.graphics.Typeface;
 import android.os.Build;
 import android.util.AttributeSet;
 import android.view.MotionEvent;
 import android.view.ViewConfiguration;
-import android.view.animation.LinearInterpolator;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -70,13 +71,12 @@ public final class AzScrubRowView extends AppCompatTextView {
     private final Paint letterPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint railFillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint railStrokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint railSheenPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint railShimmerPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint railConcavePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF railRect = new RectF();
     private final Rect glyphRect = new Rect();
-    private static final int RAIL_SHIMMER_PARTICLES = 14;
-    private float shimmerPhase = 0f;
-    @Nullable private ValueAnimator shimmerAnimator;
+    @Nullable private LinearGradient concaveShader;
+    private float concaveShaderTop = Float.NaN;
+    private float concaveShaderBottom = Float.NaN;
     private float activeTouchX = -1f;
     private float waveStrength = 0f;
     private int accentColor = Color.WHITE;
@@ -120,6 +120,7 @@ public final class AzScrubRowView extends AppCompatTextView {
         letterPaint.setColor(getCurrentTextColor());
         railFillPaint.setStyle(Paint.Style.FILL);
         railStrokePaint.setStyle(Paint.Style.STROKE);
+        railConcavePaint.setStyle(Paint.Style.FILL);
         ViewConfiguration viewConfiguration = ViewConfiguration.get(getContext());
         doubleTapTimeoutMs = ViewConfiguration.getDoubleTapTimeout();
         doubleTapSlopPx = viewConfiguration.getScaledDoubleTapSlop();
@@ -181,91 +182,40 @@ public final class AzScrubRowView extends AppCompatTextView {
         float radius = capsuleDock ? (railHeight * 0.5f) : dpf(9f);
         railRect.set(sidePad, railTop, width - sidePad, railBottom);
 
-        // Its own surface: a touch deeper/cooler than the dock so it reads as a separate pane.
-        // Darker glass on interaction — at rest a faint frosting, while scrubbing it deepens toward
-        // a dark recess so the track reads as "pushed in".
-        int base = getCurrentTextColor();
-        railFillPaint.setColor(lerpColor(withAlpha(base, 18), withAlpha(0xFF000000, 86), interact));
+        // Very subtle dark tint at rest, a touch deeper while scrubbing.
+        railFillPaint.setShader(null);
+        railFillPaint.setColor(withAlpha(0xFF000000, Math.round(lerp(20f, 52f, interact))));
         canvas.drawRoundRect(railRect, radius, radius, railFillPaint);
         railStrokePaint.setStrokeWidth(Math.max(1f, dpf(1f)));
-        railStrokePaint.setColor(lerpColor(withAlpha(base, 30), withAlpha(0xFF000000, 104), interact));
+        railStrokePaint.setColor(withAlpha(0xFF000000, Math.round(lerp(24f, 48f, interact))));
         canvas.drawRoundRect(railRect, radius, radius, railStrokePaint);
 
-        // Thin top sheen line just inside the rail to give it a distinct glassy surface.
-        float sheenInset = Math.max(dpf(2f), radius * 0.5f);
-        railSheenPaint.setStyle(Paint.Style.STROKE);
-        railSheenPaint.setStrokeWidth(Math.max(1f, dpf(1f)));
-        railSheenPaint.setColor(withAlpha(base, Math.round(lerp(26f, 64f, interact))));
-        float sheenY = railTop + Math.max(dpf(1.5f), railHeight * 0.18f);
-        canvas.drawLine(railRect.left + sheenInset, sheenY, railRect.right - sheenInset, sheenY, railSheenPaint);
-
+        // Concave recess while interacting: a top-shadow -> bottom-highlight vertical gradient makes
+        // the track look scooped in. Scaled by interaction via the paint's alpha.
         if (interact > 0.02f) {
-            drawRailShimmer(canvas, railRect, radius, interact);
+            ensureConcaveShader(railTop, railBottom);
+            railConcavePaint.setShader(concaveShader);
+            railConcavePaint.setAlpha(Math.round(150f * interact));
+            canvas.drawRoundRect(railRect, radius, radius, railConcavePaint);
+            railConcavePaint.setShader(null);
         }
+    }
+
+    private void ensureConcaveShader(float top, float bottom) {
+        if (concaveShader != null && concaveShaderTop == top && concaveShaderBottom == bottom) {
+            return;
+        }
+        concaveShaderTop = top;
+        concaveShaderBottom = bottom;
+        concaveShader = new LinearGradient(
+            0f, top, 0f, bottom,
+            new int[] { withAlpha(0xFF000000, 160), withAlpha(0xFF000000, 0), withAlpha(0xFFFFFFFF, 38) },
+            new float[] { 0f, 0.62f, 1f },
+            Shader.TileMode.CLAMP);
     }
 
     private static float lerp(float a, float b, float t) {
         return a + ((b - a) * t);
-    }
-
-    private static float fract(float v) {
-        return v - (float) Math.floor(v);
-    }
-
-    /**
-     * Light particle shimmer that drifts along the rail while scrubbing — sparkles concentrate near
-     * the fingertip and twinkle, reinforcing that the rail is its own little pane of glass. Tinted
-     * with the focus-letter accent so it blends with the dock's glow.
-     */
-    private void drawRailShimmer(Canvas canvas, RectF rail, float radius, float interact) {
-        float focusX = activeTouchX < 0f ? rail.centerX() : activeTouchX;
-        float cyMid = rail.centerY();
-        float span = Math.max(1f, rail.width() - (radius * 2f));
-        float left = rail.left + radius;
-        int tint = resolveFocusLetterColor();
-        railShimmerPaint.setStyle(Paint.Style.FILL);
-        for (int i = 0; i < RAIL_SHIMMER_PARTICLES; i++) {
-            float seed = (i * 12.9898f);
-            float phase = shimmerPhase + (i * 0.62f);
-            float twinkle = 0.5f + (0.5f * (float) Math.sin(phase));
-            float drift = fract((seed * 0.0173f) + (shimmerPhase * 0.04f) + (i * 0.067f));
-            float px = left + (drift * span);
-            float bob = (float) Math.sin((phase * 1.3f) + seed) * (rail.height() * 0.26f);
-            float py = cyMid + bob;
-            float proximity = 1f - clamp01(Math.abs(px - focusX) / Math.max(1f, rail.width() * 0.32f));
-            float alpha = interact * twinkle * (0.22f + (0.78f * proximity));
-            if (alpha <= 0.02f) {
-                continue;
-            }
-            float r = dpf(1.1f) * (0.55f + (0.9f * twinkle));
-            railShimmerPaint.setColor(withAlpha(tint, Math.round(190f * clamp01(alpha))));
-            canvas.drawCircle(px, py, r, railShimmerPaint);
-        }
-    }
-
-    private void startRailShimmer() {
-        if (shimmerAnimator != null) {
-            return;
-        }
-        ValueAnimator animator = ValueAnimator.ofFloat(0f, (float) (Math.PI * 2f));
-        animator.setDuration(1500L);
-        animator.setRepeatCount(ValueAnimator.INFINITE);
-        animator.setInterpolator(new LinearInterpolator());
-        animator.addUpdateListener(a -> {
-            shimmerPhase = (float) a.getAnimatedValue();
-            if (waveStrength > 0.01f) {
-                invalidate();
-            }
-        });
-        shimmerAnimator = animator;
-        animator.start();
-    }
-
-    private void stopRailShimmer() {
-        if (shimmerAnimator != null) {
-            shimmerAnimator.cancel();
-            shimmerAnimator = null;
-        }
     }
 
     public void setCapsuleDockStyle(boolean capsule) {
@@ -530,7 +480,6 @@ public final class AzScrubRowView extends AppCompatTextView {
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
                 stopSettleAnimation();
-                startRailShimmer();
                 updateInteractionRenderLayer(true);
                 activeTouchX = x;
                 activeLetterIndex = indexOfVisibleLetter(letter);
@@ -574,7 +523,6 @@ public final class AzScrubRowView extends AppCompatTextView {
                     waveStrength = 0f;
                     activeTouchX = -1f;
                     activeLetterIndex = -1;
-                    stopRailShimmer();
                     updateInteractionRenderLayer(false);
                     invalidate();
                 }
@@ -589,7 +537,6 @@ public final class AzScrubRowView extends AppCompatTextView {
                     waveStrength = 0f;
                     activeTouchX = -1f;
                     activeLetterIndex = -1;
-                    stopRailShimmer();
                     updateInteractionRenderLayer(false);
                     invalidate();
                 }
@@ -604,7 +551,6 @@ public final class AzScrubRowView extends AppCompatTextView {
         if (!isAttachedToWindow()) {
             waveStrength = 0f;
             activeTouchX = -1f;
-            stopRailShimmer();
             updateInteractionRenderLayer(false);
             invalidate();
             return;
@@ -621,14 +567,12 @@ public final class AzScrubRowView extends AppCompatTextView {
             public void onAnimationEnd(android.animation.Animator animation) {
                 waveStrength = 0f;
                 activeTouchX = -1f;
-                stopRailShimmer();
                 updateInteractionRenderLayer(false);
                 invalidate();
             }
 
             @Override
             public void onAnimationCancel(android.animation.Animator animation) {
-                stopRailShimmer();
                 updateInteractionRenderLayer(false);
             }
         });
@@ -638,7 +582,6 @@ public final class AzScrubRowView extends AppCompatTextView {
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
-        stopRailShimmer();
         stopSettleAnimation();
     }
 
