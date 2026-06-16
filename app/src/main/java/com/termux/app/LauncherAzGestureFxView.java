@@ -50,8 +50,8 @@ public final class LauncherAzGestureFxView extends View {
     private final Paint edgeInnerPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint bloomPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint pageIndicatorPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    /** Soft outer glow for the active "worm" page marker; lazily built once the density is known. */
-    private BlurMaskFilter pageWormGlow;
+    /** Soft underglow blur for the active page tick; lazily built once the density is known. */
+    private BlurMaskFilter pageTickGlow;
     private final Paint previewFillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final TextPaint previewLabelPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
     private final Path liquidBridgePath = new Path();
@@ -860,19 +860,19 @@ public final class LauncherAzGestureFxView extends View {
         }
         boolean subtle = interactionUseSubtlePageIndicators;
         float attention = subtle ? clamp01(subtlePageIndicatorAttention) : 1f;
-        // Both dock styles use the same "worm dots" indicator centred on the top edge.
-        drawPageWormIndicator(canvas, interactionPageIndicatorPosition, interactionPageCount, attention);
+        // Both dock styles use the same "minimal ticks" indicator centred on the top edge.
+        drawPageTicksIndicator(canvas, interactionPageIndicatorPosition, interactionPageCount, attention);
     }
 
     /**
-     * "Worm dots" page indicator (per the design handoff): a compact row of small dots centred on
-     * the dock's top edge. Inactive dots are faint; the active page is a solid, glowing capsule that
-     * stretches toward the next dot during a swipe (leading edge advances first, trailing edge
-     * catches up) and settles to a single dot-width on the destination. Pure function of
-     * (position, page count, accent); the swipe morph is driven straight off the page-scroll
-     * position so it tracks 1:1. The whole thing fades with the indicator's attention.
+     * "Minimal ticks" page indicator (per the design spec): a row of small horizontal tick marks
+     * centred on the dock's top edge. The active tick brightens and widens with a soft underglow;
+     * inactive ticks are dim and short. Everything keys off proximity to the fractional page
+     * position, so the brightness/width morph is continuous across a swipe (adjacent ticks share the
+     * transition at the midpoint). Pure function of (position, page count, accent); fades with the
+     * indicator's attention. Applies to both dock styles.
      */
-    private void drawPageWormIndicator(Canvas canvas, float activePagePosition, int totalPages, float attention) {
+    private void drawPageTicksIndicator(Canvas canvas, float activePagePosition, int totalPages, float attention) {
         if (totalPages <= 1 || getWidth() <= 0) {
             return;
         }
@@ -880,65 +880,54 @@ public final class LauncherAzGestureFxView extends View {
         if (master <= 0.01f) {
             return;
         }
-        // Slightly brighter glow once actively interacting (above the idle-attention floor).
-        float bright = clamp01((master - PINNED_INDICATOR_IDLE_ATTENTION)
-            / Math.max(0.001f, 1f - PINNED_INDICATOR_IDLE_ATTENTION));
 
-        // Geometry (handoff tokens, kept compact so many pages still read close together).
-        float d = dp(6f);
-        float r = d * 0.5f;
-        float s = dp(13f);
+        // Geometry (spec tokens).
+        float wInactive = dp(12f);
+        float wActive = dp(18f);
+        float h = dp(2f);
+        float r = h * 0.5f;
+        float step = dp(21f); // 12 tick + 9 gap, centre-to-centre
         float cx = getWidth() * 0.5f;
-        float cy = dp(6f); // sits in the dock's top band, just under the rim
+        float cy = dp(7f); // in the dock's top band, just under the rim
 
-        float totalW = ((totalPages - 1) * s) + d;
+        float totalW = ((totalPages - 1) * step) + wInactive;
         float maxW = getWidth() - dp(36f);
         if (totalW > maxW) {
-            s = (maxW - d) / (totalPages - 1);
-            totalW = ((totalPages - 1) * s) + d;
+            step = (maxW - wInactive) / (totalPages - 1);
+            totalW = ((totalPages - 1) * step) + wInactive;
         }
         float boxLeft = cx - (totalW * 0.5f);
+        float pos = clamp(activePagePosition, 0f, totalPages - 1f);
 
         // Accent from the dock's wallpaper-derived edge tint, so it recolours with the dock glow.
         int accent = edgeTintColor;
-        int inactiveColor = withAlpha(accent, Math.round(80f * master));
-        int activeColor = withAlpha(accent, Math.round(255f * master));
-        int glowColor = withAlpha(accent, Math.round(lerp(120f, 185f, bright) * master));
 
-        // Inactive dots.
+        // Underglow: a soft blob behind the active position (continuous), drawn first so the tick
+        // sits on top of it.
+        if (pageTickGlow == null) {
+            pageTickGlow = new BlurMaskFilter(dp(4f), BlurMaskFilter.Blur.NORMAL);
+        }
+        float glowCx = boxLeft + (pos * step) + (wInactive * 0.5f);
+        float glowHalfW = dp(8f);   // 16dp wide
+        float glowHalfH = dp(5f);   // 10dp tall
         pageIndicatorPaint.setStyle(Paint.Style.FILL);
+        pageIndicatorPaint.setColor(withAlpha(accent, Math.round(46f * master))); // ~0.18
+        pageIndicatorPaint.setMaskFilter(pageTickGlow);
+        tmpRect.set(glowCx - glowHalfW, cy - glowHalfH, glowCx + glowHalfW, cy + glowHalfH);
+        canvas.drawRoundRect(tmpRect, glowHalfH, glowHalfH, pageIndicatorPaint);
         pageIndicatorPaint.setMaskFilter(null);
-        pageIndicatorPaint.setColor(inactiveColor);
+
+        // Ticks: width and alpha interpolate by proximity to the active position.
         for (int p = 0; p < totalPages; p++) {
-            float dotLeft = boxLeft + (p * s);
-            tmpRect.set(dotLeft, cy - r, dotLeft + d, cy + r);
+            float prox = Math.max(0f, 1f - Math.abs(p - pos));
+            float width = wInactive + ((wActive - wInactive) * prox);
+            float alpha = 0.22f + (0.78f * prox);
+            float center = boxLeft + (p * step) + (wInactive * 0.5f);
+            float left = center - (width * 0.5f);
+            pageIndicatorPaint.setColor(withAlpha(accent, Math.round(255f * alpha * master)));
+            tmpRect.set(left, cy - r, left + width, cy + r);
             canvas.drawRoundRect(tmpRect, r, r, pageIndicatorPaint);
         }
-
-        // Active worm: leading edge advances over the first half of the swipe, trailing edge over the
-        // second half — so it stretches then contracts to one dot on the destination.
-        float pos = clamp(activePagePosition, 0f, totalPages - 1f);
-        int i = (int) Math.floor(pos);
-        if (i > totalPages - 2) i = totalPages - 2;
-        if (i < 0) i = 0;
-        float f = pos - i;
-        float rightPos = i + clamp(f * 2f, 0f, 1f);
-        float leftPos = i + clamp((f - 0.5f) * 2f, 0f, 1f);
-        float leftX = boxLeft + (leftPos * s);
-        float rightX = boxLeft + (rightPos * s) + d;
-        tmpRect.set(leftX, cy - r, rightX, cy + r);
-
-        // Soft outer glow (only on the worm), then the solid capsule on top.
-        if (pageWormGlow == null) {
-            pageWormGlow = new BlurMaskFilter(dp(9f), BlurMaskFilter.Blur.NORMAL);
-        }
-        pageIndicatorPaint.setColor(glowColor);
-        pageIndicatorPaint.setMaskFilter(pageWormGlow);
-        canvas.drawRoundRect(tmpRect, r, r, pageIndicatorPaint);
-        pageIndicatorPaint.setMaskFilter(null);
-
-        pageIndicatorPaint.setColor(activeColor);
-        canvas.drawRoundRect(tmpRect, r, r, pageIndicatorPaint);
     }
 
     private void animateInteractionPageIndicatorTo(int pageIndex, boolean animate) {
