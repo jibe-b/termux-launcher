@@ -4,11 +4,9 @@ import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
-import android.graphics.LinearGradient;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.RectF;
-import android.graphics.Shader;
 import android.graphics.Typeface;
 import android.os.Build;
 import android.util.AttributeSet;
@@ -18,6 +16,8 @@ import android.view.ViewConfiguration;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.widget.AppCompatTextView;
+
+import com.google.android.material.color.MaterialColors;
 
 import java.util.Arrays;
 import java.util.LinkedHashSet;
@@ -73,10 +73,6 @@ public final class AzScrubRowView extends AppCompatTextView {
     private final Paint railStrokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF railRect = new RectF();
     private final Rect glyphRect = new Rect();
-    @Nullable private LinearGradient glassFillShader;
-    @Nullable private LinearGradient glassRimShader;
-    private float glassShaderTop = Float.NaN;
-    private float glassShaderBottom = Float.NaN;
     private float activeTouchX = -1f;
     private float waveStrength = 0f;
     private int accentColor = Color.WHITE;
@@ -160,9 +156,9 @@ public final class AzScrubRowView extends AppCompatTextView {
     }
 
     /**
-     * Subtle recessed "rail" (a small pane of glass) behind the A–Z letters, per the wireframe's
-     * recessed scrub track. Toned down at rest, it brightens with the scrub wave so it animates in
-     * step with the rest of the dock; the lifted-letter magnifier is drawn separately and unchanged.
+     * Flat "rail" track behind the A–Z letters: a muted Material surface tint with a thin outline,
+     * wrapping all the letters. Deliberately flat (no gloss/gradient); nudges very slightly stronger
+     * while scrubbing. The lifted-letter magnifier is drawn separately and unchanged.
      */
     private void drawScrubRail(Canvas canvas, float width, float height) {
         float interact = clamp01(waveStrength);
@@ -181,52 +177,27 @@ public final class AzScrubRowView extends AppCompatTextView {
         float radius = capsuleDock ? (railHeight * 0.5f) : dpf(9f);
         railRect.set(sidePad, railTop, width - sidePad, railBottom);
 
-        ensureGlassShaders(railTop, railBottom);
-
-        // Frosted glass pane: a faint light fill that's a touch brighter along the top (lit from
-        // above) and lets the dock blur show through — subtle at rest, a little more present while
-        // scrubbing. Reads as a real pane of glass rather than a flat tint.
-        railFillPaint.setShader(glassFillShader);
-        railFillPaint.setAlpha(Math.round(lerp(150f, 220f, interact)));
+        // Flat material track: a uniform muted surface tint with a thin outline — no gloss or
+        // gradient. Nudges very slightly stronger while scrubbing for feedback.
+        int surface = resolveRailSurfaceColor();
+        int outline = resolveRailOutlineColor();
+        railFillPaint.setColor(withAlpha(surface, Math.round(lerp(54f, 72f, interact))));
         canvas.drawRoundRect(railRect, radius, radius, railFillPaint);
-        railFillPaint.setShader(null);
-        railFillPaint.setAlpha(255);
-
-        // A whisper of accent warmth refracting through the glass while scrubbing (kept very low so
-        // it stays glassy, not a solid fill).
-        if (interact > 0.02f) {
-            railFillPaint.setColor(withAlpha(accentColor, Math.round(22f * interact)));
-            canvas.drawRoundRect(railRect, radius, radius, railFillPaint);
-        }
-
-        // Rim light: a crisp highlight along the top edge of the glass that fades toward the bottom,
-        // the way light catches the lip of a real glass surface.
-        railStrokePaint.setShader(glassRimShader);
         railStrokePaint.setStrokeWidth(Math.max(1f, dpf(1f)));
-        railStrokePaint.setAlpha(Math.round(lerp(140f, 210f, interact)));
+        railStrokePaint.setColor(withAlpha(outline, Math.round(lerp(70f, 104f, interact))));
         canvas.drawRoundRect(railRect, radius, radius, railStrokePaint);
-        railStrokePaint.setShader(null);
-        railStrokePaint.setAlpha(255);
     }
 
-    private void ensureGlassShaders(float top, float bottom) {
-        if (glassFillShader != null && glassShaderTop == top && glassShaderBottom == bottom) {
-            return;
-        }
-        glassShaderTop = top;
-        glassShaderBottom = bottom;
-        // Frost: brightest at the very top, settling to a faint sheen lower down.
-        glassFillShader = new LinearGradient(
-            0f, top, 0f, bottom,
-            new int[] { withAlpha(0xFFFFFFFF, 36), withAlpha(0xFFFFFFFF, 15), withAlpha(0xFFFFFFFF, 8) },
-            new float[] { 0f, 0.55f, 1f },
-            Shader.TileMode.CLAMP);
-        // Rim: bright top lip fading to a faint bottom edge.
-        glassRimShader = new LinearGradient(
-            0f, top, 0f, bottom,
-            new int[] { withAlpha(0xFFFFFFFF, 102), withAlpha(0xFFFFFFFF, 40), withAlpha(0xFFFFFFFF, 22) },
-            new float[] { 0f, 0.5f, 1f },
-            Shader.TileMode.CLAMP);
+    /** Muted Material surface for the flat A–Z track fill. */
+    private int resolveRailSurfaceColor() {
+        return MaterialColors.getColor(this,
+            com.google.android.material.R.attr.colorSurfaceVariant, 0xFF2A2E33);
+    }
+
+    /** Muted Material outline for the flat A–Z track border. */
+    private int resolveRailOutlineColor() {
+        return MaterialColors.getColor(this,
+            com.google.android.material.R.attr.colorOutline, 0xFF8A9099);
     }
 
     private static float lerp(float a, float b, float t) {
