@@ -2,9 +2,9 @@ package com.termux.app;
 
 import android.animation.ValueAnimator;
 import android.content.Context;
+import android.graphics.BlurMaskFilter;
 import android.graphics.Canvas;
 import android.graphics.Color;
-import android.graphics.LinearGradient;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.RadialGradient;
@@ -50,6 +50,8 @@ public final class LauncherAzGestureFxView extends View {
     private final Paint edgeInnerPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint bloomPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint pageIndicatorPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    /** Soft outer glow for the active "worm" page marker; lazily built once the density is known. */
+    private BlurMaskFilter pageWormGlow;
     private final Paint previewFillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final TextPaint previewLabelPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
     private final Path liquidBridgePath = new Path();
@@ -858,73 +860,85 @@ public final class LauncherAzGestureFxView extends View {
         }
         boolean subtle = interactionUseSubtlePageIndicators;
         float attention = subtle ? clamp01(subtlePageIndicatorAttention) : 1f;
-        // Both dock styles use the same soft tube glow riding the very top edge — it reads as part
-        // of the dock's own rim sheen and avoids a second, divergent indicator treatment.
-        drawPageTubeGlow(canvas, interactionPageIndicatorPosition, interactionPageCount, attention);
+        // Both dock styles use the same "worm dots" indicator centred on the top edge.
+        drawPageWormIndicator(canvas, interactionPageIndicatorPosition, interactionPageCount, attention);
     }
 
     /**
-     * Page indicator: a soft "tube" of glow pinned to the very top edge of the dock, with a smooth
-     * radial bloom that slides to the active page. Built from gradient shaders (not stacked rings)
-     * so it reads as an actual glow rather than concentric circles, and uses the dock's glow tints
-     * so it animates as part of the overall rim sheen. Toned down at rest, brighter on interaction.
+     * "Worm dots" page indicator (per the design handoff): a compact row of small dots centred on
+     * the dock's top edge. Inactive dots are faint; the active page is a solid, glowing capsule that
+     * stretches toward the next dot during a swipe (leading edge advances first, trailing edge
+     * catches up) and settles to a single dot-width on the destination. Pure function of
+     * (position, page count, accent); the swipe morph is driven straight off the page-scroll
+     * position so it tracks 1:1. The whole thing fades with the indicator's attention.
      */
-    private void drawPageTubeGlow(Canvas canvas, float activePagePosition, int totalPages, float attention) {
+    private void drawPageWormIndicator(Canvas canvas, float activePagePosition, int totalPages, float attention) {
         if (totalPages <= 1 || getWidth() <= 0) {
             return;
         }
-        float bright = clamp01((clamp01(attention) - PINNED_INDICATOR_IDLE_ATTENTION)
+        float master = clamp01(attention);
+        if (master <= 0.01f) {
+            return;
+        }
+        // Slightly brighter glow once actively interacting (above the idle-attention floor).
+        float bright = clamp01((master - PINNED_INDICATOR_IDLE_ATTENTION)
             / Math.max(0.001f, 1f - PINNED_INDICATOR_IDLE_ATTENTION));
-        // Compact, centred tube so the marker sits in the middle of the dock's top edge, the pages
-        // read close together, and the active node only glides a short distance between them.
-        float tubeW = clamp(getWidth() * 0.09f, dp(36f), dp(50f));
+
+        // Geometry (handoff tokens, kept compact so many pages still read close together).
+        float d = dp(6f);
+        float r = d * 0.5f;
+        float s = dp(13f);
         float cx = getWidth() * 0.5f;
-        float left = cx - (tubeW * 0.5f);
-        float right = cx + (tubeW * 0.5f);
-        float coreR = dp(1.4f);
-        // Ride the very top rim of the dock: the tube's top edge sits flush with the dock's top edge.
-        float cy = coreR;
-        // Harmonize with the dock — pull the tube toward the glass tint so it blends with the rim,
-        // while keeping enough of the accent for a live, modern glow.
-        int glow = lerpColor(boostColor(overflowGlowTintColor, 1.0f, 0.92f), glassTintColor, 0.5f);
+        float cy = dp(6f); // sits in the dock's top band, just under the rim
 
+        float totalW = ((totalPages - 1) * s) + d;
+        float maxW = getWidth() - dp(36f);
+        if (totalW > maxW) {
+            s = (maxW - d) / (totalPages - 1);
+            totalW = ((totalPages - 1) * s) + d;
+        }
+        float boxLeft = cx - (totalW * 0.5f);
+
+        // Accent from the dock's wallpaper-derived edge tint, so it recolours with the dock glow.
+        int accent = edgeTintColor;
+        int inactiveColor = withAlpha(accent, Math.round(80f * master));
+        int activeColor = withAlpha(accent, Math.round(255f * master));
+        int glowColor = withAlpha(accent, Math.round(lerp(120f, 185f, bright) * master));
+
+        // Inactive dots.
         pageIndicatorPaint.setStyle(Paint.Style.FILL);
+        pageIndicatorPaint.setMaskFilter(null);
+        pageIndicatorPaint.setColor(inactiveColor);
+        for (int p = 0; p < totalPages; p++) {
+            float dotLeft = boxLeft + (p * s);
+            tmpRect.set(dotLeft, cy - r, dotLeft + d, cy + r);
+            canvas.drawRoundRect(tmpRect, r, r, pageIndicatorPaint);
+        }
 
-        // 1) Faint continuous tube whose ends fade out (no hard caps), so it melts into the rim.
-        int tubeAlpha = Math.round(lerp(9f, 28f, bright));
-        LinearGradient tubeGrad = new LinearGradient(left, 0f, right, 0f,
-            new int[] { withAlpha(glow, 0), withAlpha(glow, tubeAlpha), withAlpha(glow, tubeAlpha), withAlpha(glow, 0) },
-            new float[] { 0f, 0.2f, 0.8f, 1f }, Shader.TileMode.CLAMP);
-        pageIndicatorPaint.setShader(tubeGrad);
-        tmpRect.set(left, cy - coreR, right, cy + coreR);
-        canvas.drawRoundRect(tmpRect, coreR, coreR, pageIndicatorPaint);
-        pageIndicatorPaint.setShader(null);
+        // Active worm: leading edge advances over the first half of the swipe, trailing edge over the
+        // second half — so it stretches then contracts to one dot on the destination.
+        float pos = clamp(activePagePosition, 0f, totalPages - 1f);
+        int i = (int) Math.floor(pos);
+        if (i > totalPages - 2) i = totalPages - 2;
+        if (i < 0) i = 0;
+        float f = pos - i;
+        float rightPos = i + clamp(f * 2f, 0f, 1f);
+        float leftPos = i + clamp((f - 0.5f) * 2f, 0f, 1f);
+        float leftX = boxLeft + (leftPos * s);
+        float rightX = boxLeft + (rightPos * s) + d;
+        tmpRect.set(leftX, cy - r, rightX, cy + r);
 
-        float frac = clamp(activePagePosition, 0f, totalPages - 1f) / (totalPages - 1f);
-        float nodeHalf = dp(6f);
-        float nodeCx = lerp(left + nodeHalf, right - nodeHalf, frac);
+        // Soft outer glow (only on the worm), then the solid capsule on top.
+        if (pageWormGlow == null) {
+            pageWormGlow = new BlurMaskFilter(dp(9f), BlurMaskFilter.Blur.NORMAL);
+        }
+        pageIndicatorPaint.setColor(glowColor);
+        pageIndicatorPaint.setMaskFilter(pageWormGlow);
+        canvas.drawRoundRect(tmpRect, r, r, pageIndicatorPaint);
+        pageIndicatorPaint.setMaskFilter(null);
 
-        // 2) Soft, field-shaped glow halo around the active node — present (a real glow) but eased so
-        //    it never blooms into an overwhelming circle. Squished vertically into a low tube of light.
-        float glowRx = dp(15f);
-        float glowRy = dp(5f);
-        int peak = Math.round(lerp(46f, 135f, bright));
-        int save = canvas.save();
-        canvas.scale(1f, glowRy / glowRx, nodeCx, cy);
-        RadialGradient halo = new RadialGradient(nodeCx, cy, glowRx,
-            new int[] { withAlpha(glow, peak), withAlpha(glow, Math.round(peak * 0.3f)), withAlpha(glow, 0) },
-            new float[] { 0f, 0.5f, 1f }, Shader.TileMode.CLAMP);
-        pageIndicatorPaint.setShader(halo);
-        canvas.drawCircle(nodeCx, cy, glowRx, pageIndicatorPaint);
-        pageIndicatorPaint.setShader(null);
-        canvas.restoreToCount(save);
-
-        // 3) Bright little tube-segment core (leans slightly white) — the lit "node" for the active
-        //    page, defined but small so it stays tasteful.
-        int coreA = Math.round(lerp(116f, 210f, bright));
-        pageIndicatorPaint.setColor(withAlpha(lerpColor(glow, Color.WHITE, 0.2f), coreA));
-        tmpRect.set(nodeCx - nodeHalf, cy - coreR, nodeCx + nodeHalf, cy + coreR);
-        canvas.drawRoundRect(tmpRect, coreR, coreR, pageIndicatorPaint);
+        pageIndicatorPaint.setColor(activeColor);
+        canvas.drawRoundRect(tmpRect, r, r, pageIndicatorPaint);
     }
 
     private void animateInteractionPageIndicatorTo(int pageIndex, boolean animate) {
