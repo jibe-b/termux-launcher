@@ -1399,7 +1399,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             divider.setVisibility(View.GONE);
             return;
         }
-        divider.setBackgroundColor(withAlphaComponent(resolveAccessoryOutlineColor(), 54));
+        divider.setBackgroundColor(withAlphaComponent(resolveAccessoryOutlineColor(), 70));
         divider.setVisibility(View.VISIBLE);
     }
 
@@ -2263,9 +2263,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             );
         }
         configureAccessoryTopEdgeFx(true, state.barAlpha);
-        // The A–Z row now sits on its own subtle glass rail, so the hairline separator above the
-        // extra-keys row is redundant — keep it hidden.
-        configureExtraKeysDivider(false);
+        // Thin material hairline at the seam between the A–Z row and the extra-keys row.
+        configureExtraKeysDivider(state.appsRowEnabled);
         applyDecorNavBarSurfaceState(state);
         updateAccessoryRenderEffectBackdrop(state);
         updateAzOverflowAffordance();
@@ -2962,7 +2961,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mAzScrubRowView.setInteractionAccentColor(base);
         mAzScrubRowView.setInteractionMode(AzScrubRowView.InteractionMode.WAVE_TRACK);
         mAzScrubRowView.setLockedInlineLetter(null);
-        mAzScrubRowView.setCapsuleDockStyle(isValarieDockStyle());
         int orbColor = brightMonetShade(base);
         int edgeColor = edgeMonetVariant(base);
         if (mLauncherAzGestureFxUnderlayView != null) {

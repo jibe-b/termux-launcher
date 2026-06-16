@@ -17,8 +17,6 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.widget.AppCompatTextView;
 
-import com.google.android.material.color.MaterialColors;
-
 import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.Set;
@@ -69,9 +67,6 @@ public final class AzScrubRowView extends AppCompatTextView {
     @Nullable private ScrubCallback callback;
     private int currentSelectionIndex = 0;
     private final Paint letterPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint railFillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint railStrokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final RectF railRect = new RectF();
     private final Rect glyphRect = new Rect();
     private float activeTouchX = -1f;
     private float waveStrength = 0f;
@@ -87,7 +82,6 @@ public final class AzScrubRowView extends AppCompatTextView {
     private int activeLetterIndex = -1;
     private static final float LETTER_SLOT_HYSTERESIS_RATIO = 0.22f;
     private boolean interactionRenderActive;
-    private boolean capsuleDock;
 
     public AzScrubRowView(Context context) {
         super(context);
@@ -114,8 +108,6 @@ public final class AzScrubRowView extends AppCompatTextView {
         letterPaint.setTextAlign(Paint.Align.CENTER);
         letterPaint.setTextSize(getTextSize());
         letterPaint.setColor(getCurrentTextColor());
-        railFillPaint.setStyle(Paint.Style.FILL);
-        railStrokePaint.setStyle(Paint.Style.STROKE);
         ViewConfiguration viewConfiguration = ViewConfiguration.get(getContext());
         doubleTapTimeoutMs = ViewConfiguration.getDoubleTapTimeout();
         doubleTapSlopPx = viewConfiguration.getScaledDoubleTapSlop();
@@ -125,15 +117,10 @@ public final class AzScrubRowView extends AppCompatTextView {
         return Math.round(value * getResources().getDisplayMetrics().density);
     }
 
-    private float dpf(float value) {
-        return value * getResources().getDisplayMetrics().density;
-    }
-
-    // Letters are laid out within a horizontally-inset content band so the rail can wrap fully
-    // around the first/last letters (☆ … #) with margin to spare. The same band drives the
-    // touch->letter mapping so scrub selection stays aligned with what's drawn.
+    // Letters span the full row width (no inset). Kept as a band helper so the draw and the
+    // touch->letter mapping stay derived from one place.
     private float letterInsetPx() {
-        return dpf(12f);
+        return 0f;
     }
 
     private float letterContentWidth() {
@@ -155,74 +142,6 @@ public final class AzScrubRowView extends AppCompatTextView {
         return Math.max(0, Math.min(len - 1, index));
     }
 
-    /**
-     * Flat "rail" track behind the A–Z letters: a muted Material surface tint with a thin outline,
-     * wrapping all the letters. Deliberately flat (no gloss/gradient); nudges very slightly stronger
-     * while scrubbing. The lifted-letter magnifier is drawn separately and unchanged.
-     */
-    private void drawScrubRail(Canvas canvas, float width, float height) {
-        float interact = clamp01(waveStrength);
-        float railTop = getPaddingTop() + dp(1);
-        float railBottom = height - getPaddingBottom() - dp(1);
-        if (railBottom - railTop < dp(6)) {
-            float cy = height * 0.5f;
-            railTop = cy - dp(6);
-            railBottom = cy + dp(6);
-        }
-        // The rail wraps fully around the letters: it sits just inside the view edge while the
-        // letters are inset further (letterInsetPx), so even ☆/# have clear margin from the ends.
-        float sidePad = dpf(3f);
-        // Rounded rectangle (not a pill) for both dock styles.
-        float radius = dpf(6f);
-        railRect.set(sidePad, railTop, width - sidePad, railBottom);
-
-        // Flat material track: a uniform muted surface tint with a thin outline — no gloss or
-        // gradient. Nudges very slightly stronger while scrubbing for feedback.
-        int surface = resolveRailSurfaceColor();
-        int outline = resolveRailOutlineColor();
-        railFillPaint.setColor(withAlpha(surface, Math.round(lerp(54f, 72f, interact))));
-        canvas.drawRoundRect(railRect, radius, radius, railFillPaint);
-        railStrokePaint.setStrokeWidth(Math.max(1f, dpf(1f)));
-        railStrokePaint.setColor(withAlpha(outline, Math.round(lerp(70f, 104f, interact))));
-        canvas.drawRoundRect(railRect, radius, radius, railStrokePaint);
-    }
-
-    /** Muted Material surface for the flat A–Z track fill — close to the background tone. */
-    private int resolveRailSurfaceColor() {
-        return MaterialColors.getColor(this,
-            com.google.android.material.R.attr.colorSurfaceContainerHigh, 0xFF2B2930);
-    }
-
-    /** Muted Material outline for the flat A–Z track border. */
-    private int resolveRailOutlineColor() {
-        return MaterialColors.getColor(this,
-            com.google.android.material.R.attr.colorOutline, 0xFF8A9099);
-    }
-
-    private static float lerp(float a, float b, float t) {
-        return a + ((b - a) * t);
-    }
-
-    public void setCapsuleDockStyle(boolean capsule) {
-        if (capsuleDock == capsule) {
-            return;
-        }
-        capsuleDock = capsule;
-        invalidate();
-    }
-
-    private static int withAlpha(int color, int alpha) {
-        return (color & 0x00FFFFFF) | (Math.max(0, Math.min(255, alpha)) << 24);
-    }
-
-    private static int lerpColor(int from, int to, float t) {
-        float k = clamp01(t);
-        int a = Math.round(((from >>> 24) & 0xFF) + ((((to >>> 24) & 0xFF) - ((from >>> 24) & 0xFF)) * k));
-        int r = Math.round(((from >> 16) & 0xFF) + ((((to >> 16) & 0xFF) - ((from >> 16) & 0xFF)) * k));
-        int g = Math.round(((from >> 8) & 0xFF) + ((((to >> 8) & 0xFF) - ((from >> 8) & 0xFF)) * k));
-        int b = Math.round((from & 0xFF) + (((to & 0xFF) - (from & 0xFF)) * k));
-        return (a << 24) | (r << 16) | (g << 8) | b;
-    }
 
     @Override
     protected void onDraw(Canvas canvas) {
@@ -230,8 +149,6 @@ public final class AzScrubRowView extends AppCompatTextView {
         float width = getWidth();
         float height = getHeight();
         if (width <= 0 || height <= 0) return;
-
-        drawScrubRail(canvas, width, height);
 
         int baseColor = getCurrentTextColor();
         int focusColor = resolveFocusLetterColor();
