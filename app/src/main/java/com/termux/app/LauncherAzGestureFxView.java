@@ -882,13 +882,18 @@ public final class LauncherAzGestureFxView extends View {
         float cx = getWidth() * 0.5f;
         float left = cx - (tubeW * 0.5f);
         float right = cx + (tubeW * 0.5f);
-        float cy = dp(4f);
         float coreR = dp(1.25f);
-        int glow = boostColor(overflowGlowTintColor, 1.10f, 1.05f);
+        // Ride the very top rim of the dock: the tube's top edge sits flush with the capsule's top
+        // edge (top = cy - coreR = 0) instead of floating a few dp below it.
+        float cy = coreR;
+        // Harmonize with the dock — pull the tube toward the glass tint (softer than the raw
+        // overflow-glow cyan) so it reads as part of the capsule's own rim sheen rather than a
+        // separate bright bar.
+        int glow = lerpColor(boostColor(overflowGlowTintColor, 1.02f, 0.94f), glassTintColor, 0.55f);
 
         // Faint continuous tube.
         pageIndicatorPaint.setStyle(Paint.Style.FILL);
-        pageIndicatorPaint.setColor(withAlpha(glow, Math.round(lerp(12f, 52f, bright))));
+        pageIndicatorPaint.setColor(withAlpha(glow, Math.round(lerp(10f, 42f, bright))));
         tmpRect.set(left, cy - coreR, right, cy + coreR);
         canvas.drawRoundRect(tmpRect, coreR, coreR, pageIndicatorPaint);
 
@@ -899,8 +904,8 @@ public final class LauncherAzGestureFxView extends View {
         for (int i = 2; i >= 0; i--) {
             float grow = dp(i * 1.5f);
             int alpha = i == 0
-                ? Math.round(lerp(64f, 236f, bright))
-                : Math.round(lerp(12f, 60f, bright) / i);
+                ? Math.round(lerp(52f, 196f, bright))
+                : Math.round(lerp(12f, 56f, bright) / i);
             pageIndicatorPaint.setColor(withAlpha(glow, alpha));
             tmpRect.set(nodeCx - (nodeW * 0.5f) - grow, cy - coreR - grow,
                 nodeCx + (nodeW * 0.5f) + grow, cy + coreR + grow);

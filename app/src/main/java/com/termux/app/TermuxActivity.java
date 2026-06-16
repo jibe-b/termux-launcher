@@ -1326,9 +1326,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private int resolveDockCapsuleAppsTopPaddingPx() {
-        // Push the icons down so they sit roughly equidistant between the top-edge page indicator
-        // and the A-Z row below.
-        return Math.round(dpToPx(9));
+        // Push the icons down so they sit centered between the top-edge page indicator (now flush
+        // with the dock's top rim) and the A-Z row below. Tuned against the 9dp indicator band that
+        // sits beneath the icons, so the gap above the icons matches the gap below them.
+        return Math.round(dpToPx(12));
     }
 
     private int resolveDockCapsuleAppsBottomPaddingPx() {
