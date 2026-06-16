@@ -38,8 +38,7 @@ public final class TaiModelCatalog {
                     item.isNull("quantization") ? null : item.optString("quantization"), item.optInt("contextWindow", 4096),
                     item.optInt("recommendedRamGb", 0), item.isNull("sha256") ? null : item.optString("sha256"),
                     capabilities);
-                if (!TaiModelSpec.BACKEND_LITERT_LM.equals(entry.backend)
-                    || !TaiModelSpec.FORMAT_LITERTLM.equals(entry.format)) continue;
+                if (!TaiModelSpec.isSupportedBackendFormat(entry.backend, entry.format)) continue;
                 merged.put(entry.modelId, entry);
             } catch (Exception ignored) {}
         }

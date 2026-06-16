@@ -38,10 +38,14 @@ public final class TaiModelStore {
         for (int i = 0; i < array.length(); i++) {
             JSONObject json = array.optJSONObject(i);
             if (json == null) continue;
-            TaiModelSpec spec = TaiModelSpec.fromJson(json);
+            TaiModelSpec spec;
+            try {
+                spec = TaiModelSpec.fromJson(json);
+            } catch (IllegalArgumentException e) {
+                continue;
+            }
             if (!spec.id.isEmpty()
-                && TaiModelSpec.BACKEND_LITERT_LM.equals(spec.backend)
-                && TaiModelSpec.FORMAT_LITERTLM.equals(spec.format)) {
+                && TaiModelSpec.isSupportedBackendFormat(spec.backend, spec.format)) {
                 models.put(spec.id, spec);
             }
         }
