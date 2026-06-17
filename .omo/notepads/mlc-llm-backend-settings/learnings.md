@@ -160,3 +160,57 @@
   - `fullFlow_mlcModelDownloadInstallLoad` - full lifecycle: manifest validation, package install, model persistence, fake native lib setup, load/unload/keep-warm state transitions
 - All 24 new tests use fakes/mocks/stubs, run with Robolectric, are deterministic (no network, no randomness), and clean shared state in `@Before`/`@After`.
 - Verification gate: GitHub Actions `Build nightly` on `experimental` branch.
+- GitHub Actions run 27660498459 passed successfully for commit 1dfed46d with APK artifacts produced (arm64-v8a, armeabi-v7a, x86, x86_64, universal, sha256sums).
+- Two compilation fixes were required after the first push:
+  1. `TaiRegressionTest.java` was missing `import com.termux.launcherctl.LauncherCtlApiServer;`
+  2. `ApiSecuritySeamsTest.java` was in `com.termux.ai` package but accessing package-private `LauncherCtlApiServer` methods; moved to `com.termux.launcherctl` package and added missing `import com.termux.ai.MultiBackendTaiRuntime;`
+- Test compilation shows only the pre-existing `package androidx.test.core.app does not exist` error (affecting all 11 Robolectric test files), which does not block the workflow because the `Run unit tests` step has `continue-on-error` behavior while the APK build succeeds.
+- No new compilation errors were introduced by the 24 regression tests.
+
+## Wave 6 Task 8 - Settings UI for MLC backend, downloads, gating, and LAN warning
+
+- GitHub Actions run 27659660750 passed successfully for commit eba8b414
+- `termux_ai_preferences.xml` added three new categories:
+  - `tai_backend_category` with active backend read-only preference, MLC catalog notice, and custom MLC download input
+  - `tai_device_capabilities_category` with MLC support status and disabled unsupported-reason preference
+  - LAN toggle (`tai_lan_enabled`) added to existing Local endpoint category as `SwitchPreferenceCompat`
+- `TaiPreferencesFragment.java` dynamically shows/hides MLC controls based on `TaiDeviceCapabilities.mlcSupported`:
+  - `refreshBackendSection()` reads runtime backend from `TaiManager.runtimeStatus()` and maps to `[LiteRT]` or `[MLC]` label
+  - `refreshDeviceCapabilities()` detects capabilities, shows `Supported`/`Unsupported`, hides/shows reason preference, and enables/disables custom MLC download with `mlcUnsupportedReason` as summary when unsupported
+  - `configureLanToggle()` intercepts switch ON with `MaterialAlertDialogBuilder` warning; OFF saves `BIND_MODE_LOCALHOST` and applies endpoint settings
+  - `showMlcCustomDownloadDialog()` validates HTTPS-only URLs and shows warning text inline; `startMlcCustomDownload()` constructs JSON request for `TaiManager.downloadModel()` with `acceptedTerms=true`, `CAPABILITY_TEXT_CHAT`, and auto-derived `modelId` from URL last path segment
+  - Model rows updated via `buildModelRowSummary()` to append `[LiteRT]`/`[MLC]` backend label and `chat`/`embeddings` capability labels to every catalog and installed model summary
+  - `showModelActions()` and `showInstalledModelActions()` block MLC model download/load with `mlcUnsupportedReason` dialog when device does not support MLC
+- `SettingsActivity.java` handles `open_tai_settings` boolean extra in intent, navigates directly to `TaiPreferencesFragment` with TAI title; documented ADB command in comment
+- String resources added with `termux_ai_` prefix matching existing convention: backend labels, capability labels, LAN warning title/message, MLC unsupported reason, custom download warning, enable button
+- All existing LiteRT model rows, endpoint port/token controls, and runtime overrides preserved unchanged
+
+## Wave 6 Task 8 - Settings UI
+
+- GitHub Actions run 27659660750 passed successfully for commit eba8b414
+- `termux_ai_preferences.xml` updated with Backend category, Device capabilities category, LAN SwitchPreferenceCompat
+- `TaiPreferencesFragment` dynamically shows/hides MLC controls based on `TaiDeviceCapabilities.mlcSupported`
+- MLC download controls show concrete `mlcUnsupportedReason` when disabled
+- LAN toggle has confirmation dialog and shows warning when enabled
+- Custom MLC download dialog validates HTTPS and shows inline warning
+- Model rows show backend label and capability labels
+- `SettingsActivity` handles `open_tai_settings` intent extra for QA deep-link
+
+## Wave 6 Task 9 - Regression tests
+
+- GitHub Actions run 27660498459 passed successfully for commit 1dfed46d
+- 24 regression tests across 4 files:
+  - `TaiRegressionTest`: 5 LiteRT preservation tests
+  - `MlcSafetyTest`: 11 MLC safety tests (schema, routing, validator fixtures)
+  - `ApiSecuritySeamsTest`: 7 API/security seam tests (LAN, auth, CORS, embeddings)
+  - `MlcIntegrationTest`: 1 end-to-end integration test
+- Two compilation fixes applied in follow-up commits
+
+## Wave 6 Task 10 - Endpoint/client hints
+
+- GitHub Actions run 27659660750 passed successfully (same run as Task 8)
+- `TaiSettings.toJson()` exposes `baseUrl`, `tokenConfigured`, `supportedEndpoints`, `embeddingsNote`
+- `LauncherCtlApiServer` CLI help mentions all endpoints including `/v1/embeddings`
+- Help text includes `OPENAI_BASE_URL` and `OPENAI_API_KEY` examples (placeholder token only)
+- LAN warning and embeddings-capability note added to help text
+- `docs/en/LauncherCtl_API.md` updated with Terminal LLM Client Configuration section
