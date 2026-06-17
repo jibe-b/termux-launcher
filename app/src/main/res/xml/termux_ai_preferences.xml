@@ -25,6 +25,27 @@
     </PreferenceCategory>
 
     <PreferenceCategory
+        app:key="tai_backend_category"
+        app:title="@string/termux_ai_backend_header">
+        <Preference
+            app:key="tai_active_backend"
+            app:title="@string/termux_ai_active_backend_title"
+            app:persistent="false"
+            app:selectable="false"/>
+        <Preference
+            app:key="tai_mlc_catalog_notice"
+            app:title="@string/termux_ai_mlc_catalog_title"
+            app:summary="@string/termux_ai_mlc_catalog_summary"
+            app:persistent="false"
+            app:selectable="false"/>
+        <EditTextPreference
+            app:key="tai_mlc_custom_download"
+            app:title="@string/termux_ai_mlc_custom_download_title"
+            app:dialogTitle="@string/termux_ai_mlc_custom_download_title"
+            app:summary="@string/termux_ai_mlc_custom_download_warning"/>
+    </PreferenceCategory>
+
+    <PreferenceCategory
         app:key="tai_models_category"
         app:title="@string/termux_ai_models_header">
         <Preference
@@ -47,6 +68,22 @@
             app:title="@string/termux_ai_models_refresh_title"
             app:summary="@string/termux_ai_models_refresh_summary"
             app:persistent="false"/>
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        app:key="tai_device_capabilities_category"
+        app:title="@string/termux_ai_device_capabilities_header">
+        <Preference
+            app:key="tai_mlc_support_status"
+            app:title="@string/termux_ai_mlc_support_status_title"
+            app:persistent="false"
+            app:selectable="false"/>
+        <Preference
+            app:key="tai_mlc_unsupported_reason"
+            app:title="@string/termux_ai_mlc_unsupported_reason_title"
+            app:persistent="false"
+            app:selectable="false"
+            app:enabled="false"/>
     </PreferenceCategory>
 
     <PreferenceCategory app:title="@string/termux_ai_runtime_header">
@@ -83,5 +120,11 @@
             app:title="@string/termux_ai_api_token_rotate_title"
             app:summary="@string/termux_ai_api_token_rotate_summary"
             app:persistent="false"/>
+        <androidx.preference.SwitchPreferenceCompat
+            app:key="tai_lan_enabled"
+            app:title="@string/termux_ai_lan_enabled_title"
+            app:summaryOff="@string/termux_ai_lan_enabled_summary_off"
+            app:summaryOn="@string/termux_ai_lan_enabled_summary_on"
+            app:defaultValue="false"/>
     </PreferenceCategory>
 </PreferenceScreen>

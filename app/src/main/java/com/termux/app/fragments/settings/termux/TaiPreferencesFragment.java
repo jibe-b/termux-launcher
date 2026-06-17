@@ -31,12 +31,14 @@ import androidx.preference.ListPreference;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceCategory;
 import androidx.preference.PreferenceManager;
+import androidx.preference.SwitchPreferenceCompat;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.termux.R;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
 import com.termux.app.fragments.settings.StatusCardPreference;
+import com.termux.ai.TaiDeviceCapabilities;
 import com.termux.ai.TaiManager;
 import com.termux.ai.TaiModelCatalog;
 import com.termux.ai.TaiModelImporter;
@@ -134,6 +136,9 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
         configureHuggingFaceToken();
         configureEndpointPreferences(context);
         configureModelManager(context);
+        configureBackendSection(context);
+        configureDeviceCapabilities(context);
+        configureLanToggle(context);
     }
 
     @Override
@@ -151,6 +156,9 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
                     return;
                 case TaiSettings.KEY_SYSTEM_PROMPT_GENERAL:
                     showGeneralPromptDialog(context, editText);
+                    return;
+                case "tai_mlc_custom_download":
+                    showMlcCustomDownloadDialog(context, editText);
                     return;
                 default:
                     break;
@@ -207,6 +215,9 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
         refreshOverrides();
         refreshEndpointPreferences(context);
         populateModelRows(context);
+        refreshBackendSection(context);
+        refreshDeviceCapabilities(context);
+        refreshLanToggle(context);
     }
 
     private void configureRuntimeControls(Context context) {
@@ -482,6 +493,210 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
         }
     }
 
+    private void configureBackendSection(Context context) {
+        EditTextPreference customDownload = findPreference("tai_mlc_custom_download");
+        if (customDownload != null) {
+            customDownload.setText("");
+        }
+    }
+
+    private void refreshBackendSection(Context context) {
+        Preference activeBackend = findPreference("tai_active_backend");
+        if (activeBackend == null) return;
+        try {
+            JSONObject runtimeStatus = TaiManager.getInstance(context).runtimeStatus();
+            String backend = runtimeStatus.getJSONObject("runtime").optString("backend", "none");
+            String label;
+            if (TaiModelSpec.BACKEND_MLC_LLM.equals(backend)) {
+                label = getString(R.string.termux_ai_backend_label_mlc);
+            } else if (TaiModelSpec.BACKEND_LITERT_LM.equals(backend)) {
+                label = getString(R.string.termux_ai_backend_label_litert);
+            } else {
+                label = backend;
+            }
+            activeBackend.setSummary(label);
+        } catch (JSONException e) {
+            activeBackend.setSummary(R.string.termux_ai_backend_label_litert);
+        }
+    }
+
+    private void configureDeviceCapabilities(Context context) {
+    }
+
+    private void refreshDeviceCapabilities(Context context) {
+        TaiDeviceCapabilities capabilities = TaiDeviceCapabilities.detect(context);
+        Preference supportStatus = findPreference("tai_mlc_support_status");
+        Preference unsupportedReason = findPreference("tai_mlc_unsupported_reason");
+        if (supportStatus != null) {
+            supportStatus.setSummary(capabilities.mlcSupported
+                ? R.string.termux_ai_mlc_support_status_supported
+                : R.string.termux_ai_mlc_support_status_unsupported);
+        }
+        if (unsupportedReason != null) {
+            if (capabilities.mlcSupported) {
+                unsupportedReason.setVisible(false);
+            } else {
+                unsupportedReason.setVisible(true);
+                unsupportedReason.setSummary(capabilities.mlcUnsupportedReason != null
+                    ? capabilities.mlcUnsupportedReason
+                    : getString(R.string.termux_ai_mlc_unsupported_reason_summary));
+            }
+        }
+        EditTextPreference customDownload = findPreference("tai_mlc_custom_download");
+        if (customDownload != null) {
+            if (capabilities.mlcSupported) {
+                customDownload.setEnabled(true);
+                customDownload.setSummary(R.string.termux_ai_mlc_custom_download_warning);
+            } else {
+                customDownload.setEnabled(false);
+                customDownload.setSummary(capabilities.mlcUnsupportedReason != null
+                    ? capabilities.mlcUnsupportedReason
+                    : getString(R.string.termux_ai_mlc_unsupported_reason_summary));
+            }
+        }
+    }
+
+    private void configureLanToggle(Context context) {
+        SwitchPreferenceCompat lanToggle = findPreference("tai_lan_enabled");
+        if (lanToggle == null) return;
+        lanToggle.setOnPreferenceChangeListener((preference, newValue) -> {
+            boolean enabled = (Boolean) newValue;
+            if (enabled) {
+                showLanWarningDialog(context, lanToggle);
+                return false;
+            }
+            new TaiSettings(context).setApiBindMode(TaiSettings.BIND_MODE_LOCALHOST);
+            try {
+                LauncherCtlApiServer.getInstance().applyEndpointSettings(context);
+                refreshEndpointPreferences(context);
+            } catch (JSONException e) {
+                Toast.makeText(context, R.string.termux_ai_endpoint_update_failed, Toast.LENGTH_LONG).show();
+            }
+            return true;
+        });
+    }
+
+    private void refreshLanToggle(Context context) {
+        SwitchPreferenceCompat lanToggle = findPreference("tai_lan_enabled");
+        if (lanToggle == null) return;
+        String bindMode = new TaiSettings(context).getApiBindMode();
+        lanToggle.setChecked(TaiSettings.BIND_MODE_LAN.equals(bindMode));
+    }
+
+    private void showLanWarningDialog(Context context, SwitchPreferenceCompat lanToggle) {
+        new MaterialAlertDialogBuilder(context)
+            .setTitle(R.string.termux_ai_lan_warning_title)
+            .setMessage(R.string.termux_ai_lan_warning_message)
+            .setPositiveButton(R.string.termux_ai_dialog_enable, (dialog, which) -> {
+                lanToggle.setChecked(true);
+                new TaiSettings(context).setApiBindMode(TaiSettings.BIND_MODE_LAN);
+                try {
+                    LauncherCtlApiServer.getInstance().applyEndpointSettings(context);
+                    refreshEndpointPreferences(context);
+                } catch (JSONException e) {
+                    Toast.makeText(context, R.string.termux_ai_endpoint_update_failed, Toast.LENGTH_LONG).show();
+                }
+            })
+            .setNegativeButton(android.R.string.cancel, null)
+            .show();
+    }
+
+    private void showMlcCustomDownloadDialog(Context context, EditTextPreference preference) {
+        EditText input = buildDialogEditText(context, preference.getText(),
+            InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI, false);
+
+        TextView warning = new TextView(context);
+        warning.setText(R.string.termux_ai_mlc_custom_download_warning);
+        warning.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        int padH = Math.round(24 * context.getResources().getDisplayMetrics().density);
+        warning.setPadding(0, Math.round(12 * context.getResources().getDisplayMetrics().density), 0, 0);
+
+        LinearLayout layout = wrapDialogView(context, null, input);
+        layout.addView(warning);
+
+        new MaterialAlertDialogBuilder(context)
+            .setTitle(R.string.termux_ai_mlc_custom_download_title)
+            .setView(layout)
+            .setPositiveButton(R.string.termux_ai_dialog_save, (dialog, which) -> {
+                String url = input.getText().toString().trim();
+                if (!url.startsWith("https://")) {
+                    Toast.makeText(context, R.string.termux_ai_mlc_custom_download_invalid_url, Toast.LENGTH_LONG).show();
+                    return;
+                }
+                startMlcCustomDownload(context, url);
+            })
+            .setNegativeButton(android.R.string.cancel, null)
+            .show();
+    }
+
+    private void startMlcCustomDownload(Context context, String url) {
+        String modelId = deriveModelIdFromUrl(url);
+        runtimeActionExecutor.execute(() -> {
+            JSONObject result = null;
+            try {
+                JSONObject request = new JSONObject();
+                request.put("modelId", modelId);
+                request.put("url", url);
+                request.put("acceptedTerms", true);
+                JSONArray capabilities = new JSONArray();
+                capabilities.put(TaiModelSpec.CAPABILITY_TEXT_CHAT);
+                request.put("capabilities", capabilities);
+                result = TaiManager.getInstance(context.getApplicationContext()).downloadModel(request.toString());
+            } catch (JSONException | RuntimeException ignored) {
+            }
+            JSONObject finalResult = result;
+            handler.post(() -> {
+                Context currentContext = getContext();
+                if (currentContext == null) return;
+                if (finalResult != null && finalResult.optBoolean("ok", false)) {
+                    Toast.makeText(currentContext, R.string.termux_ai_model_download_started, Toast.LENGTH_SHORT).show();
+                    handler.removeCallbacks(refreshRuntimeRunnable);
+                    handler.postDelayed(refreshRuntimeRunnable, 1000L);
+                } else {
+                    String message = finalResult == null
+                        ? currentContext.getString(R.string.termux_ai_model_action_failed)
+                        : finalResult.optString("message", currentContext.getString(R.string.termux_ai_model_action_failed));
+                    Toast.makeText(currentContext, message, Toast.LENGTH_LONG).show();
+                }
+                refreshTaiPage(currentContext);
+            });
+        });
+    }
+
+    private String deriveModelIdFromUrl(String url) {
+        try {
+            String lastSegment = Uri.parse(url).getLastPathSegment();
+            if (lastSegment != null && !lastSegment.isEmpty()) {
+                String sanitized = TaiModelImporter.sanitizeModelId(
+                    TaiModelImporter.stripModelExtension(lastSegment));
+                if (!sanitized.isEmpty()) return sanitized;
+            }
+        } catch (Exception ignored) {
+        }
+        return "custom-mlc-model";
+    }
+
+    private String buildModelRowSummary(String baseSummary, String backend, java.util.Set<String> capabilities) {
+        String backendLabel;
+        if (TaiModelSpec.BACKEND_MLC_LLM.equals(backend)) {
+            backendLabel = getString(R.string.termux_ai_backend_label_mlc);
+        } else {
+            backendLabel = getString(R.string.termux_ai_backend_label_litert);
+        }
+        StringBuilder capBuilder = new StringBuilder();
+        for (String cap : capabilities) {
+            if (capBuilder.length() > 0) capBuilder.append(", ");
+            if (TaiModelSpec.CAPABILITY_TEXT_CHAT.equals(cap)) {
+                capBuilder.append(getString(R.string.termux_ai_capability_chat));
+            } else if (TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS.equals(cap)) {
+                capBuilder.append(getString(R.string.termux_ai_capability_embeddings));
+            } else {
+                capBuilder.append(cap);
+            }
+        }
+        return baseSummary + " · [" + backendLabel + "] · " + capBuilder.toString();
+    }
+
     private void configureDefaultModelSelector(Context context) {
         ListPreference preference = findPreference(TaiSettings.KEY_ROLE_DEFAULT_ASSISTANT);
         if (preference == null) return;
@@ -723,7 +938,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
             TaiModelSpec installed = installedModels.get(entry.modelId);
             row.setKey(MODEL_ROW_PREFIX + entry.modelId);
             row.setTitle(entry.displayName);
-            row.setSummary(entry.roleHint);
+            row.setSummary(buildModelRowSummary(entry.roleHint, entry.backend, entry.capabilities));
             row.setMetaLine(buildCatalogMetaLine(context, entry));
             configureModelPill(row, installed, download, entry.gated);
             configureProgress(row, download);
@@ -740,7 +955,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
             TaiModelPreference row = new TaiModelPreference(context);
             row.setKey(MODEL_ROW_PREFIX + model.id);
             row.setTitle(model.displayName);
-            row.setSummary(model.roleHint + " · " + model.source);
+            row.setSummary(buildModelRowSummary(model.roleHint + " · " + model.source, model.backend, model.capabilities));
             row.setMetaLine(buildInstalledMetaLine(context, model));
             row.setPill(getString(R.string.termux_ai_model_pill_installed), true);
             configureProgress(row, null);
@@ -926,6 +1141,20 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
     }
 
     private void showModelActions(Context context, TaiModelCatalog.CatalogEntry entry, TaiModelSpec installed, JSONObject download) {
+        if (TaiModelSpec.BACKEND_MLC_LLM.equals(entry.backend)) {
+            TaiDeviceCapabilities capabilities = TaiDeviceCapabilities.detect(context);
+            if (!capabilities.mlcSupported) {
+                String reason = capabilities.mlcUnsupportedReason != null
+                    ? capabilities.mlcUnsupportedReason
+                    : "MLC backend is not supported on this device.";
+                new MaterialAlertDialogBuilder(context)
+                    .setTitle(entry.displayName)
+                    .setMessage(reason)
+                    .setPositiveButton(android.R.string.ok, null)
+                    .show();
+                return;
+            }
+        }
         if (download != null && ("queued".equals(download.optString("status")) || "running".equals(download.optString("status")))) {
             new MaterialAlertDialogBuilder(context)
                 .setTitle(entry.displayName)
@@ -967,6 +1196,20 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
     }
 
     private void showInstalledModelActions(Context context, TaiModelSpec model) {
+        if (TaiModelSpec.BACKEND_MLC_LLM.equals(model.backend)) {
+            TaiDeviceCapabilities capabilities = TaiDeviceCapabilities.detect(context);
+            if (!capabilities.mlcSupported) {
+                String reason = capabilities.mlcUnsupportedReason != null
+                    ? capabilities.mlcUnsupportedReason
+                    : "MLC backend is not supported on this device.";
+                new MaterialAlertDialogBuilder(context)
+                    .setTitle(model.displayName)
+                    .setMessage(reason)
+                    .setPositiveButton(android.R.string.ok, null)
+                    .show();
+                return;
+            }
+        }
         new MaterialAlertDialogBuilder(context)
             .setTitle(model.displayName)
             .setMessage(buildInstalledModelSummary(model))
