@@ -13,6 +13,7 @@ import org.json.JSONObject;
 
 public final class TaiModelCatalog {
     private static final String UNVERIFIED_ARTIFACT_POLICY = "Import-only: models.yaml provides repository URL and estimates, but no verified artifact path, revision, and checksum policy exists in code.";
+    private static final String MLC_PACKAGE_POLICY = "Import-only: this MLC repo exposes model package files, but this app requires a verified TAI MLC manifest and a matching APK-bundled native model library before direct install can work.";
     private static final Map<String, CatalogEntry> BUILT_IN_ENTRIES = buildEntries();
     private static volatile Map<String, CatalogEntry> entries = BUILT_IN_ENTRIES;
     private TaiModelCatalog() {}
@@ -62,13 +63,21 @@ public final class TaiModelCatalog {
             "Coding and reasoning", "litert-community/gemma-4-E4B-it-litert-lm", "28299f30ee4d43294517a4ac93abd6163412f07f",
             "gemma-4-E4B-it.litertlm", "Apache-2.0", 3_659_530_240L, "8.4 GB", "12GB+", false,
             tags("Text", "Vision", "Audio", "Reasoning"), setOf("text_chat", "image_input", "audio_input", "llm_thinking")));
-        entries.put("qwen2.5-1.5b-instruct-litert-lm", liteRtImportOnly(
+        entries.put("qwen2.5-1.5b-instruct-litert-lm", liteRtAvailable(
             "qwen2.5-1.5b-instruct-litert-lm", "Qwen2.5 1.5B Instruct", "lightweight_text", "lightweight_alternative", false,
-            "Lightweight text, code, and multilingual", "litert-community/Qwen2.5-1.5B-Instruct", 1_100_000_000L, "1.1 GB", "6GB+", null,
+            "Lightweight text, code, and multilingual", "litert-community/Qwen2.5-1.5B-Instruct",
+            "19edb84c69a0212f29a6ef17ba0d6f278b6a1614",
+            "Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv4096.litertlm", "Apache-2.0",
+            1_597_931_520L, "1.5 GB", "6GB+", false, "qwen2.5", "q8",
+            "faa60663b333290c1496c499828b21d3e3254a788cacd8cce917ce0f761a2dc9",
             tags("Text", "Code", "Multilingual"), setOf("text_chat", "code", "multilingual")));
-        entries.put("deepseek-r1-distill-qwen-1.5b-litert-lm", liteRtImportOnly(
+        entries.put("deepseek-r1-distill-qwen-1.5b-litert-lm", liteRtAvailable(
             "deepseek-r1-distill-qwen-1.5b-litert-lm", "DeepSeek-R1 Distill 1.5B", "reasoning", "reasoning_small", false,
-            "Small reasoning model", "litert-community/DeepSeek-R1-Distill-Qwen-1.5B", 1_000_000_000L, "1.0 GB", "6GB+", null,
+            "Small reasoning model", "litert-community/DeepSeek-R1-Distill-Qwen-1.5B",
+            "2f8b8ee90d8f93b15305b699e8772b277d074a9a",
+            "DeepSeek-R1-Distill-Qwen-1.5B_multi-prefill-seq_q8_ekv4096.litertlm", "MIT",
+            1_833_451_520L, "1.7 GB", "6GB+", false, "deepseek-r1-distill-qwen", "q8",
+            "69b35f01759eed765641ab4af589bbe98131fd2825662a086d9037409b8c1295",
             tags("Reasoning", "Text"), setOf("text_chat", "reasoning")));
         entries.put(TaiModelRegistry.MODEL_MOBILE_ACTIONS_270M, liteRtAvailable(
             TaiModelRegistry.MODEL_MOBILE_ACTIONS_270M, "FunctionGemma 270M", "tool_calling", "experimental_launcher_agent", false,
@@ -117,8 +126,17 @@ public final class TaiModelCatalog {
                                                  String role, String repo, String revision, String file, String license, long size,
                                                  String sizeEstimate, String ramTier, boolean gated, LinkedHashSet<String> displayTags,
                                                  LinkedHashSet<String> capabilities) {
+        return liteRtAvailable(id, name, jobGroup, priority, recommended, role, repo, revision, file, license, size,
+            sizeEstimate, ramTier, gated, "gemma", null, null, displayTags, capabilities);
+    }
+
+    private static CatalogEntry liteRtAvailable(String id, String name, String jobGroup, String priority, boolean recommended,
+                                                 String role, String repo, String revision, String file, String license, long size,
+                                                 String sizeEstimate, String ramTier, boolean gated, String architecture,
+                                                 @Nullable String quantization, @Nullable String sha256,
+                                                 LinkedHashSet<String> displayTags, LinkedHashSet<String> capabilities) {
         return entry(id, name, role, repo, revision, file, license, size, gated, TaiModelSpec.BACKEND_LITERT_LM,
-            TaiModelSpec.FORMAT_LITERTLM, "gemma", null, 4096, ramGb(ramTier), null, capabilities,
+            TaiModelSpec.FORMAT_LITERTLM, architecture, quantization, 4096, ramGb(ramTier), sha256, capabilities,
             jobGroup, priority, displayTags, sizeEstimate, ramTier, recommended, true, "");
     }
 
@@ -136,7 +154,7 @@ public final class TaiModelCatalog {
                                               LinkedHashSet<String> displayTags, LinkedHashSet<String> capabilities) {
         return entry(id, name, "Import MLC package", repo, "main", null, "Review upstream license before import", size, false,
             TaiModelSpec.BACKEND_MLC_LLM, TaiModelSpec.FORMAT_MLC, "", quantization, 4096, ramGb(ramTier), null,
-            capabilities, jobGroup, priority, displayTags, sizeEstimate, ramTier, recommended, false, UNVERIFIED_ARTIFACT_POLICY);
+            capabilities, jobGroup, priority, displayTags, sizeEstimate, ramTier, recommended, false, MLC_PACKAGE_POLICY);
     }
 
     private static CatalogEntry entry(String id, String name, String role, String repo, String revision, @Nullable String file,

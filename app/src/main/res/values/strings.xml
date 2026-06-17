@@ -306,6 +306,9 @@
         <string name="termux_ai_huggingface_token_title">Hugging Face token</string>
         <string name="termux_ai_huggingface_token_summary">Optional. Stored in app-private preferences and used only for Hugging Face model downloads that need authentication.</string>
         <string name="termux_ai_huggingface_token_set_summary">Token saved. It will be sent as a Bearer token only to Hugging Face download URLs.</string>
+        <string name="termux_ai_huggingface_token_dialog_message">Paste a Hugging Face access token after signing in and accepting any model terms. The app sends it only to Hugging Face download URLs.</string>
+        <string name="termux_ai_huggingface_token_get_action">Get token</string>
+        <string name="termux_ai_huggingface_token_saved">Hugging Face token saved</string>
         <string name="termux_ai_model_import_title">Import model</string>
         <string name="termux_ai_model_import_summary">Choose LiteRT or MLC, then import from Hugging Face or a local SAF document</string>
         <string name="termux_ai_model_import_dialog_title">Import and verify model</string>

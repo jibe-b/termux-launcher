@@ -148,6 +148,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
         configureOverrides(context);
         configureEndpointPreferences(context);
         configureModelManager(context);
+        configureHuggingFaceToken();
         configureAdvancedSection(context);
         configureLanToggle(context);
     }
@@ -175,8 +176,6 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
                     break;
             }
         }
-        // Hugging Face token and the default-assistant list fall back to the shared
-        // Material dialogs provided by MaterialPreferenceFragment.
         super.onDisplayPreferenceDialog(preference);
     }
 
@@ -908,6 +907,43 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
                 ? getString(R.string.termux_ai_huggingface_token_summary)
                 : getString(R.string.termux_ai_huggingface_token_set_summary);
         });
+        token.setOnPreferenceClickListener(preference -> {
+            Context context = getContext();
+            if (context == null) return true;
+            showHuggingFaceTokenDialog(context, token);
+            return true;
+        });
+    }
+
+    private void showHuggingFaceTokenDialog(Context context, EditTextPreference preference) {
+        int padding = (int) (24 * getResources().getDisplayMetrics().density);
+        LinearLayout layout = new LinearLayout(context);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setPadding(padding, 0, padding, 0);
+
+        TextView message = new TextView(context);
+        message.setText(R.string.termux_ai_huggingface_token_dialog_message);
+        layout.addView(message);
+
+        EditText input = new EditText(context);
+        input.setSingleLine(true);
+        input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        input.setHint(R.string.termux_ai_huggingface_token_title);
+        input.setText(preference.getText() == null ? "" : preference.getText());
+        input.setSelectAllOnFocus(true);
+        layout.addView(input);
+
+        new MaterialAlertDialogBuilder(context)
+            .setTitle(R.string.termux_ai_huggingface_token_title)
+            .setView(layout)
+            .setPositiveButton(android.R.string.ok, (dialog, which) -> {
+                preference.setText(input.getText().toString().trim());
+                Toast.makeText(context, R.string.termux_ai_huggingface_token_saved, Toast.LENGTH_SHORT).show();
+            })
+            .setNeutralButton(R.string.termux_ai_huggingface_token_get_action,
+                (dialog, which) -> openUrl(context, "https://huggingface.co/settings/tokens"))
+            .setNegativeButton(android.R.string.cancel, null)
+            .show();
     }
 
     private void populateModelRows(Context context) {

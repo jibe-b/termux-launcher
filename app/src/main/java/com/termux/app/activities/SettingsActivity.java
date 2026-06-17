@@ -114,10 +114,10 @@ public class SettingsActivity extends AppCompatActivity {
                     if (!(fragment instanceof PreferenceFragmentCompat)) return;
                     PreferenceFragmentCompat preferenceFragment = (PreferenceFragmentCompat) fragment;
                     if (fragment instanceof RootPreferencesFragment) {
-                        preferenceFragment.setDivider(
-                            AppCompatResources.getDrawable(SettingsActivity.this, R.drawable.settings_divider_inset));
-                        preferenceFragment.setDividerHeight(
-                            Math.max(1, Math.round(getResources().getDisplayMetrics().density)));
+                        // Root rows rely on the category header hairline; a list divider here
+                        // creates the unwanted double-line seen between sections.
+                        preferenceFragment.setDivider(null);
+                        preferenceFragment.setDividerHeight(0);
                     } else {
                         preferenceFragment.setDivider(null);
                         preferenceFragment.setDividerHeight(0);

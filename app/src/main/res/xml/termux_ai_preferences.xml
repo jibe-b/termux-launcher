@@ -35,6 +35,10 @@
             app:title="@string/termux_ai_model_import_title"
             app:summary="@string/termux_ai_model_import_summary"
             app:persistent="false"/>
+        <EditTextPreference
+            app:key="tai_huggingface_token"
+            app:title="@string/termux_ai_huggingface_token_title"
+            app:dialogTitle="@string/termux_ai_huggingface_token_title"/>
     </PreferenceCategory>
 
     <PreferenceCategory
