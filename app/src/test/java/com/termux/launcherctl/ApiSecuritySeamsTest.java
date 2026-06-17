@@ -1,10 +1,13 @@
-package com.termux.ai;
+package com.termux.launcherctl;
 
 import android.content.Context;
 
 import androidx.test.core.app.ApplicationProvider;
 
-import com.termux.launcherctl.LauncherCtlApiServer;
+import com.termux.ai.TaiManager;
+import com.termux.ai.TaiModelSpec;
+import com.termux.ai.TaiRuntimeOptions;
+import com.termux.ai.TaiSettings;
 
 import org.json.JSONArray;
 import org.json.JSONObject;

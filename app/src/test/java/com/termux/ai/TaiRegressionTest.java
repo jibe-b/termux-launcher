@@ -4,6 +4,8 @@ import android.content.Context;
 
 import androidx.test.core.app.ApplicationProvider;
 
+import com.termux.launcherctl.LauncherCtlApiServer;
+
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.junit.Before;
