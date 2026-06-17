@@ -214,3 +214,18 @@
 - Help text includes `OPENAI_BASE_URL` and `OPENAI_API_KEY` examples (placeholder token only)
 - LAN warning and embeddings-capability note added to help text
 - `docs/en/LauncherCtl_API.md` updated with Terminal LLM Client Configuration section
+
+## Wave 7 Task 11 - Integrated build/device QA for MLC feature gates and local server behavior
+
+- GitHub Actions run 27661233112 passed successfully for commit d388e4cf
+- All workflow steps passed: unit tests, APK builds, artifact attachments
+- Artifacts downloaded: arm64-v8a, armeabi-v7a, universal, x86, x86_64 APKs plus sha256sums
+- Evidence files created for all verifiable scenarios:
+  - `task-11-github-actions-gate.txt`: Run metadata, artifact list, acceptance criteria check
+  - `task-11-local-endpoint.txt`: Documents `EmbeddingsEndpointTest` and `ApiSecuritySeamsTest` coverage for localhost auth, models JSON, and existing endpoint preservation
+  - `task-11-lan-safety.txt`: Documents `LauncherCtlApiServerLanSettingsTest` and `ApiSecuritySeamsTest` coverage for localhost default, 0.0.0.0 opt-in, auth in both modes, no CORS
+  - `task-11-download-rejection.txt`: Documents `TaiMlcPackageInstallerTest` and `MlcSafetyTest` coverage for malicious package rejection (15 + 6 tests)
+  - `task-11-mlc-unavailable.txt`: Documents no physical MLC-capable device available; code inspection confirms `MlcTaiRuntime.load()` returns 501 `mlc_runtime_unavailable` when bundled libraries missing, `TaiDeviceCapabilities` returns concrete `mlcUnsupportedReason`, and `TaiPreferencesFragment` disables MLC controls with reason text
+- No fake device QA evidence created; runtime-unavailable behavior is the expected state for devices without bundled MLC artifacts
+- LAN setting remains off-by-default (no device to change it, and tests verify default is localhost)
+- LiteRT regression QA documented via `TaiRegressionTest` coverage in existing evidence files
