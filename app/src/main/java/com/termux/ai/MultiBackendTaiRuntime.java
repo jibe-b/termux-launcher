@@ -76,21 +76,21 @@ public class MultiBackendTaiRuntime implements TaiRuntime {
         return target.keepWarm(model, options, minutes);
     }
 
-    @NonNull @Override public JSONObject cancel() throws JSONException {
+    @NonNull @Override public synchronized JSONObject cancel() throws JSONException {
         JSONObject assistant = activeAssistant.cancel();
         if (activeAssistant != liteRt) liteRt.cancel();
         return assistant;
     }
 
-    @NonNull @Override public JSONObject chat(@NonNull String id, @NonNull String system, @NonNull String user, @NonNull TaiRuntimeOptions options) throws JSONException { return runtimeForId(id).chat(id, system, user, options); }
-    @NonNull @Override public JSONObject chat(@NonNull String id, @NonNull String system, @NonNull String user, @NonNull TaiRuntimeOptions options, @NonNull TaiGenerationCallback callback) throws JSONException { return runtimeForId(id).chat(id, system, user, options, callback); }
-    @NonNull @Override public JSONObject chat(@NonNull String id, @NonNull TaiChatRequest request, @NonNull TaiRuntimeOptions options) throws JSONException { return runtimeForId(id).chat(id, request, options); }
-    @NonNull @Override public JSONObject chat(@NonNull String id, @NonNull TaiChatRequest request, @NonNull TaiRuntimeOptions options, @NonNull TaiGenerationCallback callback) throws JSONException { return runtimeForId(id).chat(id, request, options, callback); }
-    @NonNull @Override public JSONObject complete(@NonNull String id, @NonNull String prompt, @NonNull TaiRuntimeOptions options) throws JSONException { return runtimeForId(id).complete(id, prompt, options); }
-    @NonNull @Override public JSONObject complete(@NonNull String id, @NonNull String prompt, @NonNull TaiRuntimeOptions options, @NonNull TaiGenerationCallback callback) throws JSONException { return runtimeForId(id).complete(id, prompt, options, callback); }
+    @NonNull @Override public synchronized JSONObject chat(@NonNull String id, @NonNull String system, @NonNull String user, @NonNull TaiRuntimeOptions options) throws JSONException { return runtimeForId(id).chat(id, system, user, options); }
+    @NonNull @Override public synchronized JSONObject chat(@NonNull String id, @NonNull String system, @NonNull String user, @NonNull TaiRuntimeOptions options, @NonNull TaiGenerationCallback callback) throws JSONException { return runtimeForId(id).chat(id, system, user, options, callback); }
+    @NonNull @Override public synchronized JSONObject chat(@NonNull String id, @NonNull TaiChatRequest request, @NonNull TaiRuntimeOptions options) throws JSONException { return runtimeForId(id).chat(id, request, options); }
+    @NonNull @Override public synchronized JSONObject chat(@NonNull String id, @NonNull TaiChatRequest request, @NonNull TaiRuntimeOptions options, @NonNull TaiGenerationCallback callback) throws JSONException { return runtimeForId(id).chat(id, request, options, callback); }
+    @NonNull @Override public synchronized JSONObject complete(@NonNull String id, @NonNull String prompt, @NonNull TaiRuntimeOptions options) throws JSONException { return runtimeForId(id).complete(id, prompt, options); }
+    @NonNull @Override public synchronized JSONObject complete(@NonNull String id, @NonNull String prompt, @NonNull TaiRuntimeOptions options, @NonNull TaiGenerationCallback callback) throws JSONException { return runtimeForId(id).complete(id, prompt, options, callback); }
 
     @NonNull
-    public JSONObject embed(@NonNull String modelId, @NonNull String input) throws JSONException {
+    public synchronized JSONObject embed(@NonNull String modelId, @NonNull String input) throws JSONException {
         return mlc.embed(modelId, input);
     }
 
