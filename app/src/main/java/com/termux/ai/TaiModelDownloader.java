@@ -16,6 +16,7 @@ import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.net.URLEncoder;
 import java.security.MessageDigest;
 import java.util.LinkedHashSet;
 import java.util.Locale;
@@ -54,7 +55,7 @@ public final class TaiModelDownloader {
     ) throws JSONException {
         return startDownload(modelId, url, displayName, license, capabilities,
             TaiModelSpec.inferBackend(url), TaiModelSpec.inferFormat(url), "", "", 4096, 0,
-            "", authToken);
+            "", 0L, authToken);
     }
 
     @NonNull
@@ -62,7 +63,7 @@ public final class TaiModelDownloader {
                                            @Nullable String authToken) throws JSONException {
         return startDownload(entry.modelId, entry.downloadUrl, entry.displayName, entry.license,
             entry.capabilities, entry.backend, entry.format, entry.architecture, entry.quantization,
-            entry.contextWindow, entry.recommendedRamGb, entry.sha256, authToken);
+            entry.contextWindow, entry.recommendedRamGb, entry.sha256, entry.sizeBytes, authToken);
     }
 
     @NonNull
@@ -71,7 +72,7 @@ public final class TaiModelDownloader {
         @NonNull String license, @NonNull LinkedHashSet<String> capabilities,
         @NonNull String backend, @NonNull String format, @Nullable String architecture,
         @Nullable String quantization, int contextWindow, int recommendedRamGb,
-        @Nullable String expectedSha256, @Nullable String authToken
+        @Nullable String expectedSha256, long expectedSizeBytes, @Nullable String authToken
     ) throws JSONException {
         String safeModelId = sanitize(modelId);
         if (safeModelId.isEmpty()) return error(400, "bad_request", "Missing model id");
@@ -81,7 +82,7 @@ public final class TaiModelDownloader {
         File output = new File(modelDir, fileNameFromUrl(url));
         String transferId = "download-" + safeModelId;
         TaiModelDownloadService.clearCancellation(safeModelId);
-        JSONObject transfer = transfer(transferId, safeModelId, url, output.getAbsolutePath(), TaiModelStore.STATE_QUEUED, 0L, 0L, "");
+        JSONObject transfer = transfer(transferId, safeModelId, url, output.getAbsolutePath(), TaiModelStore.STATE_QUEUED, 0L, expectedSizeBytes, "");
         store.upsertDownload(transfer);
 
         Intent intent = new Intent(appContext, TaiModelDownloadService.class);
@@ -94,6 +95,7 @@ public final class TaiModelDownloader {
         intent.putExtra(TaiModelDownloadService.EXTRA_LICENSE, license);
         intent.putExtra(TaiModelDownloadService.EXTRA_CAPABILITIES, capabilities.toArray(new String[0]));
         intent.putExtra(TaiModelDownloadService.EXTRA_AUTH_TOKEN, authToken == null ? "" : authToken);
+        intent.putExtra(TaiModelDownloadService.EXTRA_EXPECTED_SIZE_BYTES, expectedSizeBytes);
         putRuntimeMetadata(intent, backend, format, architecture, quantization, contextWindow,
             recommendedRamGb, expectedSha256);
         startService(intent);
@@ -116,6 +118,7 @@ public final class TaiModelDownloader {
         int contextWindow,
         int recommendedRamGb,
         String expectedSha256,
+        long expectedSizeBytes,
         @Nullable String authToken,
         @Nullable ProgressCallback callback
     ) {
@@ -138,6 +141,7 @@ public final class TaiModelDownloader {
             if (!resumed) existing = 0L;
             long responseLength = connection.getHeaderFieldLong("Content-Length", -1L);
             contentLength = responseLength > 0 ? existing + responseLength : -1L;
+            if (expectedSizeBytes > 0L) contentLength = Math.max(contentLength, expectedSizeBytes);
             bytesRead = existing;
             persist(transfer(transferId, modelId, url, output.getAbsolutePath(), TaiModelStore.STATE_DOWNLOADING, bytesRead, contentLength, ""), callback);
 
@@ -176,11 +180,13 @@ public final class TaiModelDownloader {
                     for (String fileName : MNN_MODEL_FILES) packageFiles.add(fileName);
                 }
                 long currentBytes = output.length();
-                persist(transfer(transferId, modelId, url, output.getAbsolutePath(), TaiModelStore.STATE_DOWNLOADING, currentBytes, -1L, ""), callback);
+                bytesRead = currentBytes;
+                long packageTotalBytes = expectedSizeBytes > 0L ? expectedSizeBytes : -1L;
+                persist(transfer(transferId, modelId, url, output.getAbsolutePath(), TaiModelStore.STATE_DOWNLOADING, currentBytes, packageTotalBytes, ""), callback);
 
                 for (String fileName : packageFiles) {
                     if (output.getName().equals(fileName)) continue;
-                    String fileUrl = baseUrl + fileName;
+                    String fileUrl = baseUrl + encodeHuggingFacePath(fileName);
                     File fileOutput = new File(modelDir, fileName);
                     File fileParent = fileOutput.getParentFile();
                     if (fileParent != null && !fileParent.exists() && !fileParent.mkdirs()) {
@@ -196,7 +202,7 @@ public final class TaiModelDownloader {
                         continue;
                     }
                     persist(withCurrentFile(transfer(transferId, modelId, url, output.getAbsolutePath(),
-                        TaiModelStore.STATE_DOWNLOADING, currentBytes, -1L, ""), fileName), callback);
+                        TaiModelStore.STATE_DOWNLOADING, currentBytes, packageTotalBytes, ""), fileName), callback);
                     try (InputStream fileInput = new BufferedInputStream(fileConn.getInputStream());
                          FileOutputStream fileOut = new FileOutputStream(filePartial)) {
                         byte[] buffer = new byte[1024 * 64];
@@ -205,16 +211,17 @@ public final class TaiModelDownloader {
                             if (TaiModelDownloadService.isCancelled(modelId)) throw new InterruptedException("Download cancelled.");
                             fileOut.write(buffer, 0, read);
                             currentBytes += read;
+                            bytesRead = currentBytes;
                             if (currentBytes % (1024L * 1024L) < read) {
                                 persist(withCurrentFile(transfer(transferId, modelId, url, output.getAbsolutePath(),
-                                    TaiModelStore.STATE_DOWNLOADING, currentBytes, -1L, ""), fileName), callback);
+                                    TaiModelStore.STATE_DOWNLOADING, currentBytes, packageTotalBytes, ""), fileName), callback);
                             }
                         }
                     }
                     if (fileOutput.exists() && !fileOutput.delete()) throw new IllegalStateException("Could not replace file.");
                     if (!filePartial.renameTo(fileOutput)) throw new IllegalStateException("Could not finalize file download.");
                     persist(withCurrentFile(transfer(transferId, modelId, url, output.getAbsolutePath(),
-                        TaiModelStore.STATE_DOWNLOADING, currentBytes, -1L, ""), fileName), callback);
+                        TaiModelStore.STATE_DOWNLOADING, currentBytes, packageTotalBytes, ""), fileName), callback);
                 }
 
                 TaiModelSpec spec = new TaiModelSpec(
@@ -418,6 +425,21 @@ public final class TaiModelDownloader {
         return "config.json".equals(fileName)
             || "llm.mnn".equals(fileName)
             || "llm.mnn.weight".equals(fileName);
+    }
+
+    @NonNull
+    private String encodeHuggingFacePath(@NonNull String fileName) {
+        StringBuilder builder = new StringBuilder();
+        String[] parts = fileName.split("/", -1);
+        for (int i = 0; i < parts.length; i++) {
+            if (i > 0) builder.append('/');
+            try {
+                builder.append(URLEncoder.encode(parts[i], "UTF-8").replace("+", "%20"));
+            } catch (Exception e) {
+                builder.append(parts[i]);
+            }
+        }
+        return builder.toString();
     }
 
     @NonNull

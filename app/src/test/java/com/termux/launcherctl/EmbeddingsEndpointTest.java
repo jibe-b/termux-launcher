@@ -163,6 +163,13 @@ public class EmbeddingsEndpointTest {
 
     @Test
     public void models_returnsStandardOpenAiListWithBackendAndCapabilities() throws Exception {
+        File tempFile = File.createTempFile("listed-litert-model", ".litertlm");
+        tempFile.deleteOnExit();
+        manager.importModel(new JSONObject()
+            .put("path", tempFile.getAbsolutePath())
+            .put("modelId", "listed-litert-model")
+            .toString());
+
         HttpURLConnection conn = get("/v1/models");
         assertEquals(200, conn.getResponseCode());
         JSONObject response = new JSONObject(readBody(conn));

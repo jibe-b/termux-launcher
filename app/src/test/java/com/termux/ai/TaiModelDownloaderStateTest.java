@@ -132,7 +132,7 @@ public class TaiModelDownloaderStateTest {
         TaiModelDownloader downloader = new TaiModelDownloader(context, store);
         downloader.runDownload("download-" + modelId, modelId, url, output,
             modelId, "license", capabilities(), TaiModelSpec.BACKEND_LITERT_LM,
-            TaiModelSpec.FORMAT_LITERTLM, "", "", 4096, 0, "", null,
+            TaiModelSpec.FORMAT_LITERTLM, "", "", 4096, 0, "", 0L, null,
             transfer -> {
                 states.add(transfer.optString("status"));
                 extraCallback.onProgress(transfer);

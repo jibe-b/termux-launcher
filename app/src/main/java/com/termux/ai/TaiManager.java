@@ -529,7 +529,15 @@ public final class TaiManager {
 
     @NonNull
     public JSONObject openAiModels() throws JSONException {
-        return openAiModelsFromTaiModels(models());
+        JSONObject installed = new JSONObject();
+        JSONArray models = new JSONArray();
+        boolean mnnSupported = TaiDeviceCapabilities.detect(appContext).mnnSupported;
+        for (TaiModelSpec spec : modelStore.getUserModels().values()) {
+            if (TaiModelSpec.BACKEND_MNN_LLM.equals(spec.backend) && !mnnSupported) continue;
+            models.put(spec.toJson());
+        }
+        installed.put("models", models);
+        return openAiModelsFromTaiModels(installed);
     }
 
     @NonNull

@@ -73,8 +73,10 @@ public class TaiModelCatalogPreferencesFragment extends MaterialPreferenceFragme
             String signature = downloadStatusSignature(downloads);
             if (!signature.equals(lastDownloadStatusSignature)) {
                 refreshCatalogRows(context);
+            } else {
+                updateDownloadRows(downloads);
             }
-            if (hasActiveDownloads(context)) handler.postDelayed(this, 2000L);
+            if (hasActiveDownloads(context)) handler.postDelayed(this, 1000L);
         }
     };
     private final ActivityResultLauncher<String[]> modelPicker = registerForActivityResult(
@@ -295,16 +297,16 @@ public class TaiModelCatalogPreferencesFragment extends MaterialPreferenceFragme
     }
 
     private String buildSummary(TaiModelCatalog.CatalogEntry entry) {
-        return entry.roleHint + " · " + entry.modelId;
+        return entry.roleHint;
     }
 
     private String buildMetaLine(TaiModelCatalog.CatalogEntry entry) {
         StringBuilder builder = new StringBuilder();
-        builder.append("size ").append(!entry.sizeEstimate.isEmpty() ? entry.sizeEstimate : formatBytes(entry.sizeBytes));
-        if (!entry.ramTier.isEmpty()) builder.append("   min-RAM ").append(entry.ramTier);
-        if (entry.quantization != null && !entry.quantization.isEmpty()) builder.append("   quant ").append(entry.quantization);
+        builder.append(!entry.sizeEstimate.isEmpty() ? entry.sizeEstimate : formatBytes(entry.sizeBytes));
+        if (!entry.ramTier.isEmpty()) builder.append(" · ").append(entry.ramTier);
+        if (entry.quantization != null && !entry.quantization.isEmpty()) builder.append(" · ").append(entry.quantization);
         String tags = joinTags(displayTags(entry));
-        if (!tags.isEmpty()) builder.append("   tags ").append(tags);
+        if (!tags.isEmpty()) builder.append(" · ").append(tags);
         return builder.toString();
     }
 
@@ -416,6 +418,26 @@ public class TaiModelCatalogPreferencesFragment extends MaterialPreferenceFragme
             totalBytes > 0L ? (int) (bytesRead * 10000L / totalBytes) : 0);
     }
 
+    private void updateDownloadRows(@Nullable JSONArray downloads) {
+        if (downloads == null) return;
+        String activeModelId = "";
+        Context context = getContext();
+        if (context != null) activeModelId = new TaiSettings(context).getDefaultAssistantModel();
+        for (int i = 0; i < downloads.length(); i++) {
+            JSONObject download = downloads.optJSONObject(i);
+            if (download == null || !isActiveDownload(download.optString("status", ""))) continue;
+            String modelId = download.optString("modelId", "");
+            Preference preference = findPreference("tai_catalog_model_" + modelId);
+            if (!(preference instanceof TaiModelPreference)) continue;
+            TaiModelCatalog.CatalogEntry entry = TaiModelCatalog.get(modelId);
+            if (entry == null) continue;
+            TaiModelPreference row = (TaiModelPreference) preference;
+            CatalogActionState state = actionStateFor(entry, false, download, activeModelId);
+            row.setPill(state.pill, state.accentPill);
+            configureProgress(row, download);
+        }
+    }
+
     private void startCatalogDownload(Context context, TaiModelCatalog.CatalogEntry entry) {
         try {
             JSONObject result = TaiManager.getInstance(context).downloadCatalogModel(entry.modelId);
@@ -444,6 +466,13 @@ public class TaiModelCatalogPreferencesFragment extends MaterialPreferenceFragme
     }
 
     private void setActiveModel(Context context, String modelId) {
+        TaiModelSpec model = new TaiModelStore(context).getUserModels().get(modelId);
+        if (model != null && TaiModelSpec.BACKEND_MNN_LLM.equals(model.backend)) {
+            String reason = TaiDeviceCapabilities.detect(context).mnnUnsupportedReason;
+            Toast.makeText(context, reason == null ? getString(R.string.termux_ai_mnn_runtime_pending) : reason,
+                Toast.LENGTH_LONG).show();
+            return;
+        }
         SharedPreferences preferences = getPreferenceManager().getSharedPreferences();
         if (preferences == null) return;
         preferences.edit().putString(TaiSettings.KEY_ROLE_DEFAULT_ASSISTANT, modelId).apply();

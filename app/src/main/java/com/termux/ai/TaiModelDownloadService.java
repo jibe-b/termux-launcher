@@ -42,6 +42,7 @@ public final class TaiModelDownloadService extends Service {
     public static final String EXTRA_CONTEXT_WINDOW = "context_window";
     public static final String EXTRA_RECOMMENDED_RAM_GB = "recommended_ram_gb";
     public static final String EXTRA_SHA256 = "sha256";
+    public static final String EXTRA_EXPECTED_SIZE_BYTES = "expected_size_bytes";
 
     private static final String CHANNEL_ID = "termux_ai_model_downloads";
     private static final int NOTIFICATION_ID = 24100;
@@ -49,6 +50,8 @@ public final class TaiModelDownloadService extends Service {
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private volatile int activeDownloads;
+    private long lastNotificationUpdateMs;
+    private String lastNotificationStatus = "";
 
     public static void requestCancel(@NonNull String modelId) { CANCELLED_MODELS.add(modelId); }
     public static boolean isCancelled(@NonNull String modelId) { return CANCELLED_MODELS.contains(modelId); }
@@ -63,7 +66,9 @@ public final class TaiModelDownloadService extends Service {
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         ensureChannel();
-        startForeground(NOTIFICATION_ID, buildNotification("TAI model download", "Preparing download", 0L, 0L, true));
+        if (activeDownloads <= 0) {
+            startForeground(NOTIFICATION_ID, buildNotification("TAI model download", "Preparing download", 0L, 0L, true));
+        }
         if (intent == null || !ACTION_DOWNLOAD.equals(intent.getAction())) {
             stopSelf(startId);
             return START_NOT_STICKY;
@@ -118,6 +123,7 @@ public final class TaiModelDownloadService extends Service {
                 intent.getIntExtra(EXTRA_CONTEXT_WINDOW, 4096),
                 intent.getIntExtra(EXTRA_RECOMMENDED_RAM_GB, 0),
                 valueOrEmpty(intent.getStringExtra(EXTRA_SHA256)),
+                intent.getLongExtra(EXTRA_EXPECTED_SIZE_BYTES, 0L),
                 intent.getStringExtra(EXTRA_AUTH_TOKEN),
                 this::updateProgressNotification
             );
@@ -131,6 +137,14 @@ public final class TaiModelDownloadService extends Service {
         String status = transfer.optString("status", TaiModelStore.STATE_DOWNLOADING);
         long bytesRead = transfer.optLong("bytesRead", 0L);
         long totalBytes = transfer.optLong("totalBytes", 0L);
+        long now = android.os.SystemClock.elapsedRealtime();
+        boolean terminal = TaiModelStore.STATE_INSTALLED.equals(status)
+            || TaiModelStore.STATE_FAILED.equals(status)
+            || TaiModelStore.STATE_CANCELLED.equals(status);
+        boolean statusChanged = !status.equals(lastNotificationStatus);
+        if (!terminal && !statusChanged && now - lastNotificationUpdateMs < 750L) return;
+        lastNotificationUpdateMs = now;
+        lastNotificationStatus = status;
         String title = "TAI downloading " + modelId;
         String text;
         if (TaiModelStore.STATE_INSTALLED.equals(status)) {
