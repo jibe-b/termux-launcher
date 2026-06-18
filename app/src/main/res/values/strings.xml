@@ -308,7 +308,7 @@
         <string name="termux_ai_huggingface_token_dialog_message">Paste a Hugging Face access token after signing in and accepting any model terms. The app sends it only to Hugging Face download URLs.</string>
         <string name="termux_ai_huggingface_token_get_action">Get token</string>
         <string name="termux_ai_huggingface_token_saved">Hugging Face token saved</string>
-        <string name="termux_ai_model_import_title">Local import</string>
+        <string name="termux_ai_model_import_title">Import file</string>
         <string name="termux_ai_model_import_summary">Import a local LiteRT .litertlm or .task file into app-private storage</string>
         <string name="termux_ai_model_import_dialog_title">Local import</string>
         <string name="termux_ai_model_import_dialog_message">Choose one local SAF model file. MNN folder packages should be downloaded from the catalog.</string>
@@ -380,6 +380,9 @@
         <string name="termux_ai_speculative_decoding_title">Speculative decoding</string>
         <string name="termux_ai_idle_unload_title">Idle unload</string>
         <string name="termux_ai_context_window_title">Context window</string>
+        <string name="termux_ai_thread_count_title">Threads</string>
+        <string name="termux_ai_precision_title">Precision</string>
+        <string name="termux_ai_memory_mode_title">Memory mode</string>
         <string name="termux_ai_general_prompt_title">General chat system prompt</string>
         <string name="termux_ai_api_port_title">API port</string>
         <string name="termux_ai_api_port_summary">OpenAI base URL: %1$s</string>

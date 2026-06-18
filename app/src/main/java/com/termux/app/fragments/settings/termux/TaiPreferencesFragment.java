@@ -950,7 +950,8 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
         }
 
         TaiModelStore store = new TaiModelStore(context);
-        Map<String, TaiModelSpec> installedModels = store.getUserModels();
+        store.pruneMissingUserModels();
+        Map<String, TaiModelSpec> installedModels = store.getInstalledUserModels();
         Preference empty = findPreference("tai_models_empty");
         if (empty != null) empty.setVisible(installedModels.isEmpty());
         String activeModelId = new TaiSettings(context).getDefaultAssistantModel();
@@ -1229,7 +1230,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
         ArrayList<TaiModelCatalog.CatalogEntry> entries = new ArrayList<>(TaiModelCatalog.entries().values());
         CharSequence[] labels = new CharSequence[entries.size()];
         TaiModelStore store = new TaiModelStore(context);
-        Map<String, TaiModelSpec> installed = store.getUserModels();
+        Map<String, TaiModelSpec> installed = store.getInstalledUserModels();
         JSONArray downloads = store.getDownloads();
         for (int i = 0; i < entries.size(); i++) {
             TaiModelCatalog.CatalogEntry entry = entries.get(i);
@@ -1243,7 +1244,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
             .setTitle(R.string.termux_ai_models_browse_catalog_title)
             .setItems(labels, (dialog, which) -> {
                 TaiModelCatalog.CatalogEntry entry = entries.get(which);
-                TaiModelSpec installedSpec = new TaiModelStore(context).getUserModels().get(entry.modelId);
+                TaiModelSpec installedSpec = new TaiModelStore(context).getInstalledUserModels().get(entry.modelId);
                 if (installedSpec != null) {
                     showInstalledModelActions(context, installedSpec);
                 } else {
@@ -1255,7 +1256,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
     }
 
     private void setActiveModel(Context context, String modelId) {
-        TaiModelSpec model = new TaiModelStore(context).getUserModels().get(modelId);
+        TaiModelSpec model = new TaiModelStore(context).getInstalledUserModels().get(modelId);
         TaiDeviceCapabilities capabilities = TaiDeviceCapabilities.detect(context);
         if (model != null && TaiModelSpec.BACKEND_MNN_LLM.equals(model.backend) && !capabilities.mnnSupported) {
             String reason = capabilities.mnnUnsupportedReason;

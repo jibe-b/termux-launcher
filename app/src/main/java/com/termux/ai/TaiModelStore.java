@@ -55,6 +55,7 @@ public final class TaiModelStore {
             } catch (IllegalArgumentException e) {
                 continue;
             }
+            spec = normalizeLegacyModelSpec(spec);
             if (!spec.id.isEmpty()
                 && TaiModelSpec.isSupportedBackendFormat(spec.backend, spec.format)) {
                 models.put(spec.id, spec);
@@ -67,6 +68,33 @@ public final class TaiModelStore {
     public synchronized TaiModelSpec getUserModel(@Nullable String modelId) {
         if (modelId == null) return null;
         return getUserModels().get(modelId);
+    }
+
+    @NonNull
+    public synchronized Map<String, TaiModelSpec> getInstalledUserModels() {
+        LinkedHashMap<String, TaiModelSpec> installed = new LinkedHashMap<>();
+        for (TaiModelSpec spec : getUserModels().values()) {
+            if (isModelReadable(spec)) installed.put(spec.id, spec);
+        }
+        return installed;
+    }
+
+    public synchronized int pruneMissingUserModels() {
+        Map<String, TaiModelSpec> models = getUserModels();
+        JSONArray array = new JSONArray();
+        int removed = 0;
+        for (TaiModelSpec model : models.values()) {
+            if (!isModelReadable(model)) {
+                removed++;
+                continue;
+            }
+            try {
+                array.put(model.toJson());
+            } catch (JSONException ignored) {
+            }
+        }
+        if (removed > 0) preferences.edit().putString(KEY_USER_MODELS, array.toString()).apply();
+        return removed;
     }
 
     public synchronized void upsertUserModel(@NonNull TaiModelSpec spec) throws JSONException {
@@ -174,6 +202,45 @@ public final class TaiModelStore {
         } catch (JSONException e) {
             return new JSONArray();
         }
+    }
+
+    private boolean isModelReadable(@NonNull TaiModelSpec spec) {
+        if (spec.localPath == null || spec.localPath.trim().isEmpty()) return false;
+        File modelFile = new File(spec.localPath);
+        if (TaiModelSpec.BACKEND_MNN_LLM.equals(spec.backend)) {
+            File modelDir = modelFile.isDirectory() ? modelFile : modelFile.getParentFile();
+            return modelDir != null
+                && new File(modelDir, "config.json").isFile()
+                && new File(modelDir, "llm.mnn").isFile()
+                && new File(modelDir, "llm.mnn.weight").isFile();
+        }
+        return modelFile.isFile() && modelFile.canRead();
+    }
+
+    @NonNull
+    private TaiModelSpec normalizeLegacyModelSpec(@NonNull TaiModelSpec spec) {
+        String migratedId = TaiSettings.migrateBuiltInModelId(spec.id);
+        if (migratedId.equals(spec.id)) return spec;
+        TaiModelCatalog.CatalogEntry entry = TaiModelCatalog.get(migratedId);
+        return new TaiModelSpec(
+            migratedId,
+            entry == null ? spec.displayName : entry.displayName,
+            spec.roleHint,
+            spec.source,
+            spec.localPath,
+            spec.license,
+            spec.sizeBytes,
+            spec.capabilities,
+            spec.builtInCatalogEntry,
+            spec.runtimeProfile,
+            spec.backend,
+            spec.format,
+            spec.architecture,
+            spec.quantization,
+            spec.contextWindow,
+            spec.recommendedRamGb,
+            spec.sha256
+        );
     }
 
     private void deleteRecursively(@Nullable File file) {

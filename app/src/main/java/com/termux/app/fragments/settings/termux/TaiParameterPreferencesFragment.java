@@ -39,6 +39,7 @@ public class TaiParameterPreferencesFragment extends MaterialPreferenceFragment 
     private String modelName;
     private String backend;
     private boolean modelScreen;
+    private String selectedGlobalBackend = TaiModelSpec.BACKEND_LITERT_LM;
 
     @NonNull
     public static Bundle argumentsForModel(@NonNull TaiModelSpec model) {
@@ -103,19 +104,37 @@ public class TaiParameterPreferencesFragment extends MaterialPreferenceFragment 
     }
 
     private void buildGlobalScreen(@NonNull Context context, @NonNull PreferenceScreen screen) {
-        TaiSettings.ParameterSchema liteRt = TaiSettings.getParameterSchema(TaiModelSpec.BACKEND_LITERT_LM);
-        PreferenceCategory liteRtCategory = category(context, R.string.termux_ai_parameters_litert_title);
-        screen.addPreference(liteRtCategory);
-        addParameterRows(context, liteRtCategory, liteRt.backend, liteRt.fields(), false);
+        TaiCatalogFilterPreference filter = new TaiCatalogFilterPreference(context);
+        filter.setKey("tai_parameters_backend_filter");
+        filter.setIncludeAllOption(false);
+        filter.setSelectedValue(selectedGlobalBackend);
+        filter.setOnFilterSelectedListener(value -> {
+            selectedGlobalBackend = TaiModelSpec.BACKEND_MNN_LLM.equals(value)
+                ? TaiModelSpec.BACKEND_MNN_LLM
+                : TaiModelSpec.BACKEND_LITERT_LM;
+            rebuildGlobalScreen(context);
+        });
+        screen.addPreference(filter);
 
-        TaiSettings.ParameterSchema mnn = TaiSettings.getParameterSchema(TaiModelSpec.BACKEND_MNN_LLM);
-        PreferenceCategory mnnCategory = category(context, R.string.termux_ai_parameters_mnn_title);
-        screen.addPreference(mnnCategory);
-        addParameterRows(context, mnnCategory, mnn.backend, mnn.fields(), false);
+        TaiSettings.ParameterSchema schema = TaiSettings.getParameterSchema(selectedGlobalBackend);
+        PreferenceCategory backendCategory = category(context,
+            TaiModelSpec.BACKEND_MNN_LLM.equals(schema.backend)
+                ? R.string.termux_ai_parameters_mnn_title
+                : R.string.termux_ai_parameters_litert_title);
+        screen.addPreference(backendCategory);
+        addParameterRows(context, backendCategory, schema.backend, schema.fields(), false);
 
         PreferenceCategory prompts = category(context, R.string.termux_ai_parameters_system_prompt_title);
         screen.addPreference(prompts);
         prompts.addPreference(systemPromptPreference(context, false));
+    }
+
+    private void rebuildGlobalScreen(@NonNull Context context) {
+        if (modelScreen) return;
+        PreferenceScreen screen = getPreferenceManager().createPreferenceScreen(context);
+        setPreferenceScreen(screen);
+        buildGlobalScreen(context, screen);
+        SettingsLayoutUtils.applyScreenLayout(this);
     }
 
     @NonNull
@@ -369,6 +388,9 @@ public class TaiParameterPreferencesFragment extends MaterialPreferenceFragment 
         if (TaiSettings.FIELD_TEMPERATURE.equals(field)) return settings.getRuntimeOptions(rowBackend, modelId).temperature;
         if (TaiSettings.FIELD_ACCELERATOR.equals(field)) return settings.getRuntimeOptions(rowBackend, modelId).accelerator;
         if (TaiSettings.FIELD_CONTEXT_WINDOW.equals(field)) return settings.getRuntimeOptions(rowBackend, modelId).contextWindow;
+        if (TaiSettings.FIELD_THREAD_COUNT.equals(field)) return settings.getRuntimeOptions(rowBackend, modelId).threadCount;
+        if (TaiSettings.FIELD_PRECISION.equals(field)) return settings.getRuntimeOptions(rowBackend, modelId).precision;
+        if (TaiSettings.FIELD_MEMORY_MODE.equals(field)) return settings.getRuntimeOptions(rowBackend, modelId).memoryMode;
         if (TaiSettings.FIELD_ENABLE_THINKING.equals(field)) return settings.getRuntimeOptions(rowBackend, modelId).thinkingEnabled;
         if (TaiSettings.FIELD_ENABLE_SPECULATIVE_DECODING.equals(field)) return settings.getRuntimeOptions(rowBackend, modelId).speculativeDecodingEnabled;
         return null;
@@ -419,6 +441,9 @@ public class TaiParameterPreferencesFragment extends MaterialPreferenceFragment 
         if (TaiSettings.FIELD_ENABLE_THINKING.equals(field)) return getString(R.string.termux_ai_thinking_title);
         if (TaiSettings.FIELD_ENABLE_SPECULATIVE_DECODING.equals(field)) return getString(R.string.termux_ai_speculative_decoding_title);
         if (TaiSettings.FIELD_CONTEXT_WINDOW.equals(field)) return getString(R.string.termux_ai_context_window_title);
+        if (TaiSettings.FIELD_THREAD_COUNT.equals(field)) return getString(R.string.termux_ai_thread_count_title);
+        if (TaiSettings.FIELD_PRECISION.equals(field)) return getString(R.string.termux_ai_precision_title);
+        if (TaiSettings.FIELD_MEMORY_MODE.equals(field)) return getString(R.string.termux_ai_memory_mode_title);
         return field;
     }
 

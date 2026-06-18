@@ -55,6 +55,9 @@ public final class TaiSettings {
     public static final String FIELD_ENABLE_THINKING = "enable_thinking";
     public static final String FIELD_ENABLE_SPECULATIVE_DECODING = "enable_speculative_decoding";
     public static final String FIELD_CONTEXT_WINDOW = "context_window";
+    public static final String FIELD_THREAD_COUNT = "thread_count";
+    public static final String FIELD_PRECISION = "precision";
+    public static final String FIELD_MEMORY_MODE = "memory_mode";
     private static final ParameterSchema LITERT_PARAMETER_SCHEMA = createLiteRtParameterSchema();
     private static final ParameterSchema MNN_PARAMETER_SCHEMA = createMnnParameterSchema();
     private static final String OLD_MODEL_GEMMA_4_E2B_IT = "Gemma-4-E2B-it";
@@ -78,7 +81,7 @@ public final class TaiSettings {
             preferences.edit().putString(KEY_ROLE_DEFAULT_ASSISTANT, migratedModelId).apply();
             modelId = migratedModelId;
         }
-        if (new TaiModelRegistry().getModel(modelId) != null || new TaiModelStore(appContext).getUserModel(modelId) != null) {
+        if (new TaiModelRegistry().getModel(modelId) != null || new TaiModelStore(appContext).getInstalledUserModels().containsKey(modelId)) {
             return modelId;
         }
         preferences.edit().putString(KEY_ROLE_DEFAULT_ASSISTANT, TaiModelRegistry.MODEL_GEMMA_4_E2B_IT).apply();
@@ -112,6 +115,9 @@ public final class TaiSettings {
             (Double) resolveParameter(schema, FIELD_TEMPERATURE, modelId),
             (String) resolveParameter(schema, FIELD_ACCELERATOR, modelId),
             (Integer) resolveParameter(schema, FIELD_CONTEXT_WINDOW, modelId),
+            (Integer) resolveParameter(schema, FIELD_THREAD_COUNT, modelId),
+            (String) resolveParameter(schema, FIELD_PRECISION, modelId),
+            (String) resolveParameter(schema, FIELD_MEMORY_MODE, modelId),
             (Boolean) resolveParameter(schema, FIELD_ENABLE_THINKING, modelId),
             (Boolean) resolveParameter(schema, FIELD_ENABLE_SPECULATIVE_DECODING, modelId),
             getIdleUnloadMinutes()
@@ -392,6 +398,10 @@ public final class TaiSettings {
         LinkedHashMap<String, ParameterSpec> specs = new LinkedHashMap<>();
         put(specs, ParameterSpec.option(FIELD_ACCELERATOR, "Auto", "Auto", new String[] {"Auto", "CPU", "OpenCL"}));
         put(specs, ParameterSpec.integer(FIELD_CONTEXT_WINDOW, "4096", 4096, 1024, 8192));
+        put(specs, ParameterSpec.integer(FIELD_THREAD_COUNT, String.valueOf(Math.max(1, Runtime.getRuntime().availableProcessors() / 2)),
+            Math.max(1, Runtime.getRuntime().availableProcessors() / 2), 1, 16));
+        put(specs, ParameterSpec.option(FIELD_PRECISION, "low", "low", new String[] {"low", "normal", "high"}));
+        put(specs, ParameterSpec.option(FIELD_MEMORY_MODE, "low", "low", new String[] {"low", "normal", "high"}));
         put(specs, ParameterSpec.integer(FIELD_MAX_TOKENS, "1024", 1024, 64, 8192));
         put(specs, ParameterSpec.decimal(FIELD_TEMPERATURE, "0.70", 0.70d, 0.0d, 2.0d));
         put(specs, ParameterSpec.decimal(FIELD_TOP_P, "0.95", 0.95d, 0.0d, 1.0d));

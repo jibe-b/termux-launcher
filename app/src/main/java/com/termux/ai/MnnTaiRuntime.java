@@ -406,9 +406,10 @@ public final class MnnTaiRuntime implements TaiRuntime {
         JSONObject json = readJsonFile(config);
         if (!json.has("backend_type")) json.put("backend_type", backendName(options));
         json.put("backend_type", backendName(options));
-        json.put("thread_num", Math.max(1, Runtime.getRuntime().availableProcessors() / 2));
-        json.put("precision", "low");
-        json.put("memory", "low");
+        json.put("thread_num", threadCount(options));
+        json.put("precision", mnnMode(options.precision, "low"));
+        json.put("memory", mnnMode(options.memoryMode, "low"));
+        if (options.contextWindow != null) json.put("max_context_len", options.contextWindow);
         if (options.maxTokens != null) json.put("max_new_tokens", options.maxTokens);
         if (options.temperature != null) json.put("temperature", options.temperature);
         if (options.topP != null) json.put("top_p", options.topP);
@@ -421,6 +422,10 @@ public final class MnnTaiRuntime implements TaiRuntime {
     private JSONObject overridesJson(@NonNull String systemPrompt, @NonNull TaiRuntimeOptions options) throws JSONException {
         JSONObject json = new JSONObject();
         json.put("backend_type", backendName(options));
+        json.put("thread_num", threadCount(options));
+        json.put("precision", mnnMode(options.precision, "low"));
+        json.put("memory", mnnMode(options.memoryMode, "low"));
+        if (options.contextWindow != null) json.put("max_context_len", options.contextWindow);
         if (options.maxTokens != null) json.put("max_new_tokens", options.maxTokens);
         if (options.temperature != null) json.put("temperature", options.temperature);
         if (options.topP != null) json.put("top_p", options.topP);
@@ -445,6 +450,19 @@ public final class MnnTaiRuntime implements TaiRuntime {
         if (accelerator == null || accelerator.trim().isEmpty() || "auto".equalsIgnoreCase(accelerator)) return "cpu";
         if ("opencl".equalsIgnoreCase(accelerator) || "gpu".equalsIgnoreCase(accelerator)) return "opencl";
         return "cpu";
+    }
+
+    private int threadCount(@NonNull TaiRuntimeOptions options) {
+        int fallback = Math.max(1, Runtime.getRuntime().availableProcessors() / 2);
+        return options.threadCount == null ? fallback : Math.max(1, options.threadCount);
+    }
+
+    @NonNull
+    private String mnnMode(@Nullable String value, @NonNull String fallback) {
+        if (value == null || value.trim().isEmpty() || "auto".equalsIgnoreCase(value)) return fallback;
+        String normalized = value.trim().toLowerCase(Locale.ROOT);
+        if ("normal".equals(normalized) || "high".equals(normalized) || "low".equals(normalized)) return normalized;
+        return fallback;
     }
 
     @NonNull

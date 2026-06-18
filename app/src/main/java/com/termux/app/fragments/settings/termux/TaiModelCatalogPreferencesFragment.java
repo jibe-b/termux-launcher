@@ -156,7 +156,7 @@ public class TaiModelCatalogPreferencesFragment extends MaterialPreferenceFragme
         results.removeAll();
 
         TaiModelStore store = new TaiModelStore(context);
-        Map<String, TaiModelSpec> installed = store.getUserModels();
+        Map<String, TaiModelSpec> installed = store.getInstalledUserModels();
         JSONArray downloads = store.getDownloads();
         lastDownloadStatusSignature = downloadStatusSignature(downloads);
         String activeModelId = new TaiSettings(context).getDefaultAssistantModel();
