@@ -324,7 +324,9 @@ public final class MnnTaiRuntime implements TaiRuntime {
         JSONArray toolCalls = parseToolCalls(response, generationId);
         JSONObject toolChoiceError = validateRequiredToolChoice(request.openAiToolChoice, request.openAiTools, toolCalls);
         if (toolChoiceError != null) return toolChoiceError;
-        String responseText = toolCalls.length() > 0 ? stripToolCallBlocks(response).trim() : response;
+        String responseText = toolCalls.length() > 0
+            ? (responseLooksLikeToolCallJson(response) ? "" : stripToolCallBlocks(response).trim())
+            : response;
         if (callback != null) {
             if (toolCalls.length() > 0) callback.onToolCalls(toolCalls);
             callback.onComplete(responseText);
@@ -594,7 +596,60 @@ public final class MnnTaiRuntime implements TaiRuntime {
             }
             offset = end + "</tool_call>".length();
         }
+        if (calls.length() == 0) appendJsonToolCall(response, generationId, calls);
         return calls;
+    }
+
+    private void appendJsonToolCall(
+        @NonNull String response,
+        @NonNull String generationId,
+        @NonNull JSONArray calls
+    ) {
+        String trimmed = response.trim();
+        if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) return;
+        try {
+            JSONObject parsed = new JSONObject(trimmed);
+            JSONObject function = parsed.optJSONObject("function");
+            String name = parsed.optString("name", "");
+            Object argumentsValue = parsed.opt("arguments");
+            if (function != null) {
+                if (name.isEmpty()) name = function.optString("name", "");
+                if (argumentsValue == null || JSONObject.NULL.equals(argumentsValue)) {
+                    argumentsValue = function.opt("arguments");
+                }
+            }
+            if (name.isEmpty()) return;
+            JSONObject arguments;
+            if (argumentsValue instanceof JSONObject) {
+                arguments = (JSONObject) argumentsValue;
+            } else {
+                String argumentsText = argumentsValue == null ? "{}" : String.valueOf(argumentsValue);
+                arguments = argumentsText.trim().isEmpty() ? new JSONObject() : new JSONObject(argumentsText);
+            }
+            JSONObject callFunction = new JSONObject();
+            callFunction.put("name", name);
+            callFunction.put("arguments", arguments.toString());
+            JSONObject call = new JSONObject();
+            call.put("id", generationId + "-call-" + (calls.length() + 1));
+            call.put("type", "function");
+            call.put("function", callFunction);
+            calls.put(call);
+        } catch (JSONException ignored) {
+        }
+    }
+
+    private boolean responseLooksLikeToolCallJson(@NonNull String response) {
+        String trimmed = response.trim();
+        if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) return false;
+        try {
+            JSONObject parsed = new JSONObject(trimmed);
+            if (!parsed.optString("name", "").isEmpty() && parsed.has("arguments")) return true;
+            JSONObject function = parsed.optJSONObject("function");
+            return function != null && !function.optString("name", "").isEmpty()
+                && (parsed.has("arguments") || function.has("arguments"));
+        } catch (JSONException ignored) {
+            return false;
+        }
     }
 
     @NonNull
