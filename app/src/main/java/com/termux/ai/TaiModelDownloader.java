@@ -244,7 +244,8 @@ public final class TaiModelDownloader {
                     emptyToNull(expectedSha256)
                 );
                 store.upsertUserModel(spec);
-                persist(transfer(transferId, modelId, url, output.getAbsolutePath(), TaiModelStore.STATE_INSTALLED, currentBytes, currentBytes, ""), callback);
+                persist(withEffectiveConfig(transfer(transferId, modelId, url, output.getAbsolutePath(),
+                    TaiModelStore.STATE_INSTALLED, currentBytes, currentBytes, ""), output), callback);
                 return;
             }
 
@@ -445,6 +446,16 @@ public final class TaiModelDownloader {
     @NonNull
     private JSONObject withCurrentFile(@NonNull JSONObject transfer, @NonNull String currentFile) throws JSONException {
         transfer.put("currentFile", currentFile);
+        return transfer;
+    }
+
+    @NonNull
+    private JSONObject withEffectiveConfig(@NonNull JSONObject transfer, @NonNull File config) throws JSONException {
+        try {
+            transfer.put("effectiveConfig", new JSONObject(readSmallUtf8(new java.io.FileInputStream(config), 10L * 1024L * 1024L)));
+        } catch (Exception ignored) {
+            transfer.put("effectiveConfig", JSONObject.NULL);
+        }
         return transfer;
     }
 

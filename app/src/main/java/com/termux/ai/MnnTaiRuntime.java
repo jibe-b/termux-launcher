@@ -175,10 +175,8 @@ public final class MnnTaiRuntime implements TaiRuntime {
         if (!config.isFile() || !"config.json".equals(config.getName())) {
             return error(404, "model_file_not_readable", "MNN models must point to a readable config.json file.");
         }
-        File modelDir = config.getParentFile();
-        if (modelDir == null || !new File(modelDir, "llm.mnn").isFile() || !new File(modelDir, "llm.mnn.weight").isFile()) {
-            return error(404, "model_file_not_readable", "MNN model directory is incomplete.");
-        }
+        JSONObject validationError = validateMnnPackage(config);
+        if (validationError != null) return validationError;
         if (!isNativeRuntimeAvailable()) {
             return error(501, "mnn_native_unavailable", "Native MNN runtime libraries are not available for this APK/ABI.");
         }
@@ -245,7 +243,7 @@ public final class MnnTaiRuntime implements TaiRuntime {
             if (generating) return errorLocked(409, "generation_active", "A MNN generation is already running. Cancel it or wait for it to finish.");
             activeSession = session;
             if (activeSession == null) return errorLocked(409, "model_not_loaded", "Load the downloaded MNN model first.");
-            applyRuntimeOptionsLocked(activeSession, request.systemPrompt, options);
+            applyRuntimeOptionsLocked(activeSession, options);
             generationId = beginGenerationLocked();
             startedAt = activeGenerationStartedAtMs;
         }
@@ -254,8 +252,25 @@ public final class MnnTaiRuntime implements TaiRuntime {
         AtomicReference<Throwable> errorRef = new AtomicReference<>();
         HashMap<String, Object> metrics = new HashMap<>();
         try {
-            List<Pair<String, String>> history = mnnHistory(request);
-            HashMap<String, Object> nativeResult = activeSession.generateHistory(history, progress -> {
+            boolean hasTools = request.openAiTools.length() > 0
+                && !"none".equals(String.valueOf(request.openAiToolChoice));
+            HashMap<String, Object> nativeResult;
+            if (hasTools) {
+                nativeResult = activeSession.generateStructuredChat(
+                    mnnStructuredMessagesJson(request).toString(),
+                    request.openAiTools.toString(),
+                    progress -> {
+                        if (cancelRequested) return true;
+                        if (progress == null) return false;
+                        synchronized (responseBuilder) {
+                            responseBuilder.append(progress);
+                        }
+                        if (callback != null) callback.onToken(progress);
+                        return false;
+                    });
+            } else {
+                List<Pair<String, String>> history = mnnHistory(request);
+                nativeResult = activeSession.generateHistory(history, progress -> {
                 if (cancelRequested) return true;
                 if (progress == null) return false;
                 synchronized (responseBuilder) {
@@ -263,7 +278,8 @@ public final class MnnTaiRuntime implements TaiRuntime {
                 }
                 if (callback != null) callback.onToken(progress);
                 return false;
-            });
+                });
+            }
             if (nativeResult != null) metrics.putAll(nativeResult);
         } catch (Throwable t) {
             errorRef.set(t);
@@ -281,9 +297,20 @@ public final class MnnTaiRuntime implements TaiRuntime {
         if (throwable != null) {
             if (callback != null) callback.onError(throwable);
             if (cancelRequested) return error(499, "generation_cancelled", "MNN generation was cancelled.");
+            if (throwable instanceof UnsatisfiedLinkError && request.openAiTools.length() > 0) {
+                return error(501, "mnn_structured_chat_unavailable",
+                    "This MNN native library does not expose the structured chat bridge required for OpenAI tools.");
+            }
             return error(500, "mnn_generation_failed", "MNN generation failed: " + message(throwable));
         }
-        if (callback != null) callback.onComplete(response);
+        JSONArray toolCalls = parseToolCalls(response, generationId);
+        JSONObject toolChoiceError = validateRequiredToolChoice(request.openAiToolChoice, request.openAiTools, toolCalls);
+        if (toolChoiceError != null) return toolChoiceError;
+        String responseText = toolCalls.length() > 0 ? stripToolCallBlocks(response).trim() : response;
+        if (callback != null) {
+            if (toolCalls.length() > 0) callback.onToolCalls(toolCalls);
+            callback.onComplete(responseText);
+        }
 
         JSONObject data = new JSONObject();
         data.put("ok", true);
@@ -293,10 +320,11 @@ public final class MnnTaiRuntime implements TaiRuntime {
         data.put("loaded", true);
         data.put("generationId", generationId);
         data.put("mode", mode);
-        data.put("response", response);
-        data.put("toolCalls", new JSONArray());
+        data.put("response", responseText);
+        data.put("toolCalls", toolCalls);
         data.put("elapsedMs", System.currentTimeMillis() - startedAt);
         data.put("options", options.toJson());
+        data.put("effectiveConfig", safeJson(activeSession.dumpConfig()));
         data.put("metrics", metricsJson(metrics));
         data.put("state", getState().toJson());
         return data;
@@ -310,11 +338,11 @@ public final class MnnTaiRuntime implements TaiRuntime {
         return null;
     }
 
-    private void applyRuntimeOptionsLocked(@NonNull LlmSession activeSession, @NonNull String systemPrompt, @NonNull TaiRuntimeOptions options) {
+    private void applyRuntimeOptionsLocked(@NonNull LlmSession activeSession, @NonNull TaiRuntimeOptions options) {
         if (options.maxTokens != null) activeSession.updateMaxNewTokens(options.maxTokens);
-        if (!systemPrompt.trim().isEmpty()) activeSession.updateSystemPrompt(systemPrompt);
         try {
-            activeSession.updateConfig(overridesJson(systemPrompt, options).toString());
+            JSONObject overrides = overridesJson(options);
+            if (overrides.length() > 0) activeSession.updateConfig(overrides.toString());
         } catch (JSONException ignored) {
         }
     }
@@ -380,6 +408,132 @@ public final class MnnTaiRuntime implements TaiRuntime {
     }
 
     @NonNull
+    private JSONArray mnnStructuredMessagesJson(@NonNull TaiChatRequest request) throws JSONException {
+        JSONArray messages = new JSONArray();
+        if (!request.systemPrompt.trim().isEmpty()) {
+            messages.put(new JSONObject()
+                .put("role", "system")
+                .put("content", request.systemPrompt));
+        }
+        if (request.openAiMessages.length() > 0) {
+            for (int i = 0; i < request.openAiMessages.length(); i++) {
+                JSONObject source = request.openAiMessages.optJSONObject(i);
+                if (source == null) continue;
+                String role = source.optString("role", "user");
+                if ("system".equals(role) || "developer".equals(role)) continue;
+                JSONObject message = new JSONObject();
+                message.put("role", role);
+                message.put("content", openAiContentText(source.opt("content")));
+                if (source.has("tool_calls")) message.put("tool_calls", source.opt("tool_calls"));
+                if (source.has("tool_call_id")) message.put("tool_call_id", source.optString("tool_call_id", ""));
+                if (source.has("name")) message.put("name", source.optString("name", ""));
+                messages.put(message);
+            }
+        } else {
+            for (Pair<String, String> item : mnnHistory(request)) {
+                messages.put(new JSONObject()
+                    .put("role", item.first)
+                    .put("content", item.second));
+            }
+        }
+        return messages;
+    }
+
+    @NonNull
+    private String openAiContentText(@Nullable Object content) {
+        if (content == null || JSONObject.NULL.equals(content)) return "";
+        if (content instanceof JSONArray) {
+            JSONArray array = (JSONArray) content;
+            StringBuilder builder = new StringBuilder();
+            for (int i = 0; i < array.length(); i++) {
+                Object item = array.opt(i);
+                if (item instanceof JSONObject) {
+                    JSONObject object = (JSONObject) item;
+                    if ("text".equals(object.optString("type", ""))) builder.append(object.optString("text", ""));
+                } else if (item != null && !JSONObject.NULL.equals(item)) {
+                    builder.append(String.valueOf(item));
+                }
+            }
+            return builder.toString();
+        }
+        return String.valueOf(content);
+    }
+
+    @NonNull
+    private JSONArray parseToolCalls(@NonNull String response, @NonNull String generationId) {
+        JSONArray calls = new JSONArray();
+        int offset = 0;
+        while (offset < response.length()) {
+            int start = response.indexOf("<tool_call>", offset);
+            if (start < 0) break;
+            int jsonStart = start + "<tool_call>".length();
+            int end = response.indexOf("</tool_call>", jsonStart);
+            if (end < 0) break;
+            String json = response.substring(jsonStart, end).trim();
+            try {
+                JSONObject parsed = new JSONObject(json);
+                String name = parsed.optString("name", "");
+                Object argumentsValue = parsed.opt("arguments");
+                JSONObject arguments;
+                if (argumentsValue instanceof JSONObject) {
+                    arguments = (JSONObject) argumentsValue;
+                } else {
+                    String argumentsText = argumentsValue == null ? "{}" : String.valueOf(argumentsValue);
+                    arguments = argumentsText.trim().isEmpty() ? new JSONObject() : new JSONObject(argumentsText);
+                }
+                if (!name.isEmpty()) {
+                    JSONObject function = new JSONObject();
+                    function.put("name", name);
+                    function.put("arguments", arguments.toString());
+                    JSONObject call = new JSONObject();
+                    call.put("id", generationId + "-call-" + (calls.length() + 1));
+                    call.put("type", "function");
+                    call.put("function", function);
+                    calls.put(call);
+                }
+            } catch (JSONException ignored) {
+            }
+            offset = end + "</tool_call>".length();
+        }
+        return calls;
+    }
+
+    @NonNull
+    private String stripToolCallBlocks(@NonNull String response) {
+        return response.replaceAll("(?s)<tool_call>.*?</tool_call>", "");
+    }
+
+    @Nullable
+    private JSONObject validateRequiredToolChoice(
+        @Nullable Object toolChoice,
+        @NonNull JSONArray tools,
+        @NonNull JSONArray toolCalls
+    ) throws JSONException {
+        if (tools.length() == 0 || toolChoice == null || JSONObject.NULL.equals(toolChoice)
+            || "auto".equals(String.valueOf(toolChoice)) || "none".equals(String.valueOf(toolChoice))) {
+            return null;
+        }
+        if (toolCalls.length() == 0) {
+            return error(422, "mnn_required_tool_call_missing",
+                "MNN generated no valid tool call for a request that required tool use.");
+        }
+        if (toolChoice instanceof JSONObject) {
+            JSONObject function = ((JSONObject) toolChoice).optJSONObject("function");
+            String requiredName = function == null ? "" : function.optString("name", "");
+            if (!requiredName.isEmpty()) {
+                for (int i = 0; i < toolCalls.length(); i++) {
+                    JSONObject call = toolCalls.optJSONObject(i);
+                    JSONObject callFunction = call == null ? null : call.optJSONObject("function");
+                    if (callFunction != null && requiredName.equals(callFunction.optString("name", ""))) return null;
+                }
+                return error(422, "mnn_required_tool_call_missing",
+                    "MNN generated a tool call, but not the required tool: " + requiredName + ".");
+            }
+        }
+        return null;
+    }
+
+    @NonNull
     private String mnnRole(@NonNull Message message) {
         String role = String.valueOf(message.getRole()).toLowerCase(Locale.ROOT);
         if (role.contains("model") || role.contains("assistant")) return "assistant";
@@ -404,33 +558,31 @@ public final class MnnTaiRuntime implements TaiRuntime {
     @NonNull
     private String mergedConfigJson(@NonNull File config, @NonNull TaiModelSpec modelSpec, @NonNull TaiRuntimeOptions options) throws JSONException {
         JSONObject json = readJsonFile(config);
-        if (!json.has("backend_type")) json.put("backend_type", backendName(options));
-        json.put("backend_type", backendName(options));
-        json.put("thread_num", threadCount(options));
-        json.put("precision", mnnMode(options.precision, "low"));
-        json.put("memory", mnnMode(options.memoryMode, "low"));
+        if (!json.has("backend_type")) json.put("backend_type", "cpu");
+        if (hasExplicitAccelerator(options)) json.put("backend_type", backendName(options));
+        if (options.threadCount != null) json.put("thread_num", Math.max(1, options.threadCount));
+        if (options.precision != null) json.put("precision", mnnMode(options.precision, json.optString("precision", "low")));
+        if (options.memoryMode != null) json.put("memory", mnnMode(options.memoryMode, json.optString("memory", "low")));
         if (options.contextWindow != null) json.put("max_context_len", options.contextWindow);
         if (options.maxTokens != null) json.put("max_new_tokens", options.maxTokens);
         if (options.temperature != null) json.put("temperature", options.temperature);
         if (options.topP != null) json.put("top_p", options.topP);
         if (options.topK != null) json.put("top_k", options.topK);
-        json.put("system_prompt", new TaiSettings(appContext).getSystemPrompt(modelSpec.id));
         return json.toString();
     }
 
     @NonNull
-    private JSONObject overridesJson(@NonNull String systemPrompt, @NonNull TaiRuntimeOptions options) throws JSONException {
+    private JSONObject overridesJson(@NonNull TaiRuntimeOptions options) throws JSONException {
         JSONObject json = new JSONObject();
-        json.put("backend_type", backendName(options));
-        json.put("thread_num", threadCount(options));
-        json.put("precision", mnnMode(options.precision, "low"));
-        json.put("memory", mnnMode(options.memoryMode, "low"));
+        if (hasExplicitAccelerator(options)) json.put("backend_type", backendName(options));
+        if (options.threadCount != null) json.put("thread_num", Math.max(1, options.threadCount));
+        if (options.precision != null) json.put("precision", mnnMode(options.precision, "low"));
+        if (options.memoryMode != null) json.put("memory", mnnMode(options.memoryMode, "low"));
         if (options.contextWindow != null) json.put("max_context_len", options.contextWindow);
         if (options.maxTokens != null) json.put("max_new_tokens", options.maxTokens);
         if (options.temperature != null) json.put("temperature", options.temperature);
         if (options.topP != null) json.put("top_p", options.topP);
         if (options.topK != null) json.put("top_k", options.topK);
-        if (!systemPrompt.trim().isEmpty()) json.put("system_prompt", systemPrompt);
         return json;
     }
 
@@ -447,9 +599,15 @@ public final class MnnTaiRuntime implements TaiRuntime {
     @NonNull
     private String backendName(@Nullable TaiRuntimeOptions options) {
         String accelerator = options == null ? null : options.accelerator;
-        if (accelerator == null || accelerator.trim().isEmpty() || "auto".equalsIgnoreCase(accelerator)) return "cpu";
+        if (accelerator == null || accelerator.trim().isEmpty() || "auto".equalsIgnoreCase(accelerator)) return "auto";
         if ("opencl".equalsIgnoreCase(accelerator) || "gpu".equalsIgnoreCase(accelerator)) return "opencl";
         return "cpu";
+    }
+
+    private boolean hasExplicitAccelerator(@NonNull TaiRuntimeOptions options) {
+        return options.accelerator != null
+            && !options.accelerator.trim().isEmpty()
+            && !"auto".equalsIgnoreCase(options.accelerator);
     }
 
     private int threadCount(@NonNull TaiRuntimeOptions options) {
@@ -496,6 +654,51 @@ public final class MnnTaiRuntime implements TaiRuntime {
         } catch (Exception e) {
             throw new JSONException("Could not read MNN config: " + message(e));
         }
+    }
+
+    @Nullable
+    private JSONObject validateMnnPackage(@NonNull File config) throws JSONException {
+        File modelDir = config.getParentFile();
+        if (modelDir == null) {
+            return error(404, "model_file_not_readable", "MNN model config has no parent directory.");
+        }
+        JSONObject json;
+        try {
+            json = readJsonFile(config);
+        } catch (JSONException e) {
+            JSONObject error = error(404, "model_file_not_readable", e.getMessage());
+            error.put("path", config.getAbsolutePath());
+            return error;
+        }
+        JSONObject missing = missingMnnSidecar(modelDir, json, "llm_model", "llm.mnn");
+        if (missing != null) return missing;
+        missing = missingMnnSidecar(modelDir, json, "llm_weight", "llm.mnn.weight");
+        if (missing != null) return missing;
+        String tokenizer = json.optString("tokenizer_file", "");
+        if (tokenizer.trim().isEmpty()) {
+            JSONObject error = error(404, "model_file_not_readable", "MNN config is missing tokenizer_file.");
+            error.put("missingFilename", "tokenizer_file");
+            error.put("path", config.getAbsolutePath());
+            return error;
+        }
+        return missingMnnSidecar(modelDir, json, "tokenizer_file", tokenizer);
+    }
+
+    @Nullable
+    private JSONObject missingMnnSidecar(
+        @NonNull File modelDir,
+        @NonNull JSONObject config,
+        @NonNull String key,
+        @NonNull String fallback
+    ) throws JSONException {
+        String fileName = config.optString(key, fallback);
+        if (fileName == null || fileName.trim().isEmpty()) fileName = fallback;
+        File file = new File(modelDir, fileName);
+        if (file.isFile() && file.canRead()) return null;
+        JSONObject error = error(404, "model_file_not_readable", "MNN package sidecar is missing or unreadable: " + fileName);
+        error.put("missingFilename", fileName);
+        error.put("path", file.getAbsolutePath());
+        return error;
     }
 
     @NonNull

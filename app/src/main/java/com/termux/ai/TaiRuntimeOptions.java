@@ -121,6 +121,10 @@ public final class TaiRuntimeOptions {
         @Nullable Double overrideTopP,
         @Nullable Double overrideTemperature,
         @Nullable String overrideAccelerator,
+        @Nullable Integer overrideContextWindow,
+        @Nullable Integer overrideThreadCount,
+        @Nullable String overridePrecision,
+        @Nullable String overrideMemoryMode,
         @Nullable Boolean overrideThinkingEnabled,
         @Nullable Boolean overrideSpeculativeDecodingEnabled
     ) {
@@ -130,14 +134,28 @@ public final class TaiRuntimeOptions {
             overrideTopP != null ? overrideTopP : topP,
             overrideTemperature != null ? overrideTemperature : temperature,
             overrideAccelerator != null ? overrideAccelerator : accelerator,
-            contextWindow,
-            threadCount,
-            precision,
-            memoryMode,
+            overrideContextWindow != null ? overrideContextWindow : contextWindow,
+            overrideThreadCount != null ? overrideThreadCount : threadCount,
+            overridePrecision != null ? overridePrecision : precision,
+            overrideMemoryMode != null ? overrideMemoryMode : memoryMode,
             overrideThinkingEnabled != null ? overrideThinkingEnabled : thinkingEnabled,
             overrideSpeculativeDecodingEnabled != null ? overrideSpeculativeDecodingEnabled : speculativeDecodingEnabled,
             idleUnloadMinutes
         );
+    }
+
+    @NonNull
+    public TaiRuntimeOptions withGenerationOverrides(
+        @Nullable Integer overrideMaxTokens,
+        @Nullable Integer overrideTopK,
+        @Nullable Double overrideTopP,
+        @Nullable Double overrideTemperature,
+        @Nullable String overrideAccelerator,
+        @Nullable Boolean overrideThinkingEnabled,
+        @Nullable Boolean overrideSpeculativeDecodingEnabled
+    ) {
+        return withGenerationOverrides(overrideMaxTokens, overrideTopK, overrideTopP, overrideTemperature,
+            overrideAccelerator, null, null, null, null, overrideThinkingEnabled, overrideSpeculativeDecodingEnabled);
     }
 
     private static void putNullable(JSONObject json, String key, Object value) throws JSONException {

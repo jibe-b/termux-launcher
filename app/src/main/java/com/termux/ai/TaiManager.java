@@ -2,6 +2,7 @@ package com.termux.ai;
 
 import android.content.Context;
 import android.net.Uri;
+import android.util.Base64;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -20,6 +21,10 @@ import org.json.JSONObject;
 
 import java.io.IOException;
 import java.io.File;
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.ArrayList;
@@ -30,6 +35,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 public final class TaiManager {
     private static TaiManager instance;
+    private static final int MAX_MEDIA_BYTES = 25 * 1024 * 1024;
 
     private final Context appContext;
     private final TaiSettings settings;
@@ -270,7 +276,7 @@ public final class TaiManager {
         if (!requestedBackend.isEmpty() && !requestedBackend.equalsIgnoreCase(spec.backend)) {
             return error(409, "backend_mismatch", "Model " + modelId + " requires backend " + spec.backend + ".");
         }
-        TaiRuntimeOptions options = runtimeOptionsFromRequest(request);
+        TaiRuntimeOptions options = runtimeOptionsFromRequest(request, spec);
         JSONObject result = runtime.load(spec, options);
         appendCompanionMobileActions(result, spec.id);
         return result;
@@ -291,7 +297,7 @@ public final class TaiManager {
         if (spec == null) return error(404, "model_not_found", "Unknown TAI model: " + modelId);
         int minutes = request.optInt("minutes", request.optInt("keepWarmMinutes", 0));
         if (minutes <= 0) minutes = settings.getIdleUnloadMinutes() > 0 ? settings.getIdleUnloadMinutes() : 30;
-        return runtime.keepWarm(spec, runtimeOptionsFromRequest(request), minutes);
+        return runtime.keepWarm(spec, runtimeOptionsFromRequest(request, spec), minutes);
     }
 
     @NonNull
@@ -306,13 +312,17 @@ public final class TaiManager {
         if (messages == null || messages.length() == 0) return error(400, "bad_request", "Missing messages");
 
         String modelId = requestedModelId(request, settings.getDefaultAssistantModel());
+        TaiModelSpec spec = resolveModel(modelId);
+        if (spec == null) return openAiError(error(404, "model_not_found", "Unknown TAI model: " + modelId));
+        JSONObject audioOutputError = unsupportedAudioOutputRequest(request);
+        if (audioOutputError != null) return openAiError(audioOutputError);
         OpenAiChatRequest chatRequest;
         try {
-            chatRequest = openAiChatRequest(request, messages, modelId);
+            chatRequest = openAiChatRequest(request, messages, spec);
         } catch (JSONException e) {
-            return openAiError(error(400, "invalid_chat_request", e.getMessage()));
+            return openAiError(chatRequestError(e));
         }
-        TaiRuntimeOptions options = runtimeOptionsFromRequest(request);
+        TaiRuntimeOptions options = runtimeOptionsFromRequest(request, spec);
         JSONObject loadError = ensureModelLoadedForGeneration(modelId, options);
         if (loadError != null) return openAiError(loadError);
 
@@ -351,7 +361,9 @@ public final class TaiManager {
         if (prompt.trim().isEmpty()) return openAiError(error(400, "bad_request", "Missing prompt"));
 
         String modelId = requestedModelId(request, settings.getDefaultAssistantModel());
-        TaiRuntimeOptions options = runtimeOptionsFromRequest(request);
+        TaiModelSpec spec = resolveModel(modelId);
+        if (spec == null) return openAiError(error(404, "model_not_found", "Unknown TAI model: " + modelId));
+        TaiRuntimeOptions options = runtimeOptionsFromRequest(request, spec);
         JSONObject loadError = ensureModelLoadedForGeneration(modelId, options);
         if (loadError != null) return openAiError(loadError);
 
@@ -376,6 +388,14 @@ public final class TaiManager {
         return response;
     }
 
+    @NonNull
+    public JSONObject openAiAudioSpeech(@NonNull String body) throws JSONException {
+        parseBody(body);
+        return openAiError(error(501, "unsupported_audio_output",
+            "Audio output is not available from the local LiteRT-LM or MNN runners. "
+                + "Use text responses or a separate text-to-speech backend."));
+    }
+
     public boolean isStreamRequest(@NonNull String body) {
         try {
             return parseBody(body).optBoolean("stream", false);
@@ -393,14 +413,24 @@ public final class TaiManager {
         }
 
         String modelId = requestedModelId(request, settings.getDefaultAssistantModel());
-        OpenAiChatRequest chatRequest;
-        try {
-            chatRequest = openAiChatRequest(request, messages, modelId);
-        } catch (JSONException e) {
-            emitOpenAiError(sink, error(400, "invalid_chat_request", e.getMessage()));
+        TaiModelSpec spec = resolveModel(modelId);
+        if (spec == null) {
+            emitOpenAiError(sink, error(404, "model_not_found", "Unknown TAI model: " + modelId));
             return;
         }
-        TaiRuntimeOptions options = runtimeOptionsFromRequest(request);
+        JSONObject audioOutputError = unsupportedAudioOutputRequest(request);
+        if (audioOutputError != null) {
+            emitOpenAiError(sink, audioOutputError);
+            return;
+        }
+        OpenAiChatRequest chatRequest;
+        try {
+            chatRequest = openAiChatRequest(request, messages, spec);
+        } catch (JSONException e) {
+            emitOpenAiError(sink, chatRequestError(e));
+            return;
+        }
+        TaiRuntimeOptions options = runtimeOptionsFromRequest(request, spec);
         JSONObject loadError = ensureModelLoadedForGeneration(modelId, options);
         if (loadError != null) {
             emitOpenAiError(sink, loadError);
@@ -479,7 +509,12 @@ public final class TaiManager {
         }
 
         String modelId = requestedModelId(request, settings.getDefaultAssistantModel());
-        TaiRuntimeOptions options = runtimeOptionsFromRequest(request);
+        TaiModelSpec spec = resolveModel(modelId);
+        if (spec == null) {
+            emitOpenAiError(sink, error(404, "model_not_found", "Unknown TAI model: " + modelId));
+            return;
+        }
+        TaiRuntimeOptions options = runtimeOptionsFromRequest(request, spec);
         JSONObject loadError = ensureModelLoadedForGeneration(modelId, options);
         if (loadError != null) {
             emitOpenAiError(sink, loadError);
@@ -567,7 +602,7 @@ public final class TaiManager {
                 capabilities = new JSONArray();
                 capabilities.put(TaiModelSpec.CAPABILITY_TEXT_CHAT);
             }
-            item.put("_capabilities", capabilities);
+            item.put("_capabilities", openAiEndpointCapabilities(capabilities, backend));
             data.put(item);
         }
 
@@ -631,18 +666,22 @@ public final class TaiManager {
         if (runtime.isModelLoaded(TaiModelRegistry.MODEL_MOBILE_ACTIONS_270M)) return;
         TaiModelSpec mobileActions = resolveModel(TaiModelRegistry.MODEL_MOBILE_ACTIONS_270M);
         if (mobileActions == null || mobileActions.localPath == null || mobileActions.localPath.trim().isEmpty()) return;
-        TaiRuntimeOptions companionOptions = settings.getRuntimeOptions().withAccelerator("cpu");
+        TaiRuntimeOptions companionOptions = settings.getRuntimeOptions(mobileActions).withAccelerator("cpu");
         JSONObject companion = runtime.load(mobileActions, companionOptions);
         result.put("companionMobileActions", companion);
     }
 
     @NonNull
-    private TaiRuntimeOptions runtimeOptionsFromRequest(@NonNull JSONObject request) {
-        TaiRuntimeOptions options = settings.getRuntimeOptions();
+    private TaiRuntimeOptions runtimeOptionsFromRequest(@NonNull JSONObject request, @NonNull TaiModelSpec spec) {
+        TaiRuntimeOptions options = settings.getRuntimeOptions(spec);
         Integer maxTokens = integerOverride(request, "max_tokens", integerOverride(request, "max_completion_tokens", null));
         Integer topK = integerOverride(request, "top_k", null);
         Double topP = doubleOverride(request, "top_p", null);
         Double temperature = doubleOverride(request, "temperature", null);
+        Integer contextWindow = integerOverride(request, "context_window", null);
+        Integer threadCount = integerOverride(request, "thread_count", null);
+        String precision = stringOverride(request, "precision");
+        String memoryMode = stringOverride(request, "memory_mode");
         String accelerator = null;
         if (request.has("accelerator") && !request.isNull("accelerator")) {
             String value = request.optString("accelerator", "").trim();
@@ -650,7 +689,8 @@ public final class TaiManager {
         }
         Boolean thinking = booleanOverride(request, "thinking");
         Boolean speculative = booleanOverride(request, "speculative_decoding");
-        return options.withGenerationOverrides(maxTokens, topK, topP, temperature, accelerator, thinking, speculative);
+        return options.withGenerationOverrides(maxTokens, topK, topP, temperature, accelerator,
+            contextWindow, threadCount, precision, memoryMode, thinking, speculative);
     }
 
     @Nullable
@@ -677,6 +717,13 @@ public final class TaiManager {
     private Boolean booleanOverride(@NonNull JSONObject request, @NonNull String key) {
         if (!request.has(key) || request.isNull(key)) return null;
         return request.optBoolean(key);
+    }
+
+    @Nullable
+    private String stringOverride(@NonNull JSONObject request, @NonNull String key) {
+        if (!request.has(key) || request.isNull(key)) return null;
+        String value = request.optString(key, "").trim();
+        return value.isEmpty() ? null : value;
     }
 
     @NonNull
@@ -714,6 +761,42 @@ public final class TaiManager {
         response.put("tai", source);
         response.put("_statusCode", source.optInt("_statusCode", 500));
         return response;
+    }
+
+    @NonNull
+    private JSONObject chatRequestError(@NonNull JSONException e) throws JSONException {
+        String message = e.getMessage() == null ? "Invalid chat request" : e.getMessage();
+        if (message.startsWith("unsupported_content_part:")) {
+            String type = message.substring("unsupported_content_part:".length());
+            return error(400, "unsupported_content_part", "Unsupported OpenAI content part: " + type);
+        }
+        if (message.startsWith("capability_not_supported:")) {
+            String detail = message.substring("capability_not_supported:".length());
+            return error(400, "capability_not_supported", detail);
+        }
+        if (message.startsWith("media_fetch_failed:")) {
+            String detail = message.substring("media_fetch_failed:".length());
+            return error(400, "media_fetch_failed", detail);
+        }
+        return error(400, "invalid_chat_request", message);
+    }
+
+    @Nullable
+    private JSONObject unsupportedAudioOutputRequest(@NonNull JSONObject request) throws JSONException {
+        JSONArray modalities = request.optJSONArray("modalities");
+        if (modalities != null) {
+            for (int i = 0; i < modalities.length(); i++) {
+                if ("audio".equalsIgnoreCase(modalities.optString(i, ""))) {
+                    return error(501, "unsupported_audio_output",
+                        "Audio output is not available from the local LiteRT/MNN chat runtimes.");
+                }
+            }
+        }
+        if (request.has("audio") && !request.isNull("audio")) {
+            return error(501, "unsupported_audio_output",
+                "Audio output is not available from the local LiteRT/MNN chat runtimes.");
+        }
+        return null;
     }
 
     private void emitOpenAiError(@NonNull OpenAiStreamSink sink, @NonNull JSONObject source) throws JSONException, IOException {
@@ -807,7 +890,8 @@ public final class TaiManager {
         limitations.put("LiteRT-LM inference is available on supported device ABI builds.");
         limitations.put("Auto follows Edge Gallery model accelerator allowlists, minimum-memory metadata, and Pixel 10 GPU exclusion; LiteRT-LM initialization remains the final backend check.");
         limitations.put("Streaming text responses, cancellation, and keep-warm lifecycle controls are available through the localhost API.");
-        limitations.put("Benchmark counters and multimodal input are TODO for a later phase.");
+        limitations.put("LiteRT-LM image and audio input are accepted for models that declare those capabilities.");
+        limitations.put("Audio output is not available from the local LiteRT-LM or MNN runners.");
         limitations.put("OpenAI function tools are returned for client-side execution; TAI does not automatically execute shell commands or device actions.");
         return limitations;
     }
@@ -816,7 +900,7 @@ public final class TaiManager {
     private OpenAiChatRequest openAiChatRequest(
         @NonNull JSONObject request,
         @NonNull JSONArray messages,
-        @NonNull String modelId
+        @NonNull TaiModelSpec spec
     ) throws JSONException {
         StringBuilder clientSystemPrompt = new StringBuilder();
         List<Message> conversationMessages = new ArrayList<>();
@@ -825,8 +909,8 @@ public final class TaiManager {
             JSONObject message = messages.optJSONObject(i);
             if (message == null) continue;
             String role = message.optString("role", "user");
-            String content = messageContentToText(message.opt("content"));
             if ("system".equals(role) || "developer".equals(role)) {
+                String content = messageContentToText(message.opt("content"));
                 if (!content.isEmpty()) {
                     if (clientSystemPrompt.length() > 0) clientSystemPrompt.append('\n');
                     clientSystemPrompt.append(content);
@@ -834,6 +918,7 @@ public final class TaiManager {
                 continue;
             }
             if ("assistant".equals(role)) {
+                String content = messageContentToText(message.opt("content"));
                 List<ToolCall> calls = toolCallsFromAssistant(message, toolNamesByCallId);
                 conversationMessages.add(Message.Companion.model(
                     Contents.Companion.of(content), calls, Collections.emptyMap()));
@@ -845,7 +930,7 @@ public final class TaiManager {
                 conversationMessages.add(Message.Companion.tool(
                     Contents.Companion.of(new Content.ToolResponse(toolName, response))));
             } else {
-                conversationMessages.add(Message.Companion.user(content));
+                conversationMessages.add(Message.Companion.user(messageContentToContents(message.opt("content"), spec)));
             }
         }
         if (conversationMessages.isEmpty()) {
@@ -853,7 +938,7 @@ public final class TaiManager {
         }
 
         String systemPrompt = clientSystemPrompt.length() > 0
-            ? clientSystemPrompt.toString() : settings.getSystemPrompt(modelId);
+            ? clientSystemPrompt.toString() : settings.getSystemPrompt(spec.id);
         JSONArray toolsJson = request.optJSONArray("tools");
         List<ToolProvider> tools = toolProviders(toolsJson, request.opt("tool_choice"));
         systemPrompt = applyToolChoiceInstruction(systemPrompt, request.opt("tool_choice"), toolsJson);
@@ -864,7 +949,8 @@ public final class TaiManager {
             throw new JSONException("The final chat message must have role user or tool");
         }
         return new OpenAiChatRequest(new TaiChatRequest(
-            systemPrompt, conversationMessages, finalMessage, tools, false));
+            systemPrompt, conversationMessages, finalMessage, tools, false,
+            messages, toolsJson, request.opt("tool_choice")));
     }
 
     @NonNull
@@ -1006,7 +1092,7 @@ public final class TaiManager {
     }
 
     @NonNull
-    private String messageContentToText(@Nullable Object content) {
+    private String messageContentToText(@Nullable Object content) throws JSONException {
         if (content == null || JSONObject.NULL.equals(content)) return "";
         if (content instanceof JSONArray) {
             JSONArray array = (JSONArray) content;
@@ -1015,8 +1101,14 @@ public final class TaiManager {
                 Object item = array.opt(i);
                 if (item instanceof JSONObject) {
                     JSONObject object = (JSONObject) item;
-                    if ("text".equals(object.optString("type", ""))) {
+                    String type = object.optString("type", "");
+                    if ("text".equals(type)) {
                         builder.append(object.optString("text", ""));
+                    } else if ("image_url".equals(type) || "input_image".equals(type)
+                        || "audio".equals(type) || "input_audio".equals(type)) {
+                        throw new JSONException("unsupported_content_part:" + type);
+                    } else if (!type.isEmpty()) {
+                        throw new JSONException("unsupported_content_part:" + type);
                     }
                 } else if (item != null && !JSONObject.NULL.equals(item)) {
                     builder.append(String.valueOf(item));
@@ -1025,6 +1117,165 @@ public final class TaiManager {
             return builder.toString();
         }
         return String.valueOf(content);
+    }
+
+    @NonNull
+    static Contents messageContentToContents(@Nullable Object content, @NonNull TaiModelSpec spec) throws JSONException {
+        if (content == null || JSONObject.NULL.equals(content)) return Contents.Companion.of("");
+        if (!(content instanceof JSONArray)) return Contents.Companion.of(String.valueOf(content));
+        JSONArray array = (JSONArray) content;
+        ArrayList<Content> contents = new ArrayList<>();
+        for (int i = 0; i < array.length(); i++) {
+            Object item = array.opt(i);
+            if (item instanceof JSONObject) {
+                JSONObject object = (JSONObject) item;
+                String type = object.optString("type", "");
+                if ("text".equals(type)) {
+                    contents.add(new Content.Text(object.optString("text", "")));
+                } else if ("image_url".equals(type) || "input_image".equals(type)) {
+                    if (!TaiModelSpec.BACKEND_LITERT_LM.equals(spec.backend)
+                        || !spec.capabilities.contains("image_input")) {
+                        throw new JSONException("capability_not_supported:Model " + spec.id + " does not support image input through this endpoint.");
+                    }
+                    contents.add(imageContent(object));
+                } else if ("input_audio".equals(type) || "audio".equals(type)) {
+                    if (!TaiModelSpec.BACKEND_LITERT_LM.equals(spec.backend)
+                        || !spec.capabilities.contains("audio_input")) {
+                        throw new JSONException("capability_not_supported:Model " + spec.id + " does not support audio input through this endpoint.");
+                    }
+                    contents.add(audioContent(object));
+                } else if (!type.isEmpty()) {
+                    throw new JSONException("unsupported_content_part:" + type);
+                }
+            } else if (item != null && !JSONObject.NULL.equals(item)) {
+                contents.add(new Content.Text(String.valueOf(item)));
+            }
+        }
+        if (contents.isEmpty()) contents.add(new Content.Text(""));
+        return Contents.Companion.of(contents);
+    }
+
+    @NonNull
+    private static Content imageContent(@NonNull JSONObject part) throws JSONException {
+        Object imageUrlValue = part.opt("image_url");
+        String url = "";
+        if (imageUrlValue instanceof JSONObject) {
+            url = ((JSONObject) imageUrlValue).optString("url", "");
+        } else if (imageUrlValue != null && !JSONObject.NULL.equals(imageUrlValue)) {
+            url = String.valueOf(imageUrlValue);
+        }
+        if (url.trim().isEmpty()) url = part.optString("image_url", "");
+        if (url.trim().isEmpty()) throw new JSONException("unsupported_content_part:image_url");
+        return contentFromUrl(url, true);
+    }
+
+    @NonNull
+    private static Content audioContent(@NonNull JSONObject part) throws JSONException {
+        JSONObject inputAudio = part.optJSONObject("input_audio");
+        if (inputAudio == null) inputAudio = part.optJSONObject("audio");
+        if (inputAudio != null) {
+            String data = inputAudio.optString("data", "");
+            if (!data.trim().isEmpty()) {
+                return new Content.AudioBytes(decodeBase64(data, "input_audio"));
+            }
+            String url = inputAudio.optString("url", "");
+            if (!url.trim().isEmpty()) return contentFromUrl(url, false);
+        }
+        String url = part.optString("audio_url", "");
+        if (!url.trim().isEmpty()) return contentFromUrl(url, false);
+        throw new JSONException("unsupported_content_part:input_audio");
+    }
+
+    @NonNull
+    private static Content contentFromUrl(@NonNull String rawUrl, boolean image) throws JSONException {
+        String url = rawUrl.trim();
+        if (url.startsWith("data:")) {
+            return image
+                ? new Content.ImageBytes(decodeDataUrl(url, "image_url"))
+                : new Content.AudioBytes(decodeDataUrl(url, "input_audio"));
+        }
+        if (url.startsWith("file://")) {
+            String path = Uri.parse(url).getPath();
+            if (path == null || path.trim().isEmpty()) throw new JSONException("media_fetch_failed:Empty file URL");
+            return image ? new Content.ImageFile(path) : new Content.AudioFile(path);
+        }
+        if (url.startsWith("/")) {
+            return image ? new Content.ImageFile(url) : new Content.AudioFile(url);
+        }
+        if (url.startsWith("http://") || url.startsWith("https://")) {
+            byte[] bytes = fetchMedia(url);
+            return image ? new Content.ImageBytes(bytes) : new Content.AudioBytes(bytes);
+        }
+        throw new JSONException("media_fetch_failed:Unsupported media URL scheme");
+    }
+
+    @NonNull
+    private static byte[] decodeDataUrl(@NonNull String dataUrl, @NonNull String partName) throws JSONException {
+        int comma = dataUrl.indexOf(',');
+        if (comma < 0) throw new JSONException("media_fetch_failed:Malformed data URL for " + partName);
+        String metadata = dataUrl.substring(0, comma).toLowerCase(Locale.ROOT);
+        if (!metadata.contains(";base64")) {
+            throw new JSONException("media_fetch_failed:Only base64 data URLs are supported for " + partName);
+        }
+        return decodeBase64(dataUrl.substring(comma + 1), partName);
+    }
+
+    @NonNull
+    private static byte[] decodeBase64(@NonNull String value, @NonNull String partName) throws JSONException {
+        try {
+            byte[] bytes = Base64.decode(value, Base64.DEFAULT);
+            if (bytes.length > MAX_MEDIA_BYTES) throw new JSONException("media_fetch_failed:" + partName + " exceeds 25 MB");
+            return bytes;
+        } catch (IllegalArgumentException e) {
+            throw new JSONException("media_fetch_failed:Invalid base64 for " + partName);
+        }
+    }
+
+    @NonNull
+    private static byte[] fetchMedia(@NonNull String url) throws JSONException {
+        try {
+            HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
+            connection.setConnectTimeout(10_000);
+            connection.setReadTimeout(20_000);
+            connection.setInstanceFollowRedirects(true);
+            int status = connection.getResponseCode();
+            if (status < 200 || status >= 300) {
+                throw new JSONException("media_fetch_failed:HTTP " + status + " while fetching media");
+            }
+            int length = connection.getContentLength();
+            if (length > MAX_MEDIA_BYTES) throw new JSONException("media_fetch_failed:Media exceeds 25 MB");
+            try (InputStream input = connection.getInputStream();
+                 ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+                byte[] buffer = new byte[8192];
+                int read;
+                int total = 0;
+                while ((read = input.read(buffer)) != -1) {
+                    total += read;
+                    if (total > MAX_MEDIA_BYTES) throw new JSONException("media_fetch_failed:Media exceeds 25 MB");
+                    output.write(buffer, 0, read);
+                }
+                return output.toByteArray();
+            }
+        } catch (JSONException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new JSONException("media_fetch_failed:" + (e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage()));
+        }
+    }
+
+    @NonNull
+    private static JSONArray openAiEndpointCapabilities(@NonNull JSONArray capabilities, @NonNull String backend) {
+        JSONArray filtered = new JSONArray();
+        for (int i = 0; i < capabilities.length(); i++) {
+            String capability = capabilities.optString(i, "");
+            if (TaiModelSpec.BACKEND_MNN_LLM.equals(backend)
+                && ("tool_use".equals(capability) || "image_input".equals(capability) || "audio_input".equals(capability))) {
+                continue;
+            }
+            filtered.put(capability);
+        }
+        if (filtered.length() == 0) filtered.put(TaiModelSpec.CAPABILITY_TEXT_CHAT);
+        return filtered;
     }
 
     @NonNull

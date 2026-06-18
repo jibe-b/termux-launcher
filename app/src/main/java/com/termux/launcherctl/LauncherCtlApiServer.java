@@ -86,7 +86,7 @@ public class LauncherCtlApiServer {
     private static final int MAX_REQUEST_LINE_BYTES = 4096;
     private static final int MAX_HEADER_LINE_BYTES = 4096;
     private static final int MAX_HEADER_LINES = 64;
-    private static final int MAX_BODY_BYTES = 256 * 1024;
+    private static final int MAX_BODY_BYTES = 32 * 1024 * 1024;
     private static final int CLIENT_SOCKET_TIMEOUT_MS = 10_000;
 
     private static LauncherCtlApiServer instance;
@@ -349,6 +349,8 @@ public class LauncherCtlApiServer {
                 return jsonResponse(TaiManager.getInstance(context).openAiCompletions(request.body));
             } else if ("POST".equals(request.method) && "/v1/embeddings".equals(request.path)) {
                 return jsonResponse(TaiManager.getInstance(context).embeddings(request.body));
+            } else if ("POST".equals(request.method) && "/v1/audio/speech".equals(request.path)) {
+                return jsonResponse(TaiManager.getInstance(context).openAiAudioSpeech(request.body));
             }
 
             JSONObject notFound = jsonError("not_found", "Unknown endpoint");
@@ -901,6 +903,7 @@ public class LauncherCtlApiServer {
         rateLimiters.put("POST:/v1/chat/completions", new SimpleRateLimiter(60, 60_000));
         rateLimiters.put("POST:/v1/completions", new SimpleRateLimiter(60, 60_000));
         rateLimiters.put("POST:/v1/embeddings", new SimpleRateLimiter(60, 60_000));
+        rateLimiters.put("POST:/v1/audio/speech", new SimpleRateLimiter(60, 60_000));
     }
 
     private void writeClientConfig() throws IOException {
@@ -979,8 +982,10 @@ private JSONObject buildEndpointSettings(Context context, boolean includeToken) 
         supportedEndpoints.put("/v1/chat/completions");
         supportedEndpoints.put("/v1/completions");
         supportedEndpoints.put("/v1/embeddings");
+        supportedEndpoints.put("/v1/audio/speech");
         data.put("supportedEndpoints", supportedEndpoints);
         data.put("embeddingsNote", "Embeddings support is model-capability dependent.");
+        data.put("audioOutputNote", "Audio output returns an explicit unsupported_audio_output error until a local runner exposes generated audio.");
         if (includeToken) {
             data.put("token", settings.getOrCreateApiToken());
         }
@@ -1253,6 +1258,7 @@ private JSONObject buildEndpointSettings(Context context, boolean includeToken) 
             "  /v1/chat/completions\n" +
             "  /v1/completions\n" +
             "  /v1/embeddings\n" +
+            "  /v1/audio/speech\n" +
             "\n" +
             "Point OpenAI-compatible terminal tools at this host, e.g.:\n" +
             "  export OPENAI_BASE_URL=http://127.0.0.1:<port>/v1\n" +
@@ -1262,6 +1268,7 @@ private JSONObject buildEndpointSettings(Context context, boolean includeToken) 
             "Security notes:\n" +
             "  LAN mode (opt-in via settings) exposes the API to your local network. Keep your token secure.\n" +
             "  /v1/embeddings is model-capability dependent. Not all models support embeddings.\n" +
+            "  /v1/audio/speech returns unsupported_audio_output until a local runner exposes generated audio.\n" +
             "  Check /v1/models for capability metadata (for example, _backend and _capabilities per model).\n" +
             "\n" +
             "Use tai --json <command> for raw API JSON.\n" +

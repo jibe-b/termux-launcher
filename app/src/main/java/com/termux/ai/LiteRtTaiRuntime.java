@@ -436,14 +436,14 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
                         Backend backend = new Backend.GPU();
                         initializedBackendName = backend.getName();
                         initializedFallbackReason = AUTO_GPU_REASON;
-                        initializedEngine = createAndInitializeEngine(modelFile.getAbsolutePath(), options, profile, backend);
+                        initializedEngine = createAndInitializeEngine(modelSpec, modelFile.getAbsolutePath(), options, profile, backend);
                     } catch (Exception gpuException) {
                         if (!autoAccelerators.contains("cpu")) throw gpuException;
                         throwIfLoadCancellationRequested();
                         Backend backend = new Backend.CPU(null);
                         initializedBackendName = backend.getName();
                         initializedFallbackReason = "Auto GPU initialization failed; selected the model's CPU fallback. GPU error: " + gpuException.getMessage();
-                        initializedEngine = createAndInitializeEngine(modelFile.getAbsolutePath(), options, profile, backend);
+                        initializedEngine = createAndInitializeEngine(modelSpec, modelFile.getAbsolutePath(), options, profile, backend);
                     }
                 } else {
                     throwIfLoadCancellationRequested();
@@ -452,13 +452,13 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
                     initializedFallbackReason = deviceCapabilities.pixel10 && profile.supports("gpu")
                         ? "Auto selected CPU because Google AI Edge Gallery disables GPU on Pixel 10 devices."
                         : AUTO_MODEL_CPU_REASON;
-                    initializedEngine = createAndInitializeEngine(modelFile.getAbsolutePath(), options, profile, backend);
+                    initializedEngine = createAndInitializeEngine(modelSpec, modelFile.getAbsolutePath(), options, profile, backend);
                 }
             } else {
                 throwIfLoadCancellationRequested();
                 Backend backend = "gpu".equals(requestedAccelerator) ? new Backend.GPU() : new Backend.CPU(null);
                 initializedBackendName = backend.getName();
-                initializedEngine = createAndInitializeEngine(modelFile.getAbsolutePath(), options, profile, backend);
+                initializedEngine = createAndInitializeEngine(modelSpec, modelFile.getAbsolutePath(), options, profile, backend);
             }
         } catch (Exception e) {
             synchronized (this) {
@@ -577,6 +577,7 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
     }
 
     private Engine createAndInitializeEngine(
+        @NonNull TaiModelSpec modelSpec,
         @NonNull String modelPath,
         @NonNull TaiRuntimeOptions options,
         @NonNull TaiModelProfile profile,
@@ -585,13 +586,15 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         applyExperimentalFlags(options, modelPath);
         String cacheDir = modelPath.startsWith("/data/local/tmp")
             ? appContext.getCacheDir().getAbsolutePath() : null;
+        boolean imageInput = modelSpec.capabilities.contains("image_input");
+        boolean audioInput = modelSpec.capabilities.contains("audio_input");
         EngineConfig config = new EngineConfig(
             modelPath,
             backend,
-            null,
-            null,
+            imageInput ? matchingBackend(backend) : null,
+            audioInput ? matchingBackend(backend) : null,
             options.maxTokens == null ? profile.defaultMaxTokens : options.maxTokens,
-            null,
+            imageInput ? 8 : null,
             cacheDir
         );
         Engine loadedEngine = new Engine(config);
@@ -607,6 +610,11 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         } finally {
             ExperimentalFlags.INSTANCE.setEnableSpeculativeDecoding(false);
         }
+    }
+
+    @NonNull
+    private Backend matchingBackend(@NonNull Backend backend) {
+        return backend instanceof Backend.GPU ? new Backend.GPU() : new Backend.CPU(null);
     }
 
     @Nullable

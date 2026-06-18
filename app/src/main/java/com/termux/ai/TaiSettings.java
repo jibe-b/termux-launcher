@@ -97,12 +97,13 @@ public final class TaiSettings {
     }
     @NonNull
     public TaiRuntimeOptions getRuntimeOptions() {
-        return getRuntimeOptions(TaiModelSpec.BACKEND_LITERT_LM, null);
+        return getRuntimeOptions((TaiModelSpec) null);
     }
 
     @NonNull
-    public TaiRuntimeOptions getRuntimeOptions(@NonNull TaiModelSpec model) {
-        return getRuntimeOptions(model.backend, model.id);
+    public TaiRuntimeOptions getRuntimeOptions(@Nullable TaiModelSpec model) {
+        return getRuntimeOptions(model == null ? TaiModelSpec.BACKEND_LITERT_LM : model.backend,
+            model == null ? null : model.id);
     }
 
     @NonNull
@@ -331,9 +332,7 @@ public final class TaiSettings {
             Object globalValue = spec.parse(preferences.getString(globalKey, AUTO));
             if (globalValue != null) return globalValue;
         }
-        Object backendDefault = spec.parse(spec.defaultValue);
-        if (backendDefault != null) return backendDefault;
-        return spec.fallbackValue;
+        return null;
     }
 
     @Nullable
@@ -398,13 +397,12 @@ public final class TaiSettings {
         LinkedHashMap<String, ParameterSpec> specs = new LinkedHashMap<>();
         put(specs, ParameterSpec.option(FIELD_ACCELERATOR, "Auto", "Auto", new String[] {"Auto", "CPU", "OpenCL"}));
         put(specs, ParameterSpec.integer(FIELD_CONTEXT_WINDOW, "4096", 4096, 1024, 8192));
-        put(specs, ParameterSpec.integer(FIELD_THREAD_COUNT, String.valueOf(Math.max(1, Runtime.getRuntime().availableProcessors() / 2)),
-            Math.max(1, Runtime.getRuntime().availableProcessors() / 2), 1, 16));
+        put(specs, ParameterSpec.integer(FIELD_THREAD_COUNT, "4", 4, 1, 16));
         put(specs, ParameterSpec.option(FIELD_PRECISION, "low", "low", new String[] {"low", "normal", "high"}));
         put(specs, ParameterSpec.option(FIELD_MEMORY_MODE, "low", "low", new String[] {"low", "normal", "high"}));
         put(specs, ParameterSpec.integer(FIELD_MAX_TOKENS, "1024", 1024, 64, 8192));
-        put(specs, ParameterSpec.decimal(FIELD_TEMPERATURE, "0.70", 0.70d, 0.0d, 2.0d));
-        put(specs, ParameterSpec.decimal(FIELD_TOP_P, "0.95", 0.95d, 0.0d, 1.0d));
+        put(specs, ParameterSpec.decimal(FIELD_TEMPERATURE, "0.80", 0.80d, 0.0d, 2.0d));
+        put(specs, ParameterSpec.decimal(FIELD_TOP_P, "0.90", 0.90d, 0.0d, 1.0d));
         put(specs, ParameterSpec.integer(FIELD_TOP_K, "40", 40, 1, 100));
         return new ParameterSchema(TaiModelSpec.BACKEND_MNN_LLM, specs);
     }
@@ -575,9 +573,11 @@ public final class TaiSettings {
         supportedEndpoints.put("/v1/chat/completions");
         supportedEndpoints.put("/v1/completions");
         supportedEndpoints.put("/v1/embeddings");
+        supportedEndpoints.put("/v1/audio/speech");
         json.put("supportedEndpoints", supportedEndpoints);
+        json.put("audioOutputNote", "Audio output returns an explicit unsupported_audio_output error until a local runner exposes generated audio.");
         json.put("embeddingsNote", "Embeddings support is model-capability dependent.");
-        json.put("autoGenerationDefaultState", "nullable generation overrides use Google AI Edge Gallery defaults in the LiteRT runtime");
+        json.put("autoGenerationDefaultState", "nullable generation overrides use model profile or MNN config defaults in the selected runtime");
         return json;
     }
 

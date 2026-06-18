@@ -47,13 +47,13 @@ public class TaiSettingsParameterTest {
         assertBooleanSpec(fields.get(TaiSettings.FIELD_ENABLE_SPECULATIVE_DECODING), "false");
 
         TaiRuntimeOptions options = settings.getRuntimeOptions(TaiModelSpec.BACKEND_LITERT_LM, null);
-        assertEquals(Integer.valueOf(4000), options.maxTokens);
-        assertEquals(Integer.valueOf(64), options.topK);
-        assertEquals(Double.valueOf(0.95d), options.topP);
-        assertEquals(Double.valueOf(1.0d), options.temperature);
-        assertEquals("GPU", options.accelerator);
-        assertEquals(Boolean.FALSE, options.thinkingEnabled);
-        assertEquals(Boolean.FALSE, options.speculativeDecodingEnabled);
+        assertNull(options.maxTokens);
+        assertNull(options.topK);
+        assertNull(options.topP);
+        assertNull(options.temperature);
+        assertNull(options.accelerator);
+        assertNull(options.thinkingEnabled);
+        assertNull(options.speculativeDecodingEnabled);
         assertNull(options.contextWindow);
     }
 
@@ -63,23 +63,60 @@ public class TaiSettingsParameterTest {
         Map<String, TaiSettings.ParameterSpec> fields = schema.fields();
 
         assertEquals(TaiModelSpec.BACKEND_MNN_LLM, schema.backend);
-        assertEquals(6, fields.size());
+        assertEquals(9, fields.size());
         assertArrayEquals(new String[] {"Auto", "CPU", "OpenCL"}, fields.get(TaiSettings.FIELD_ACCELERATOR).options);
         assertIntegerSpec(fields.get(TaiSettings.FIELD_CONTEXT_WINDOW), "4096", 1024, 8192);
+        assertIntegerSpec(fields.get(TaiSettings.FIELD_THREAD_COUNT), "4", 1, 16);
+        assertArrayEquals(new String[] {"low", "normal", "high"}, fields.get(TaiSettings.FIELD_PRECISION).options);
+        assertArrayEquals(new String[] {"low", "normal", "high"}, fields.get(TaiSettings.FIELD_MEMORY_MODE).options);
         assertIntegerSpec(fields.get(TaiSettings.FIELD_MAX_TOKENS), "1024", 64, 8192);
-        assertDecimalSpec(fields.get(TaiSettings.FIELD_TEMPERATURE), "0.70", 0.0d, 2.0d);
-        assertDecimalSpec(fields.get(TaiSettings.FIELD_TOP_P), "0.95", 0.0d, 1.0d);
+        assertDecimalSpec(fields.get(TaiSettings.FIELD_TEMPERATURE), "0.80", 0.0d, 2.0d);
+        assertDecimalSpec(fields.get(TaiSettings.FIELD_TOP_P), "0.90", 0.0d, 1.0d);
         assertIntegerSpec(fields.get(TaiSettings.FIELD_TOP_K), "40", 1, 100);
 
         TaiRuntimeOptions options = settings.getRuntimeOptions(TaiModelSpec.BACKEND_MNN_LLM, null);
-        assertEquals("Auto", options.accelerator);
-        assertEquals(Integer.valueOf(4096), options.contextWindow);
-        assertEquals(Integer.valueOf(1024), options.maxTokens);
-        assertEquals(Double.valueOf(0.70d), options.temperature);
-        assertEquals(Double.valueOf(0.95d), options.topP);
-        assertEquals(Integer.valueOf(40), options.topK);
+        assertNull(options.accelerator);
+        assertNull(options.contextWindow);
+        assertNull(options.threadCount);
+        assertNull(options.precision);
+        assertNull(options.memoryMode);
+        assertNull(options.maxTokens);
+        assertNull(options.temperature);
+        assertNull(options.topP);
+        assertNull(options.topK);
         assertNull(options.thinkingEnabled);
         assertNull(options.speculativeDecodingEnabled);
+    }
+
+    @Test
+    public void liteRtModelProfiles_matchEdgeGalleryDefaults() {
+        TaiModelRegistry registry = new TaiModelRegistry();
+
+        TaiModelProfile gemma = TaiModelProfile.forModel(registry.getModel(TaiModelRegistry.MODEL_GEMMA_4_E2B_IT));
+        assertEquals(4000, gemma.defaultMaxTokens);
+        assertEquals(64, gemma.defaultTopK);
+        assertEquals(0.95d, gemma.defaultTopP, 0.0d);
+        assertEquals(1.0d, gemma.defaultTemperature, 0.0d);
+        assertEquals("gpu", gemma.compatibleAccelerators.get(0));
+
+        TaiModelProfile mobileActions = TaiModelProfile.forModel(registry.getModel(TaiModelRegistry.MODEL_MOBILE_ACTIONS_270M));
+        assertEquals(1024, mobileActions.defaultMaxTokens);
+        assertEquals(64, mobileActions.defaultTopK);
+        assertEquals(0.95d, mobileActions.defaultTopP, 0.0d);
+        assertEquals(0.0d, mobileActions.defaultTemperature, 0.0d);
+        assertEquals("cpu", mobileActions.compatibleAccelerators.get(0));
+
+        TaiModelProfile deepSeek = TaiModelProfile.forModel(registry.getModel("deepseek-r1-distill-qwen-1.5b-litert-lm"));
+        assertEquals(4096, deepSeek.defaultMaxTokens);
+        assertEquals(64, deepSeek.defaultTopK);
+        assertEquals(0.95d, deepSeek.defaultTopP, 0.0d);
+        assertEquals(1.0d, deepSeek.defaultTemperature, 0.0d);
+
+        TaiModelProfile qwen = TaiModelProfile.forModel(registry.getModel("qwen2.5-1.5b-instruct-litert-lm"));
+        assertEquals(4096, qwen.defaultMaxTokens);
+        assertEquals(20, qwen.defaultTopK);
+        assertEquals(0.80d, qwen.defaultTopP, 0.0d);
+        assertEquals(0.70d, qwen.defaultTemperature, 0.0d);
     }
 
     @Test
@@ -128,19 +165,19 @@ public class TaiSettingsParameterTest {
         settings.setGlobalParameter(TaiSettings.FIELD_ENABLE_SPECULATIVE_DECODING, "yes");
 
         TaiRuntimeOptions liteRt = settings.getRuntimeOptions(TaiModelSpec.BACKEND_LITERT_LM, "litert-bad");
-        assertEquals(Integer.valueOf(4000), liteRt.maxTokens);
-        assertEquals(Integer.valueOf(64), liteRt.topK);
-        assertEquals(Double.valueOf(0.95d), liteRt.topP);
-        assertEquals(Double.valueOf(1.0d), liteRt.temperature);
-        assertEquals("GPU", liteRt.accelerator);
-        assertFalse(liteRt.thinkingEnabled);
-        assertFalse(liteRt.speculativeDecodingEnabled);
+        assertNull(liteRt.maxTokens);
+        assertNull(liteRt.topK);
+        assertNull(liteRt.topP);
+        assertNull(liteRt.temperature);
+        assertNull(liteRt.accelerator);
+        assertNull(liteRt.thinkingEnabled);
+        assertNull(liteRt.speculativeDecodingEnabled);
 
         settings.setGlobalParameter(TaiSettings.FIELD_CONTEXT_WINDOW, 9000);
         TaiRuntimeOptions mnn = settings.getRuntimeOptions(TaiModelSpec.BACKEND_MNN_LLM, "mnn-bad");
-        assertEquals("Auto", mnn.accelerator);
-        assertEquals(Integer.valueOf(4096), mnn.contextWindow);
-        assertEquals(Integer.valueOf(1024), mnn.maxTokens);
+        assertNull(mnn.accelerator);
+        assertNull(mnn.contextWindow);
+        assertNull(mnn.maxTokens);
     }
 
     @Test
@@ -185,7 +222,7 @@ public class TaiSettingsParameterTest {
         assertEquals(Integer.valueOf(32000), liteRt.maxTokens);
         assertEquals("CPU", liteRt.accelerator);
         assertEquals(Integer.valueOf(256), mnn.maxTokens);
-        assertEquals("Auto", mnn.accelerator);
+        assertNull(mnn.accelerator);
         assertNull(liteRt.contextWindow);
         assertNull(mnn.thinkingEnabled);
         assertFalse(context.getSharedPreferences(TaiSettings.PREFS_NAME, Context.MODE_PRIVATE)
@@ -214,7 +251,7 @@ public class TaiSettingsParameterTest {
 
         TaiRuntimeOptions liteRt = settings.getRuntimeOptions(TaiModelSpec.BACKEND_LITERT_LM, null);
         TaiRuntimeOptions mnn = settings.getRuntimeOptions(TaiModelSpec.BACKEND_MNN_LLM, null);
-        assertEquals(Double.valueOf(1.0d), liteRt.temperature);
+        assertNull(liteRt.temperature);
         assertEquals(Double.valueOf(0.2d), mnn.temperature);
     }
 
@@ -247,8 +284,8 @@ public class TaiSettingsParameterTest {
         assertEquals(Integer.valueOf(2048), withGlobalFallback.contextWindow);
 
         settings.setGlobalParameter(TaiSettings.FIELD_CONTEXT_WINDOW, "bad");
-        TaiRuntimeOptions withBackendFallback = settings.getRuntimeOptions(TaiModelSpec.BACKEND_MNN_LLM, modelId);
-        assertEquals(Integer.valueOf(4096), withBackendFallback.contextWindow);
+        TaiRuntimeOptions withConfigFallback = settings.getRuntimeOptions(TaiModelSpec.BACKEND_MNN_LLM, modelId);
+        assertNull(withConfigFallback.contextWindow);
     }
 
     private static void assertIntegerSpec(TaiSettings.ParameterSpec spec, String defaultValue, int min, int max) {

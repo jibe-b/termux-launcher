@@ -1,13 +1,18 @@
 package com.termux.ai;
 
+import com.google.ai.edge.litertlm.Content;
+import com.google.ai.edge.litertlm.Contents;
 import com.google.ai.edge.litertlm.ToolCall;
 import com.google.ai.edge.litertlm.ToolProvider;
 
 import org.json.JSONArray;
+import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.Test;
 
+import java.util.Arrays;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 
@@ -70,9 +75,14 @@ public class TaiOpenAiCompatibilityTest {
         JSONObject taiModels = new JSONObject()
             .put("ok", true)
             .put("models", new JSONArray()
-                .put(new JSONObject().put("id", "gemma").put("backend", "litert-lm"))
-                .put(new JSONObject().put("id", "gemma").put("backend", "litert-lm"))
-                .put(new JSONObject().put("id", "gemma")));
+                .put(new JSONObject().put("id", "gemma").put("backend", "litert-lm")
+                    .put("capabilities", new JSONArray()
+                        .put("text_chat")
+                        .put("image_input")
+                        .put("audio_input")))
+                .put(new JSONObject().put("id", "gemma").put("backend", "litert-lm")
+                    .put("capabilities", new JSONArray().put("text_chat").put("image_input")))
+                .put(new JSONObject().put("id", "qwen")));
 
         JSONObject response = TaiManager.openAiModelsFromTaiModels(taiModels);
 
@@ -80,8 +90,68 @@ public class TaiOpenAiCompatibilityTest {
         assertEquals(2, response.getJSONArray("data").length());
         assertEquals("gemma", response.getJSONArray("data").getJSONObject(0).getString("id"));
         assertEquals("model", response.getJSONArray("data").getJSONObject(0).getString("object"));
+        assertTrue(response.getJSONArray("data").getJSONObject(0).getJSONArray("_capabilities").toString().contains("image_input"));
+        assertTrue(response.getJSONArray("data").getJSONObject(0).getJSONArray("_capabilities").toString().contains("audio_input"));
         assertFalse(response.has("tai"));
         assertFalse(response.getJSONArray("data").getJSONObject(0).has("tai"));
+    }
+
+    @Test
+    public void openAiModels_filtersMnnToolUseUntilStructuredNativeBridgeIsPresent() throws Exception {
+        JSONObject taiModels = new JSONObject()
+            .put("ok", true)
+            .put("models", new JSONArray().put(new JSONObject()
+                .put("id", "mnn-tools")
+                .put("backend", TaiModelSpec.BACKEND_MNN_LLM)
+                .put("capabilities", new JSONArray()
+                    .put("text_chat")
+                    .put("tool_use")
+                    .put("image_input")
+                    .put("audio_input"))));
+
+        JSONObject response = TaiManager.openAiModelsFromTaiModels(taiModels);
+
+        JSONArray capabilities = response.getJSONArray("data").getJSONObject(0).getJSONArray("_capabilities");
+        assertTrue(capabilities.toString().contains("text_chat"));
+        assertFalse(capabilities.toString().contains("tool_use"));
+        assertFalse(capabilities.toString().contains("image_input"));
+        assertFalse(capabilities.toString().contains("audio_input"));
+    }
+
+    @Test
+    public void messageContentToContents_acceptsLiteRtOpenAiImageAndAudioParts() throws Exception {
+        TaiModelSpec spec = spec("gemma-multimodal", TaiModelSpec.BACKEND_LITERT_LM, "image_input", "audio_input");
+        JSONArray parts = new JSONArray()
+            .put(new JSONObject().put("type", "text").put("text", "describe this"))
+            .put(new JSONObject()
+                .put("type", "image_url")
+                .put("image_url", new JSONObject().put("url", "data:image/png;base64,AQID")))
+            .put(new JSONObject()
+                .put("type", "input_audio")
+                .put("input_audio", new JSONObject().put("data", "BAUG").put("format", "wav")));
+
+        Contents contents = TaiManager.messageContentToContents(parts, spec);
+
+        assertEquals(3, contents.getContents().size());
+        assertTrue(contents.getContents().get(0) instanceof Content.Text);
+        assertTrue(contents.getContents().get(1) instanceof Content.ImageBytes);
+        assertTrue(contents.getContents().get(2) instanceof Content.AudioBytes);
+    }
+
+    @Test
+    public void messageContentToContents_rejectsMediaForTextOnlyModel() throws Exception {
+        TaiModelSpec spec = spec("text-only", TaiModelSpec.BACKEND_LITERT_LM);
+        JSONArray parts = new JSONArray().put(new JSONObject()
+            .put("type", "image_url")
+            .put("image_url", new JSONObject().put("url", "data:image/png;base64,AQID")));
+
+        try {
+            TaiManager.messageContentToContents(parts, spec);
+        } catch (JSONException e) {
+            assertTrue(e.getMessage().startsWith("capability_not_supported:"));
+            return;
+        }
+        throw new AssertionError("Expected capability_not_supported");
     }
 
     @Test
@@ -91,5 +161,30 @@ public class TaiOpenAiCompatibilityTest {
 
         assertTrue(LiteRtTaiRuntime.isCancellation(error));
         assertFalse(LiteRtTaiRuntime.isCancellation(new RuntimeException("GPU initialization failed")));
+    }
+
+    private static TaiModelSpec spec(String id, String backend, String... capabilities) {
+        LinkedHashSet<String> caps = new LinkedHashSet<>();
+        caps.add("text_chat");
+        caps.addAll(Arrays.asList(capabilities));
+        return new TaiModelSpec(
+            id,
+            id,
+            "test",
+            "test",
+            backend.equals(TaiModelSpec.BACKEND_MNN_LLM) ? "/models/config.json" : "/models/model.litertlm",
+            "test",
+            0L,
+            caps,
+            false,
+            null,
+            backend,
+            backend.equals(TaiModelSpec.BACKEND_MNN_LLM) ? TaiModelSpec.FORMAT_MNN : TaiModelSpec.FORMAT_LITERTLM,
+            null,
+            null,
+            4096,
+            0,
+            null
+        );
     }
 }

@@ -208,13 +208,41 @@ public final class TaiModelStore {
         if (spec.localPath == null || spec.localPath.trim().isEmpty()) return false;
         File modelFile = new File(spec.localPath);
         if (TaiModelSpec.BACKEND_MNN_LLM.equals(spec.backend)) {
-            File modelDir = modelFile.isDirectory() ? modelFile : modelFile.getParentFile();
-            return modelDir != null
-                && new File(modelDir, "config.json").isFile()
-                && new File(modelDir, "llm.mnn").isFile()
-                && new File(modelDir, "llm.mnn.weight").isFile();
+            return mnnPackageReadable(modelFile);
         }
         return modelFile.isFile() && modelFile.canRead();
+    }
+
+    private boolean mnnPackageReadable(@NonNull File modelFile) {
+        File config = modelFile.isDirectory() ? new File(modelFile, "config.json") : modelFile;
+        if (!config.isFile() || !config.canRead()) return false;
+        File modelDir = config.getParentFile();
+        if (modelDir == null) return false;
+        try {
+            JSONObject json = new JSONObject(readUtf8(config));
+            return sidecarReadable(modelDir, json.optString("llm_model", "llm.mnn"))
+                && sidecarReadable(modelDir, json.optString("llm_weight", "llm.mnn.weight"))
+                && sidecarReadable(modelDir, json.optString("tokenizer_file", ""));
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private boolean sidecarReadable(@NonNull File modelDir, @Nullable String fileName) {
+        if (fileName == null || fileName.trim().isEmpty()) return false;
+        File file = new File(modelDir, fileName);
+        return file.isFile() && file.canRead();
+    }
+
+    @NonNull
+    private String readUtf8(@NonNull File file) throws java.io.IOException {
+        try (java.io.FileInputStream input = new java.io.FileInputStream(file);
+             java.io.ByteArrayOutputStream output = new java.io.ByteArrayOutputStream()) {
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = input.read(buffer)) != -1) output.write(buffer, 0, read);
+            return output.toString("UTF-8");
+        }
     }
 
     @NonNull
