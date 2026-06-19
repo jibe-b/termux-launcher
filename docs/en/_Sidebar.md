@@ -15,6 +15,7 @@
 - [Termux extra keys](Termux_Extrakeys)
 - [tmux status setup](Launcher_Tmux_Status_Setup)
 - [tmux theme plugin](https://github.com/PickleHik3/termux-launcher-tmux)
+- [LauncherCtl agent tools](LauncherCtl_Agent)
 - [LauncherCtl API](LauncherCtl_API)
 - [Optional Shizuku](Launcher_Optional_Shizuku)
 - [Shizuku helper examples](Launcher_Shizuku_Examples)

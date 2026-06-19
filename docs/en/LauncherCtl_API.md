@@ -168,7 +168,7 @@ LauncherCtl exposes a shared tool registry for local agents, MCP clients, and sc
 - `POST /v1/agent/route`: route a natural-language request to a tool and arguments.
 - `POST /v1/agent/execute`: execute a named tool with JSON arguments.
 
-Execution is confirmation-gated for medium/high/critical risk tools. `launcherctl agent --dry-run "open maps"` routes only; `launcherctl agent "open maps"` routes and executes with explicit CLI confirmation.
+Execution is confirmation-gated for medium/high/critical risk tools. `launcherctl agent --dry-run "open maps"` routes only. `launcherctl agent "open maps"` routes and executes with `confirm: true`, so use dry-run first when reviewing an action.
 
 FunctionGemma mobile-actions routing is used only when the model is already loaded and supported. LauncherCtl does not auto-download or auto-load it.
 
