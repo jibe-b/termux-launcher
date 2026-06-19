@@ -137,6 +137,17 @@ public class LauncherToolRegistryTest {
     }
 
     @Test
+    public void epochMillisSchemas_allowCurrentTimestamps() throws Exception {
+        long now = System.currentTimeMillis();
+        assertTrue(registry.getTool("notifications.since").schema
+            .getJSONObject("properties").getJSONObject("since").getLong("maximum") > now);
+        assertTrue(registry.getTool("notifications.stats").schema
+            .getJSONObject("properties").getJSONObject("since").getLong("maximum") > now);
+        assertTrue(registry.getTool("events.tail").schema
+            .getJSONObject("properties").getJSONObject("since").getLong("maximum") > now);
+    }
+
+    @Test
     public void openAiNameToInternalName_mapsUnderscoresToDots() {
         assertEquals("apps.launch", LauncherToolRegistry.openAiNameToInternalName("apps_launch"));
         assertEquals("notifications.recent", LauncherToolRegistry.openAiNameToInternalName("notifications_recent"));

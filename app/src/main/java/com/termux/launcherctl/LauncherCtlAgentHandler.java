@@ -21,7 +21,7 @@ import java.util.Locale;
  * <p>Routing is deterministic and never executes. It maps obvious user intents to
  * registered tools using keyword matching. If FunctionGemma is already loaded in
  * the TAI runtime, route may optionally call it through the OpenAI-compatible
- * chat completions endpoint with the registry's OpenAI tool schemas.
+ * chat completions endpoint with compact OpenAI tool schemas.
  *
  * <p>Execution enforces confirmation gating for tools that require it or carry
  * medium/high/critical risk, then delegates to a {@link LauncherToolRegistry.ToolExecutionHandler}.
@@ -205,7 +205,9 @@ public final class LauncherCtlAgentHandler {
         }
 
         // Media
-        if (text.contains("now playing") || text.contains("media") || text.contains("music")) {
+        if (text.contains("now playing") || text.contains("currently playing")
+            || text.contains("what is playing") || text.contains("playing now")
+            || text.contains("media") || text.contains("music")) {
             return new RouteMatch(registry.getTool(LauncherToolRegistry.TOOL_MEDIA_NOW_PLAYING), new JSONObject(),
                 "User asked for now playing / media information.");
         }
@@ -255,18 +257,19 @@ public final class LauncherCtlAgentHandler {
             JSONObject request = new JSONObject();
             request.put("model", TaiModelRegistry.MODEL_MOBILE_ACTIONS_270M);
             request.put("tool_choice", "auto");
+            request.put("max_tokens", 128);
 
             JSONArray messages = new JSONArray();
             JSONObject system = new JSONObject();
             system.put("role", "system");
-            system.put("content", "You are a launcher assistant. Choose the best tool for the user request.");
+            system.put("content", "Pick one launcher tool for the user request. Return a tool call only.");
             messages.put(system);
             JSONObject user = new JSONObject();
             user.put("role", "user");
             user.put("content", userText);
             messages.put(user);
             request.put("messages", messages);
-            request.put("tools", registry.toOpenAiToolsJson());
+            request.put("tools", compactFunctionGemmaTools(registry));
 
             JSONObject response = TaiManager.getInstance(context).openAiChatCompletions(request.toString());
             JSONObject message = response.optJSONArray("choices") != null
@@ -304,6 +307,93 @@ public final class LauncherCtlAgentHandler {
             // FunctionGemma routing is best-effort; fall back to deterministic behavior.
             return null;
         }
+    }
+
+    @NonNull
+    private JSONArray compactFunctionGemmaTools(@NonNull LauncherToolRegistry registry) throws JSONException {
+        JSONArray tools = new JSONArray();
+        String[] names = {
+            LauncherToolRegistry.TOOL_APPS_LAUNCH,
+            LauncherToolRegistry.TOOL_APPS_SEARCH,
+            LauncherToolRegistry.TOOL_INTENT_OPEN,
+            LauncherToolRegistry.TOOL_NOTIFICATIONS_RECENT,
+            LauncherToolRegistry.TOOL_NOTIFICATIONS_SEARCH,
+            LauncherToolRegistry.TOOL_NOTIFICATIONS_STATS,
+            LauncherToolRegistry.TOOL_MEDIA_NOW_PLAYING,
+            LauncherToolRegistry.TOOL_SYSTEM_RESOURCES,
+            LauncherToolRegistry.TOOL_CAPABILITIES_GET
+        };
+        for (String name : names) {
+            LauncherToolRegistry.ToolMetadata tool = registry.getTool(name);
+            if (tool != null) {
+                tools.put(compactTool(tool));
+            }
+        }
+        return tools;
+    }
+
+    @NonNull
+    private JSONObject compactTool(@NonNull LauncherToolRegistry.ToolMetadata tool) throws JSONException {
+        JSONObject function = new JSONObject();
+        function.put("name", tool.openAiName());
+        function.put("description", compactDescription(tool.name));
+        function.put("parameters", compactSchema(tool.name));
+        JSONObject wrapper = new JSONObject();
+        wrapper.put("type", "function");
+        wrapper.put("function", function);
+        return wrapper;
+    }
+
+    @NonNull
+    private String compactDescription(@NonNull String toolName) {
+        switch (toolName) {
+            case LauncherToolRegistry.TOOL_APPS_LAUNCH:
+                return "Launch app by name.";
+            case LauncherToolRegistry.TOOL_APPS_SEARCH:
+                return "Search apps.";
+            case LauncherToolRegistry.TOOL_INTENT_OPEN:
+                return "Open Android URI intent.";
+            case LauncherToolRegistry.TOOL_NOTIFICATIONS_RECENT:
+                return "Recent notifications.";
+            case LauncherToolRegistry.TOOL_NOTIFICATIONS_SEARCH:
+                return "Search notifications.";
+            case LauncherToolRegistry.TOOL_NOTIFICATIONS_STATS:
+                return "Notification stats.";
+            case LauncherToolRegistry.TOOL_MEDIA_NOW_PLAYING:
+                return "Now playing media.";
+            case LauncherToolRegistry.TOOL_SYSTEM_RESOURCES:
+                return "Device resources.";
+            case LauncherToolRegistry.TOOL_CAPABILITIES_GET:
+                return "Launcher capabilities.";
+            default:
+                return toolName;
+        }
+    }
+
+    @NonNull
+    private JSONObject compactSchema(@NonNull String toolName) throws JSONException {
+        JSONObject schema = new JSONObject();
+        JSONObject properties = new JSONObject();
+        JSONArray required = new JSONArray();
+        schema.put("type", "object");
+        schema.put("properties", properties);
+        schema.put("additionalProperties", false);
+
+        if (LauncherToolRegistry.TOOL_APPS_LAUNCH.equals(toolName)
+            || LauncherToolRegistry.TOOL_APPS_SEARCH.equals(toolName)
+            || LauncherToolRegistry.TOOL_NOTIFICATIONS_SEARCH.equals(toolName)) {
+            properties.put("query", new JSONObject().put("type", "string"));
+            required.put("query");
+        } else if (LauncherToolRegistry.TOOL_INTENT_OPEN.equals(toolName)) {
+            properties.put("data", new JSONObject().put("type", "string"));
+            properties.put("action", new JSONObject().put("type", "string"));
+            required.put("data");
+        }
+
+        if (required.length() > 0) {
+            schema.put("required", required);
+        }
+        return schema;
     }
 
     private boolean isFunctionGemmaLoaded() {

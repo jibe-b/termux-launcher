@@ -25,6 +25,7 @@ import java.util.Map;
  * execute logic is added in a later slice.
  */
 public final class LauncherToolRegistry {
+    private static final long JSON_SAFE_INTEGER_MAX = 9_007_199_254_740_991L;
 
     /** Risk classification used for confirmation gating and UI hints. */
     public enum ToolRisk {
@@ -169,7 +170,7 @@ public final class LauncherToolRegistry {
         add(map, TOOL_NOTIFICATIONS_SINCE,
             "Return notification history events posted since a timestamp.",
             schemaObject()
-                .withInteger("since", "Epoch milliseconds", true)
+                .withLong("since", "Epoch milliseconds", 0L, JSON_SAFE_INTEGER_MAX, 0L, true)
                 .withInteger("limit", 1, 1000, 200, false)
                 .build(),
             ToolRisk.LOW,
@@ -187,7 +188,7 @@ public final class LauncherToolRegistry {
         add(map, TOOL_NOTIFICATIONS_STATS,
             "Return statistics about notification history events.",
             schemaObject()
-                .withInteger("since", "Optional epoch milliseconds", false)
+                .withLong("since", "Optional epoch milliseconds", 0L, JSON_SAFE_INTEGER_MAX, 0L, false)
                 .build(),
             ToolRisk.LOW,
             false,
@@ -240,7 +241,7 @@ public final class LauncherToolRegistry {
             "Return recent agent/system events.",
             schemaObject()
                 .withInteger("limit", 1, 1000, 100, false)
-                .withInteger("since", "Optional epoch milliseconds", false)
+                .withLong("since", "Optional epoch milliseconds", 0L, JSON_SAFE_INTEGER_MAX, 0L, false)
                 .build(),
             ToolRisk.LOW,
             false,
@@ -452,6 +453,25 @@ public final class LauncherToolRegistry {
         }
 
         SchemaBuilder withInteger(@NonNull String name, @NonNull String description, int minimum, int maximum, int defaultValue, boolean required) {
+            try {
+                JSONObject prop = new JSONObject();
+                prop.put("type", "integer");
+                prop.put("minimum", minimum);
+                prop.put("maximum", maximum);
+                prop.put("default", defaultValue);
+                if (!description.isEmpty()) {
+                    prop.put("description", description);
+                }
+                properties.put(name, prop);
+                if (required) {
+                    this.required.put(name);
+                }
+            } catch (JSONException ignored) {
+            }
+            return this;
+        }
+
+        SchemaBuilder withLong(@NonNull String name, @NonNull String description, long minimum, long maximum, long defaultValue, boolean required) {
             try {
                 JSONObject prop = new JSONObject();
                 prop.put("type", "integer");

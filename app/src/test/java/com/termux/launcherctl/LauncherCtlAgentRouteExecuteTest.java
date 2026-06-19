@@ -97,6 +97,15 @@ public class LauncherCtlAgentRouteExecuteTest {
     }
 
     @Test
+    public void postAgentRoute_whatIsPlaying_routesToMedia() throws Exception {
+        HttpURLConnection conn = post("/v1/agent/route", new JSONObject().put("request", "what is playing"));
+        assertEquals(200, conn.getResponseCode());
+        JSONObject response = new JSONObject(readBody(conn));
+        assertEquals("media.now_playing", response.getString("tool"));
+        assertFalse(response.getBoolean("requiresConfirmation"));
+    }
+
+    @Test
     public void postAgentRoute_noObviousIntent_defaultsToCapabilities() throws Exception {
         HttpURLConnection conn = post("/v1/agent/route", new JSONObject().put("request", "hello"));
         assertEquals(200, conn.getResponseCode());
@@ -179,8 +188,14 @@ public class LauncherCtlAgentRouteExecuteTest {
         new JSONObject(readBody(conn));
 
         LauncherCtlEventStore.getInstance().awaitWritesForTesting(2_000);
+        JSONArray events = new JSONArray();
+        for (JSONObject event : LauncherCtlEventStore.getInstance().tailEvents(10, null)) {
+            events.put(event);
+        }
         assertFalse(LauncherCtlEventStore.getInstance().tailAgentRuns(10, null).isEmpty());
-        assertFalse(LauncherCtlEventStore.getInstance().tailEvents(10, null).isEmpty());
+        assertTrue(events.length() > 0);
+        JSONObject payload = events.getJSONObject(events.length() - 1).getJSONObject("payload");
+        assertEquals("capabilities.get", payload.getString("tool"));
     }
 
     @Test

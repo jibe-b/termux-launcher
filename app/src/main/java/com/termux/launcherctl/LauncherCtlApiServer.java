@@ -820,12 +820,29 @@ public class LauncherCtlApiServer {
             }
             if (result.has("tool") && !result.isNull("tool")) {
                 payload.put("tool", result.optString("tool", null));
+            } else {
+                String requestTool = agentToolFromRequest(requestBody);
+                if (requestTool != null && !requestTool.isEmpty()) {
+                    payload.put("tool", requestTool);
+                }
             }
             LauncherCtlEventStore.getInstance().appendEvent(type, payload);
             LauncherCtlEventStore.getInstance().appendAgentRun(type, payload);
         } catch (Exception e) {
             Logger.logWarn(LOG_TAG, "Failed to append agent audit event: " + e.getMessage());
         }
+    }
+
+    @Nullable
+    private String agentToolFromRequest(String requestBody) {
+        if (requestBody == null || requestBody.trim().isEmpty()) {
+            return null;
+        }
+        JSONObject request = parseJsonBody(requestBody);
+        String tool = request.optString("tool", "").trim();
+        if (!tool.isEmpty()) return tool;
+        String name = request.optString("name", "").trim();
+        return name.isEmpty() ? null : LauncherToolRegistry.openAiNameToInternalName(name);
     }
 
     private void writeDebugSnapshot(LauncherToolRegistry registry, JSONObject capabilities) {
