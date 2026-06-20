@@ -332,6 +332,38 @@ public final class ExtraKeysView extends GridLayout {
     @Nullable private GradientDrawable mTravelBubbleBg;
     private int mTravelKeyScreenX, mTravelKeyScreenY, mTravelKeyW, mTravelKeyH;
 
+    /**
+     * Reports the pressed key's screen-space rect so the host (the launcher dock) can drive a glass
+     * refraction lens behind it. The dock maps the rect into its backdrop and bends the wallpaper
+     * showing through the transparent key cell; if the host ignores it, only the bubble border shows.
+     */
+    public interface KeyLensListener {
+        void onKeyLensShow(float screenLeft, float screenTop, float screenRight, float screenBottom);
+        void onKeyLensHide();
+    }
+    @Nullable private KeyLensListener mKeyLensListener;
+    private final int[] mKeyLensLoc = new int[2];
+
+    public void setKeyLensListener(@Nullable KeyLensListener listener) {
+        mKeyLensListener = listener;
+    }
+
+    private void emitKeyLensShow(@NonNull MaterialButton button, int inset) {
+        if (mKeyLensListener == null)
+            return;
+        button.getLocationOnScreen(mKeyLensLoc);
+        mKeyLensListener.onKeyLensShow(
+            mKeyLensLoc[0] + inset,
+            mKeyLensLoc[1] + inset,
+            mKeyLensLoc[0] + button.getWidth() - inset,
+            mKeyLensLoc[1] + button.getHeight() - inset);
+    }
+
+    private void emitKeyLensHide() {
+        if (mKeyLensListener != null)
+            mKeyLensListener.onKeyLensHide();
+    }
+
     /** Generic long-press hold-visual for keys that don't auto-repeat or toggle (so EVERY key shows
      *  a press-hold indication, not just repetitive/special ones). */
     @Nullable private Runnable mGenericHoldVisualRunnable;
@@ -1015,6 +1047,7 @@ public final class ExtraKeysView extends GridLayout {
         mBubbleTravelDistPx = (mBubbleB - mBubbleT) + dpToPx(10f);
         paintBubble(false);
         getOverlay().add(g);
+        emitKeyLensShow(button, inset); // drive the host's glass refraction lens behind the key
 
         if (shouldSnapKeyMotion()) {
             applyBubbleFrame(1f, 1f);
@@ -1074,6 +1107,7 @@ public final class ExtraKeysView extends GridLayout {
      */
     private void armBubbleTravel(@NonNull MaterialButton button, @NonNull ExtraKeyButton popup) {
         removeBubbleNow(); // hand off from the on-key overlay bubble to the travel popup
+        emitKeyLensHide(); // lens follows the on-key bubble only; the popup is opaque
         dismissTravelPopup(false);
         mBubbleArmed = true;
         mBubbleHeld = true;
@@ -1199,6 +1233,7 @@ public final class ExtraKeysView extends GridLayout {
      * so the feedback is visible around the finger; false (a held release / swipe commit) collapses.
      */
     private void hideBubble(boolean expand) {
+        emitKeyLensHide();
         final GradientDrawable g = mBubble;
         final int l = mBubbleL, t = mBubbleT, r = mBubbleR, b = mBubbleB;
         mBubble = null;

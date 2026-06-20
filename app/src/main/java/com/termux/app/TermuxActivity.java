@@ -1125,6 +1125,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Cached AGSL glass-refraction shader (API 33+). */
     @Nullable private RuntimeShader mGlassShader;
 
+    // --- Active extra-key lens state (drives the per-key refraction in the backdrop shader). ---
+    private boolean mKeyLensActive = false;
+    private float mKeyLensIntensity = 0f;            // 0..1 fade
+    private float mKeyLensCx, mKeyLensCy;            // centre in backdrop fragCoord space
+    private float mKeyLensHx, mKeyLensHy;            // half extents
+    private float mKeyLensRadius;                    // corner radius
+    // Last dock-glass params, so the lens can rebuild the backdrop effect without recapturing.
+    private boolean mGlassParamsValid = false;
+    private float mGlassBlurPx, mGlassCapLeft, mGlassCapTop, mGlassCapRight, mGlassCapBottom, mGlassRadiusPx;
+
     /**
      * AGSL glass: what separates real glass from frosted polymer is that glass <em>bends</em> light
      * at its edges (refraction) and catches a crisp edge highlight, instead of just diffusing it.
@@ -1142,6 +1152,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         "uniform float uStrength;\n" +
         "uniform float uRim;\n" +
         "uniform float uDensity;\n" +
+        // Active extra-key "lens": a rounded-rect that MAGNIFIES (bends) the backdrop strongest from
+        // the middle and eases to nothing at its rim, so a pressed key reads as a thick glass pill
+        // refracting the wallpaper that shows through the transparent key cell. uLensActive carries
+        // the 0..1 fade intensity.
+        "uniform float uLensActive;\n" +
+        "uniform float2 uLensCenter;\n" +
+        "uniform float2 uLensHalf;\n" +
+        "uniform float uLensRadius;\n" +
+        "uniform float uLensStrength;\n" +
+        "uniform float uLensFeather;\n" +
         "float sdRoundRect(float2 p, float2 b, float r) {\n" +
         "    float2 q = abs(p) - b + float2(r, r);\n" +
         "    return min(max(q.x, q.y), 0.0) + length(max(q, float2(0.0, 0.0))) - r;\n" +
@@ -1154,11 +1174,29 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         "    float2 n = normalize(float2(p.x / max(b.x, 1.0), p.y / max(b.y, 1.0)) + float2(1e-4, 1e-4));\n" +
         "    float e = clamp(1.0 - inside / uBand, 0.0, 1.0);\n" +
         "    e = e * e;\n" +
-        "    half4 col = content.eval(fragCoord - n * (e * uStrength));\n" +
+        "    float2 sampleCoord = fragCoord - n * (e * uStrength);\n" +
+        // Per-key lens: magnify the backdrop toward the key centre, fading out to the pill rim.
+        "    float lensGlow = 0.0;\n" +
+        "    if (uLensActive > 0.001) {\n" +
+        "        float2 lp = fragCoord - uLensCenter;\n" +
+        "        float ld = -sdRoundRect(lp, uLensHalf, uLensRadius);\n" +
+        "        if (ld > 0.0) {\n" +
+        "            float2 ln = float2(lp.x / max(uLensHalf.x, 1.0), lp.y / max(uLensHalf.y, 1.0));\n" +
+        "            float rr = clamp(length(ln), 0.0, 1.0);\n" +
+        "            float kFull = mix(1.0 - uLensStrength, 1.0, smoothstep(0.5, 1.0, rr));\n" +
+        "            float k = mix(1.0, kFull, uLensActive);\n" +
+        "            float fade = smoothstep(0.0, max(uLensFeather, 1.0), ld) * uLensActive;\n" +
+        "            float2 lensCoord = uLensCenter + lp * k;\n" +
+        "            sampleCoord = mix(sampleCoord, lensCoord - n * (e * uStrength), fade);\n" +
+        "            lensGlow = fade * (1.0 - rr);\n" +
+        "        }\n" +
+        "    }\n" +
+        "    half4 col = content.eval(sampleCoord);\n" +
         // One clean, sharp hairline rim where the light catches the glass edge. No dark contour, no
         // wide bevel band, no inner shadow — minimal/zen: a crisp pane with slight edge refraction.
         "    float rim = 1.0 - smoothstep(0.0, 2.0 * uDensity, inside);\n" +
         "    col.rgb = col.rgb + half3(rim * uRim);\n" +
+        "    col.rgb = col.rgb + half3(lensGlow * uRim * 0.6);\n" +
         "    return col;\n" +
         "}\n";
 
@@ -1184,6 +1222,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mGlassShader.setFloatUniform("uStrength", density * 9f);
             mGlassShader.setFloatUniform("uRim", 0.16f);
             mGlassShader.setFloatUniform("uDensity", density);
+            // Per-key lens state (0 intensity == no lens, dock refraction unchanged).
+            mGlassShader.setFloatUniform("uLensActive", mKeyLensActive ? mKeyLensIntensity : 0f);
+            mGlassShader.setFloatUniform("uLensCenter", mKeyLensCx, mKeyLensCy);
+            mGlassShader.setFloatUniform("uLensHalf", Math.max(1f, mKeyLensHx), Math.max(1f, mKeyLensHy));
+            mGlassShader.setFloatUniform("uLensRadius", mKeyLensRadius);
+            mGlassShader.setFloatUniform("uLensStrength", 0.20f);
+            mGlassShader.setFloatUniform("uLensFeather", density * 10f);
             RenderEffect shaderEffect = RenderEffect.createRuntimeShaderEffect(mGlassShader, "content");
             if (blurPx > 0f) {
                 RenderEffect blur = RenderEffect.createBlurEffect(blurPx, blurPx, Shader.TileMode.CLAMP);
@@ -1193,6 +1238,66 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         } catch (Throwable t) {
             Logger.logStackTraceWithMessage(LOG_TAG, "Glass refraction shader failed; falling back to blur", t);
             return null;
+        }
+    }
+
+    /**
+     * Drive the per-key refraction lens from a pressed extra key (screen-space rect). Maps the rect
+     * into the backdrop shader's coordinate space and fades the lens in. No-op unless the backdrop
+     * glass shader is currently active (API 33+, static wallpaper, blur on) — otherwise the key just
+     * shows its thin-border bubble. Called on the UI thread from the ExtraKeysView lens listener.
+     */
+    private void setExtraKeyLens(float screenLeft, float screenTop, float screenRight, float screenBottom) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU || !mGlassParamsValid) {
+            return;
+        }
+        View surfaceHost = findViewById(R.id.accessory_surface_host);
+        if (surfaceHost == null || surfaceHost.getWidth() <= 0 || surfaceHost.getHeight() <= 0) {
+            return;
+        }
+        int[] hostLoc = new int[2];
+        surfaceHost.getLocationOnScreen(hostLoc);
+        // surfaceHost's left maps to fragCoord x == capLeft (the overscan); top maps to capTop.
+        float fl = (screenLeft - hostLoc[0]) + mGlassCapLeft;
+        float fr = (screenRight - hostLoc[0]) + mGlassCapLeft;
+        float ft = (screenTop - hostLoc[1]) + mGlassCapTop;
+        float fb = (screenBottom - hostLoc[1]) + mGlassCapTop;
+        mKeyLensCx = (fl + fr) * 0.5f;
+        mKeyLensCy = (ft + fb) * 0.5f;
+        mKeyLensHx = Math.max(1f, (fr - fl) * 0.5f);
+        mKeyLensHy = Math.max(1f, (fb - ft) * 0.5f);
+        mKeyLensRadius = Math.min(mKeyLensHx, mKeyLensHy); // stadium pill, matches the bubble
+        mKeyLensActive = true;
+        // Snap on (single RenderEffect rebuild) rather than fade — a per-frame rebuild during a fade
+        // would be continuous GPU work while typing, which we explicitly avoid. The bubble border
+        // carries the motion; the lens is a static refraction held for the duration of the press.
+        mKeyLensIntensity = 1f;
+        rebuildBackdropGlassEffectForLens();
+    }
+
+    /** Snap the active extra-key lens off (single rebuild). */
+    private void clearExtraKeyLens() {
+        if (!mKeyLensActive && mKeyLensIntensity == 0f) {
+            return;
+        }
+        mKeyLensActive = false;
+        mKeyLensIntensity = 0f;
+        rebuildBackdropGlassEffectForLens();
+    }
+
+    /** Rebuild + re-apply the backdrop glass RenderEffect with the current lens state (no recapture). */
+    private void rebuildBackdropGlassEffectForLens() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU || !mGlassParamsValid) {
+            return;
+        }
+        View backdrop = findViewById(R.id.accessory_blur_backdrop);
+        if (backdrop == null || backdrop.getVisibility() != View.VISIBLE) {
+            return;
+        }
+        RenderEffect glass = buildGlassRefractionEffect(
+            mGlassBlurPx, mGlassCapLeft, mGlassCapTop, mGlassCapRight, mGlassCapBottom, mGlassRadiusPx);
+        if (glass != null) {
+            backdrop.setRenderEffect(glass);
         }
     }
 
@@ -1676,6 +1781,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         backdrop.setImageDrawable(null);
         backdrop.setVisibility(View.GONE);
+        mGlassParamsValid = false; // no live backdrop shader -> key lens falls back to the bubble border
         mAccessoryBackdropDirty = true;
         mLastAccessoryBackdropBlurRadiusDp = -1;
         mLastAccessoryBackdropManagedSource = false;
@@ -2304,6 +2410,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 ? resolveDockCapsuleCornerRadiusPx(surfaceHost.getHeight())
                 : 0f;
             RenderEffect glass = buildGlassRefractionEffect(blurRadiusPx, capLeft, 0f, capRight, capBottom, radiusPx);
+            // Remember the dock params so a key-press lens can rebuild this effect cheaply (no recapture).
+            mGlassBlurPx = blurRadiusPx;
+            mGlassCapLeft = capLeft;
+            mGlassCapTop = 0f;
+            mGlassCapRight = capRight;
+            mGlassCapBottom = capBottom;
+            mGlassRadiusPx = radiusPx;
+            mGlassParamsValid = (glass != null);
             backdrop.setRenderEffect(glass != null
                 ? glass
                 : RenderEffect.createBlurEffect(blurRadiusPx, blurRadiusPx, Shader.TileMode.CLAMP));
@@ -4881,6 +4995,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             extraKeysView.setKeyPressFeedbackBlurAvailable(blurActive);
             // Floating capsule dock -> vertical liquid popup pill; edge-to-edge dock -> rounded-rect.
             extraKeysView.setPopupCapsuleStyle(isValarieDockStyle());
+            // Drive the per-key glass refraction lens from a pressed key (API 33+ / blur on only).
+            extraKeysView.setKeyLensListener(new ExtraKeysView.KeyLensListener() {
+                @Override
+                public void onKeyLensShow(float l, float t, float r, float b) {
+                    setExtraKeyLens(l, t, r, b);
+                }
+                @Override
+                public void onKeyLensHide() {
+                    clearExtraKeyLens();
+                }
+            });
         }
     }
 
