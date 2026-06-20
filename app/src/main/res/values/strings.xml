@@ -492,6 +492,8 @@
                 <string name="termux_extrakeys_blur_live_wallpaper_note">For best alignment, set wallpapers through the launcher. Live wallpapers should set Blur to 0.</string>
                 <string name="termux_extrakeys_blur_live_wallpaper_active_note">Dock blur is not available while using a live wallpaper. Blur has been set to 0.</string>
                 <string name="termux_app_bar_opacity_title">Opacity</string>
+                <string name="termux_dock_glass_grain_title">Glass grain</string>
+                <string name="termux_dock_glass_grain_summary">Subtle film grain over the dock glass. 0 disables it.</string>
 
             <!-- App Launcher Category -->
             <string name="termux_app_launcher_header">Behavior</string>

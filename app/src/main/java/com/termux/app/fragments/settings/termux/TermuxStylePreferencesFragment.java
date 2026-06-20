@@ -329,6 +329,10 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 mPreferences.setAppBarOpacity(value);
                 scheduleTermuxActivityStylingSync(false);
                 break;
+            case "dock_glass_grain":
+                mPreferences.setDockGlassGrain(value);
+                scheduleTermuxActivityStylingSync(false);
+                break;
             case "app_launcher_button_count":
                 mPreferences.setAppLauncherButtonCount(value);
                 scheduleTermuxActivityStylingSync(false);
@@ -363,6 +367,8 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.getExtraKeysBlurRadius();
             case "app_bar_opacity":
                 return mPreferences.getAppBarOpacity();
+            case "dock_glass_grain":
+                return mPreferences.getDockGlassGrain();
             case "app_launcher_button_count":
                 return mPreferences.getAppLauncherButtonCount();
             case "app_launcher_icon_scale_percent":

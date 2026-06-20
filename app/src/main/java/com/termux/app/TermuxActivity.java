@@ -33,6 +33,7 @@ import android.graphics.RuntimeShader;
 import android.graphics.RectF;
 import android.graphics.Shader;
 import android.graphics.drawable.Drawable;
+import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.LayerDrawable;
 import android.net.Uri;
@@ -1046,7 +1047,47 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
         );
         lightLayer.setDither(true);
+
+        // Optional film grain over the frosted glass — reads as real glass texture instead of a flat
+        // blur. Amount is user-controlled (Appearance > Glass grain); 0 omits the layer entirely.
+        int grain = mPreferences != null
+            ? mPreferences.getDockGlassGrain()
+            : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN;
+        if (grain > 0) {
+            return new LayerDrawable(new Drawable[] { baseLayer, lightLayer, buildDockGrainLayer(grain) });
+        }
         return new LayerDrawable(new Drawable[] { baseLayer, lightLayer });
+    }
+
+    /** Cached static monochrome noise tile for the dock-glass grain. */
+    @Nullable private Bitmap mDockGrainBitmap;
+
+    @NonNull
+    private Bitmap getDockGrainBitmap() {
+        if (mDockGrainBitmap == null) {
+            int size = 110;
+            int[] px = new int[size * size];
+            // Fixed seed -> stable grain across rebuilds (no shimmer when the dock repositions).
+            java.util.Random rnd = new java.util.Random(0x6A11E);
+            for (int i = 0; i < px.length; i++) {
+                int v = rnd.nextInt(256);        // monochrome speck luminance
+                int a = rnd.nextInt(256);        // sparse alpha -> film grain, not a flat gray wash
+                px[i] = (a << 24) | (v << 16) | (v << 8) | v;
+            }
+            mDockGrainBitmap = Bitmap.createBitmap(px, size, size, Bitmap.Config.ARGB_8888);
+        }
+        return mDockGrainBitmap;
+    }
+
+    /** A tiled grain layer whose overall strength scales with {@code grainPercent} (1..100). */
+    @NonNull
+    private Drawable buildDockGrainLayer(int grainPercent) {
+        BitmapDrawable grain = new BitmapDrawable(getResources(), getDockGrainBitmap());
+        grain.setTileModeXY(Shader.TileMode.REPEAT, Shader.TileMode.REPEAT);
+        grain.setDither(true);
+        // Cap the strength so even at 100% it stays a texture, not visual static.
+        grain.setAlpha(Math.round(Math.max(0, Math.min(100, grainPercent)) / 100f * 60f));
+        return grain;
     }
 
     /** Max alpha (of 255) the translucent dock-glass base reaches at full user opacity. Kept low so

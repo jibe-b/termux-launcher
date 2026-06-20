@@ -389,6 +389,14 @@ public final class TermuxPreferenceConstants {
         public static final int DEFAULT_VALUE_APP_BAR_OPACITY = 50;
 
         /**
+         * Defines the key for the dock-glass grain/noise amount (percentage, 0 disables). A subtle
+         * film grain over the frosted glass that reads as real glass texture rather than flat blur.
+         */
+        public static final String KEY_DOCK_GLASS_GRAIN = "dock_glass_grain";
+
+        public static final int DEFAULT_VALUE_DOCK_GLASS_GRAIN = 12;
+
+        /**
          * Stores the user's preferred terminal opacity while wallpaper mode is enabled so it can
          * be restored after temporarily disabling wallpaper.
          */

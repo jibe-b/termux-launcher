@@ -63,6 +63,15 @@
             app:showSeekBarValue="true" />
 
         <androidx.preference.SeekBarPreference
+            app:key="dock_glass_grain"
+            app:title="@string/termux_dock_glass_grain_title"
+            app:summary="@string/termux_dock_glass_grain_summary"
+            android:min="0"
+            android:max="100"
+            android:defaultValue="12"
+            app:showSeekBarValue="true" />
+
+        <androidx.preference.SeekBarPreference
             app:key="app_launcher_button_count"
             app:title="@string/termux_app_launcher_button_count_title"
             app:summary="@string/termux_app_launcher_button_count_summary"
