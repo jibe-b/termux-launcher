@@ -1034,18 +1034,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         GradientDrawable lightLayer = new GradientDrawable(
             GradientDrawable.Orientation.TOP_BOTTOM,
             new int[] {
-                withAlphaComponent(Color.WHITE, 26),
-                withAlphaComponent(accent, 14),
+                // No broad white sheen — a near-white wash over the wallpaper reads as frosted
+                // plastic. A faint cool accent lift at the top keeps the glass tinted, not milky.
+                withAlphaComponent(accent, 16),
+                withAlphaComponent(accent, 8),
                 Color.TRANSPARENT,
-                withAlphaComponent(Color.BLACK, 22)
+                withAlphaComponent(Color.BLACK, 20)
             }
         );
         lightLayer.setDither(true);
         return new LayerDrawable(new Drawable[] { baseLayer, lightLayer });
     }
 
-    /** Max alpha (of 255) the translucent dock-glass base reaches at full user opacity. */
-    private static final int DOCK_GLASS_BASE_MAX_ALPHA = 140;
+    /** Max alpha (of 255) the translucent dock-glass base reaches at full user opacity. Kept low so
+     *  the near-white day-theme surface colour stays a faint glass tint, not a plastic frost. */
+    private static final int DOCK_GLASS_BASE_MAX_ALPHA = 64;
 
     /** Lazily wires the reactive glass-plank controller to the inflated dock views. */
     private void setupDockPlankFx() {
