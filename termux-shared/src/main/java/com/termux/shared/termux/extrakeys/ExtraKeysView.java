@@ -662,6 +662,8 @@ public final class ExtraKeysView extends GridLayout {
                             animateKeyCapDip(button, KeyVisualState.RESTING);
                             hideBubble(false);
                             dismissTravelPopup(false);
+                            // Re-apply the key's persistent state so a latched modifier keeps its pill.
+                            restoreButtonVisualState(button, buttonInfo);
                             return true;
                         case MotionEvent.ACTION_UP:
                             requestParentDisallowIntercept(view, false);
@@ -686,6 +688,10 @@ public final class ExtraKeysView extends GridLayout {
                                 // feedback is visible around the finger; a held release collapses.
                                 hideBubble(tap);
                             }
+                            // performClick() above may have toggled a special key's active/locked
+                            // state — repaint so a now-latched modifier shows its persistent pill
+                            // ("hold/tap to keep pressed"), or a deactivated one clears it.
+                            restoreButtonVisualState(button, buttonInfo);
                             return true;
                         default:
                             return true;
@@ -910,12 +916,12 @@ public final class ExtraKeysView extends GridLayout {
                 rimAlpha = 245;
                 break;
             case STICKY_LOCKED:
-                fillAlpha = mKeyPressFeedbackBlurAvailable ? 70 : 120;
-                rimAlpha = 230;
+                fillAlpha = mKeyPressFeedbackBlurAvailable ? 64 : 120;
+                rimAlpha = 235;
                 break;
             case STICKY_ACTIVE:
-                fillAlpha = mKeyPressFeedbackBlurAvailable ? 34 : 80;
-                rimAlpha = 150;
+                fillAlpha = mKeyPressFeedbackBlurAvailable ? 48 : 96;
+                rimAlpha = 215;
                 break;
             case POPUP_ARMED:
                 // Source key reads as a "lifted/empty socket" while the popup floats above it.
@@ -931,12 +937,15 @@ public final class ExtraKeysView extends GridLayout {
 
         GradientDrawable chip = new GradientDrawable();
         chip.setShape(GradientDrawable.RECTANGLE);
-        chip.setCornerRadius(dpToPx(12f));
+        // Generous corner -> a stadium pill matching the dock capsule and the press bubble.
+        chip.setCornerRadius(dpToPx(18f));
         chip.setColor(withAlpha(tint, fillAlpha));
-        chip.setStroke(Math.max(1, Math.round(dpToPx(1f))), withAlpha(tint, rimAlpha));
+        // Thin hairline rim like the dock edge, brightened a touch off pure accent.
+        chip.setStroke(Math.max(1, Math.round(dpToPx(1.25f))),
+            withAlpha(lerpColor(tint, Color.WHITE, 0.10f), rimAlpha));
         chip.setDither(true);
 
-        int chipInset = Math.round(dpToPx(4f));
+        int chipInset = Math.round(dpToPx(3f));
         return new InsetDrawable(chip, chipInset, chipInset, chipInset, chipInset);
     }
 
@@ -995,8 +1004,8 @@ public final class ExtraKeysView extends GridLayout {
         GradientDrawable g = new GradientDrawable();
         g.setShape(GradientDrawable.RECTANGLE);
         g.setDither(true);
-        // Generous corner -> a glass key-cap matching the dock's rounded language.
-        g.setCornerRadius(Math.min(mBubbleR - mBubbleL, mBubbleB - mBubbleT) * 0.42f);
+        // Fully-rounded stadium ends -> a glass pill matching the dock capsule's rounded language.
+        g.setCornerRadius(Math.min(mBubbleR - mBubbleL, mBubbleB - mBubbleT) * 0.5f);
 
         mBubble = g;
         mBubbleAnchor = button;
@@ -1082,16 +1091,16 @@ public final class ExtraKeysView extends GridLayout {
         GradientDrawable bg = new GradientDrawable();
         bg.setShape(GradientDrawable.RECTANGLE);
         bg.setDither(true);
-        bg.setCornerRadius(Math.min(mTravelKeyW, mTravelKeyH) * (mPopupVerticalPill ? 0.5f : 0.42f));
+        bg.setCornerRadius(Math.min(mTravelKeyW, mTravelKeyH) * 0.5f); // stadium pill, like the dock
         bg.setOrientation(GradientDrawable.Orientation.TOP_BOTTOM);
-        // Travel popup floats free of the dock blur, so it gets a present, readable dark fill with a
-        // crisp bright accent rim (the same border language as the on-key bubble) — not a milky wash.
+        // Travel popup floats free of the dock blur, so it gets a present, readable dark fill (opaque
+        // enough that the source key doesn't bleed through) with a thin accent rim like the dock.
         bg.setColors(new int[] {
-            withAlpha(Color.rgb(20, 24, 32), mKeyPressFeedbackBlurAvailable ? 170 : 220),
-            withAlpha(Color.rgb(10, 12, 18), mKeyPressFeedbackBlurAvailable ? 170 : 220)
+            withAlpha(Color.rgb(20, 24, 32), mKeyPressFeedbackBlurAvailable ? 208 : 236),
+            withAlpha(Color.rgb(10, 12, 18), mKeyPressFeedbackBlurAvailable ? 208 : 236)
         });
-        bg.setStroke(Math.max(1, Math.round(dpToPx(2.4f))),
-            withAlpha(lerpColor(tint, Color.WHITE, 0.18f), 255));
+        bg.setStroke(Math.max(1, Math.round(dpToPx(1.4f))),
+            withAlpha(lerpColor(tint, Color.WHITE, 0.10f), 230));
 
         TextView tv = new TextView(getContext());
         tv.setGravity(Gravity.CENTER);
@@ -1151,8 +1160,8 @@ public final class ExtraKeysView extends GridLayout {
         // Border brightens to "selected" as the bubble reaches the secondary slot.
         boolean selected = frac >= 0.5f;
         int tint = feedbackTint();
-        mTravelBubbleBg.setStroke(Math.max(1, Math.round(dpToPx(selected ? 2.8f : 2.4f))),
-            withAlpha(lerpColor(tint, Color.WHITE, selected ? 0.35f : 0.18f), 255));
+        mTravelBubbleBg.setStroke(Math.max(1, Math.round(dpToPx(selected ? 1.8f : 1.4f))),
+            withAlpha(lerpColor(tint, Color.WHITE, selected ? 0.25f : 0.10f), selected ? 255 : 230));
         mTravelBubble.invalidate();
     }
 
@@ -1254,11 +1263,13 @@ public final class ExtraKeysView extends GridLayout {
         int tint = feedbackTint();
         mBubble.setOrientation(GradientDrawable.Orientation.TOP_BOTTOM);
         mBubble.setColors(new int[] {
-            withAlpha(tint, strong ? 58 : 40),
-            withAlpha(tint, strong ? 30 : 18)
+            withAlpha(tint, strong ? 44 : 30),
+            withAlpha(tint, strong ? 22 : 14)
         });
-        mBubble.setStroke(Math.max(1, Math.round(dpToPx(strong ? 2.6f : 2.2f))),
-            withAlpha(lerpColor(tint, Color.WHITE, 0.18f), 255));
+        // Thin hairline rim matching the dock's own edge (the dock leans on refraction, not a heavy
+        // border), brightened a touch off pure accent so it reads cleanly without going stark white.
+        mBubble.setStroke(Math.max(1, Math.round(dpToPx(strong ? 1.5f : 1.25f))),
+            withAlpha(lerpColor(tint, Color.WHITE, 0.10f), strong ? 235 : 210));
     }
 
     private int feedbackTint() {
