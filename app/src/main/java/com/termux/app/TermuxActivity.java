@@ -1050,31 +1050,31 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** Max alpha (of 255) the translucent dock-glass base reaches at full user opacity. Kept low so
      *  the blurred wallpaper carries the glass body; the base is just a faint legibility tint. */
-    private static final int DOCK_GLASS_BASE_MAX_ALPHA = 32;
+    private static final int DOCK_GLASS_BASE_MAX_ALPHA = 20;
 
     /** Cached light-scatter filter applied to the blurred wallpaper backdrop. */
     @Nullable private ColorMatrixColorFilter mGlassFrostFilter;
 
     /**
-     * Real frosted glass scatters light: it slightly brightens and desaturates whatever is behind it,
-     * varying with the content rather than as a flat film. Applying this content-aware scatter to the
-     * blurred backdrop image (a cheap GPU colour filter) is what makes it read as glass instead of a
-     * plastic white wash. Compresses contrast toward mid + lifts brightness + desaturates.
+     * "Liquid glass" vibrancy applied to the blurred backdrop (cheap GPU colour filter). Apple-style
+     * glass does NOT desaturate and lift the backdrop toward grey — that reads as milky plastic.
+     * Instead it keeps the content vivid: boost saturation and DEEPEN contrast so darks stay dark and
+     * colours pop through the blur, so the dock reads as a vivid see-through pane, not a flat slab.
      */
     @NonNull
     private ColorMatrixColorFilter glassFrostFilter() {
         if (mGlassFrostFilter == null) {
             ColorMatrix frost = new ColorMatrix();
-            frost.setSaturation(0.82f);
-            float c = 0.88f;   // contrast scale (<1 compresses toward mid grey = frosty haze)
-            float t = 16f;     // gentle brightness lift; kept low so light glyphs stay legible
-            ColorMatrix scatter = new ColorMatrix(new float[] {
+            frost.setSaturation(1.30f);   // vibrancy boost (was desaturating -> milk)
+            float c = 1.06f;   // slight contrast boost (>1); opposite of the milky compression
+            float t = -6f;     // no brightness lift; tiny deepen so darks don't haze to grey
+            ColorMatrix vibrancy = new ColorMatrix(new float[] {
                 c, 0, 0, 0, t,
                 0, c, 0, 0, t,
                 0, 0, c, 0, t,
                 0, 0, 0, 1, 0
             });
-            frost.postConcat(scatter);
+            frost.postConcat(vibrancy);
             mGlassFrostFilter = new ColorMatrixColorFilter(frost);
         }
         return mGlassFrostFilter;

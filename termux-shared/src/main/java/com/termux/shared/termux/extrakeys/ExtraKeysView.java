@@ -306,6 +306,10 @@ public final class ExtraKeysView extends GridLayout {
     @Nullable private Animator mKeyBloomAnimator;
     @Nullable private MaterialButton mKeyBloomButton;
 
+    /** Generic long-press hold-visual for keys that don't auto-repeat or toggle (so EVERY key shows
+     *  a press-hold indication, not just repetitive/special ones). */
+    @Nullable private Runnable mGenericHoldVisualRunnable;
+
     public ExtraKeysView(Context context, AttributeSet attrs) {
         super(context, attrs);
         // The hold bloom lives in this view's overlay and must be allowed to draw past the
@@ -585,6 +589,11 @@ public final class ExtraKeysView extends GridLayout {
                             setButtonPressedVisualState(button, buttonInfo, true);
                             // Start long press scheduled executors which will be stopped in next MotionEvent
                             startScheduledExecutors(view, buttonInfo, button);
+                            // Keys that neither auto-repeat nor toggle get no hold path above, so give
+                            // them a generic press-hold visual so every key reacts to a long press.
+                            if (!mRepetitiveKeys.contains(buttonInfo.getKey()) && !isSpecialButton(buttonInfo)) {
+                                scheduleGenericHoldVisual(button, buttonInfo);
+                            }
                             return true;
                         case MotionEvent.ACTION_MOVE:
                             requestParentDisallowIntercept(view, true);
@@ -758,6 +767,28 @@ public final class ExtraKeysView extends GridLayout {
             mHandler.removeCallbacks(mSpecialButtonsLongHoldRunnable);
             mSpecialButtonsLongHoldRunnable = null;
         }
+        cancelGenericHoldVisual();
+    }
+
+    /** Schedule the generic press-hold visual (chip deepen + bloom) for a non-repeat/non-special key. */
+    private void scheduleGenericHoldVisual(@NonNull MaterialButton button, @NonNull ExtraKeyButton buttonInfo) {
+        if (mHandler == null) {
+            mHandler = new Handler(Looper.getMainLooper());
+        }
+        cancelGenericHoldVisual();
+        mGenericHoldVisualRunnable = () -> {
+            setButtonVisualState(button, buttonInfo, KeyVisualState.REPEAT_HELD);
+            animateKeyCapDip(button, KeyVisualState.REPEAT_HELD);
+            showKeyBloom(button, KeyVisualState.REPEAT_HELD);
+        };
+        mHandler.postDelayed(mGenericHoldVisualRunnable, mLongPressTimeout);
+    }
+
+    private void cancelGenericHoldVisual() {
+        if (mGenericHoldVisualRunnable != null && mHandler != null) {
+            mHandler.removeCallbacks(mGenericHoldVisualRunnable);
+        }
+        mGenericHoldVisualRunnable = null;
     }
 
     public class SpecialButtonsLongHoldRunnable implements Runnable {
@@ -899,9 +930,9 @@ public final class ExtraKeysView extends GridLayout {
         int whiteRimAlpha;
         switch (state) {
             case REPEAT_HELD:
-                fillAlpha = mKeyPressFeedbackBlurAvailable ? 64 : 134;
-                rimAlpha = 200;
-                whiteRimAlpha = 78;
+                fillAlpha = mKeyPressFeedbackBlurAvailable ? 124 : 150;
+                rimAlpha = 245;
+                whiteRimAlpha = 110;
                 break;
             case STICKY_LOCKED:
                 fillAlpha = mKeyPressFeedbackBlurAvailable ? 48 : 116;
@@ -921,9 +952,9 @@ public final class ExtraKeysView extends GridLayout {
                 break;
             case PRESSED:
             default:
-                fillAlpha = mKeyPressFeedbackBlurAvailable ? 52 : 118;
-                rimAlpha = 170;
-                whiteRimAlpha = 60;
+                fillAlpha = mKeyPressFeedbackBlurAvailable ? 96 : 128;
+                rimAlpha = 230;
+                whiteRimAlpha = 96;
                 break;
         }
 
@@ -992,8 +1023,8 @@ public final class ExtraKeysView extends GridLayout {
         clearKeyBloom();
 
         int tint = mKeyPressFeedbackColor != 0 ? mKeyPressFeedbackColor : mButtonActiveBackgroundColor;
-        final float radius = dpToPx(state == KeyVisualState.POPUP_ARMED ? 22f : 30f);
-        final int peakAlpha = state == KeyVisualState.POPUP_ARMED ? 120 : 150;
+        final float radius = dpToPx(state == KeyVisualState.POPUP_ARMED ? 26f : 34f);
+        final int peakAlpha = state == KeyVisualState.POPUP_ARMED ? 150 : 190;
         final float cx = button.getX() + button.getWidth() / 2f;
         final float cy = button.getY() + button.getHeight() / 2f;
 
