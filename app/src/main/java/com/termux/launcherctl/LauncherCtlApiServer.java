@@ -360,6 +360,8 @@ public class LauncherCtlApiServer {
                 return maybeTextResponse(request, "load", TaiManager.getInstance(context).loadModel(request.body));
             } else if ("POST".equals(request.method) && "/v1/ai/runtime/load".equals(request.path)) {
                 return maybeTextResponse(request, "load", TaiManager.getInstance(context).loadModel(request.body));
+            } else if ("POST".equals(request.method) && "/v1/ai/runtime/preflight".equals(request.path)) {
+                return maybeTextResponse(request, "preflight", TaiManager.getInstance(context).preflight(request.body));
             } else if ("POST".equals(request.method) && "/v1/ai/models/unload".equals(request.path)) {
                 return maybeTextResponse(request, "unload", TaiManager.getInstance(context).unloadModel());
             } else if ("POST".equals(request.method) && "/v1/ai/runtime/unload".equals(request.path)) {
@@ -710,9 +712,9 @@ public class LauncherCtlApiServer {
             warnings.put("Notification access is disabled; notification and media tools are unavailable.");
             blockingReasons.put("notification_access_disabled");
         }
-        if (!device.liteRtLmAbiSupported) {
-            warnings.put("LiteRT-LM backend is not supported on this device ABI.");
-            blockingReasons.put("litert_lm_abi_unsupported");
+        if (!device.liteRtLmAbiSupported || !device.liteRtLmNativeLibrariesAvailable) {
+            warnings.put("LiteRT-LM backend is not available for this device ABI/APK.");
+            blockingReasons.put(device.liteRtLmAbiSupported ? "litert_lm_native_unavailable" : "litert_lm_abi_unsupported");
         }
         if (device.mnnUnsupportedReason != null && !device.mnnUnsupportedReason.isEmpty()) {
             warnings.put(device.mnnUnsupportedReason);
@@ -744,6 +746,7 @@ public class LauncherCtlApiServer {
         }
 
         boolean backendSupported = device.liteRtLmAbiSupported
+            && device.liteRtLmNativeLibrariesAvailable
             && TaiModelSpec.BACKEND_LITERT_LM.equals(catalogEntry != null ? catalogEntry.backend : "");
         info.put("backendSupported", backendSupported);
 
@@ -1213,6 +1216,7 @@ public class LauncherCtlApiServer {
         rateLimiters.put("POST:/v1/ai/models/load", new SimpleRateLimiter(20, 60_000));
         rateLimiters.put("POST:/v1/ai/models/unload", new SimpleRateLimiter(60, 60_000));
         rateLimiters.put("POST:/v1/ai/runtime/load", new SimpleRateLimiter(20, 60_000));
+        rateLimiters.put("POST:/v1/ai/runtime/preflight", new SimpleRateLimiter(60, 60_000));
         rateLimiters.put("POST:/v1/ai/runtime/unload", new SimpleRateLimiter(60, 60_000));
         rateLimiters.put("POST:/v1/ai/runtime/keep-warm", new SimpleRateLimiter(60, 60_000));
         rateLimiters.put("POST:/v1/ai/runtime/cancel", new SimpleRateLimiter(60, 60_000));
@@ -1686,16 +1690,17 @@ public class LauncherCtlApiServer {
             "  tai downloads\n" +
             "  tai download-cancel <model-id>\n" +
             "  tai delete <model-id>\n" +
+            "  tai preflight [model] [--auto|--cpu|--gpu]\n" +
             "  tai load [model] [--auto|--cpu|--gpu]\n" +
             "  tai unload\n" +
             "  tai keep-warm [model] [--minutes N] [--auto|--cpu|--gpu]\n" +
             "  tai cancel\n" +
             "  tai doctor\n" +
             "\n" +
-            "TAI is authenticated through ~/.launcherctl and runs in the Android app process.\n" +
-            "LiteRT-LM runs in the Android app process when supported by the installed APK.\n" +
+            "TAI is authenticated through ~/.launcherctl and runs native AI in the isolated :tai_runtime process.\n" +
+            "LiteRT-LM and MNN load in :tai_runtime after ABI/API/library/model/memory preflight.\n" +
             "MNN models route through the bundled MNN backend when supported by the installed APK.\n" +
-            "Auto uses backend-specific GPU-first behavior with CPU fallback where available.\n" +
+            "Auto defaults to CPU on unknown devices; GPU is used automatically only after a successful device/model history.\n" +
             "OpenAI-compatible endpoints (default bind mode is localhost):\n" +
             "  /v1/models\n" +
             "  /v1/chat/completions\n" +
@@ -1792,6 +1797,23 @@ public class LauncherCtlApiServer {
             "    [ \"$#\" -gt 0 ] || { echo \"usage: tai delete <model-id>\" >&2; exit 2; }\n" +
             "    model=$(json_escape \"$1\")\n" +
             "    post_json /v1/ai/models/delete \"{\\\"modelId\\\":\\\"$model\\\"}\"\n" +
+            "    ;;\n" +
+            "  preflight)\n" +
+            "    model=\"\"\n" +
+            "    accelerator=\"\"\n" +
+            "    while [ \"$#\" -gt 0 ]; do\n" +
+            "      case \"$1\" in\n" +
+            "        --auto) accelerator=auto ;;\n" +
+            "        --cpu) accelerator=cpu ;;\n" +
+            "        --gpu) accelerator=gpu ;;\n" +
+            "        --*) echo \"usage: tai preflight [model] [--auto|--cpu|--gpu]\" >&2; exit 2 ;;\n" +
+            "        *) [ -z \"$model\" ] || { echo \"usage: tai preflight [model] [--auto|--cpu|--gpu]\" >&2; exit 2; }; model=\"$1\" ;;\n" +
+            "      esac\n" +
+            "      shift\n" +
+            "    done\n" +
+            "    accel_json=\"\"\n" +
+            "    if [ -n \"$accelerator\" ]; then accel_json=\",\\\"accelerator\\\":\\\"$accelerator\\\"\"; fi\n" +
+            "    if [ -n \"$model\" ]; then model_escaped=$(json_escape \"$model\"); post_json /v1/ai/runtime/preflight \"{\\\"model\\\":\\\"$model_escaped\\\"$accel_json}\"; elif [ -n \"$accelerator\" ]; then post_json /v1/ai/runtime/preflight \"{\\\"accelerator\\\":\\\"$accelerator\\\"}\"; else post_json /v1/ai/runtime/preflight '{}'; fi\n" +
             "    ;;\n" +
             "  load)\n" +
             "    model=\"\"\n" +

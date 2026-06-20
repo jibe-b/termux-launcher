@@ -40,7 +40,7 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
     private static final double DEFAULT_TEMPERATURE = 1.0d;
     private static final int DEFAULT_KEEP_WARM_MINUTES = 30;
     private static final String AUTO_GPU_REASON =
-        "Auto selected GPU first from the model's Edge Gallery compatibility profile.";
+        "Auto selected GPU because this model/device has a successful GPU load history.";
     private static final String AUTO_MODEL_CPU_REASON =
         "Auto selected CPU because the model's Edge Gallery compatibility profile requires CPU.";
 
@@ -376,18 +376,24 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         if (!deviceCapabilities.liteRtLmAbiSupported) {
             return error(501, "litert_lm_unsupported_abi", "LiteRT-LM 0.12.0 ships native libraries for arm64-v8a and x86_64 only.");
         }
+        if (!deviceCapabilities.liteRtLmNativeLibrariesAvailable) {
+            return error(501, "litert_lm_native_unavailable", "LiteRT-LM native libraries are not available in this APK.");
+        }
         if (modelSpec.localPath == null || modelSpec.localPath.trim().isEmpty()) {
             return error(404, "model_file_missing", "Download or import this model before loading it.");
         }
         File modelFile = new File(modelSpec.localPath);
         if (!modelFile.isFile() || !modelFile.canRead()) {
-            JSONObject error = error(404, "model_file_not_readable", "Model file is missing or not readable by the app process.");
+            JSONObject error = error(404, "model_file_not_readable", "Model file is missing or not readable by the runtime process.");
             error.put("path", modelSpec.localPath);
             return error;
         }
 
         String requestedAccelerator = requestedAccelerator(options);
         List<String> autoAccelerators = deviceCapabilities.compatibleAccelerators(profile);
+        if (requestedAccelerator == null) {
+            autoAccelerators = safeAutoAccelerators(modelSpec, deviceCapabilities, profile);
+        }
         if (requestedAccelerator != null) {
             if (!profile.supports(requestedAccelerator)) {
                 JSONObject error = error(400, "accelerator_not_supported_by_model",
@@ -436,14 +442,17 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
                         Backend backend = new Backend.GPU();
                         initializedBackendName = backend.getName();
                         initializedFallbackReason = AUTO_GPU_REASON;
-                        initializedEngine = createAndInitializeEngine(modelSpec, modelFile.getAbsolutePath(), options, profile, backend);
+                        initializedEngine = createAndInitializeEngineWithCrashMarker(modelSpec, modelFile.getAbsolutePath(), options, profile, backend, "gpu");
                     } catch (Exception gpuException) {
+                        TaiRuntimeCrashMarker.clear(appContext);
+                        TaiRuntimeHistory.recordFailure(appContext, modelSpec, deviceCapabilities,
+                            TaiModelSpec.BACKEND_LITERT_LM, "gpu", gpuException.getMessage() == null ? "GPU initialization failed." : gpuException.getMessage());
                         if (!autoAccelerators.contains("cpu")) throw gpuException;
                         throwIfLoadCancellationRequested();
                         Backend backend = new Backend.CPU(null);
                         initializedBackendName = backend.getName();
                         initializedFallbackReason = "Auto GPU initialization failed; selected the model's CPU fallback. GPU error: " + gpuException.getMessage();
-                        initializedEngine = createAndInitializeEngine(modelSpec, modelFile.getAbsolutePath(), options, profile, backend);
+                        initializedEngine = createAndInitializeEngineWithCrashMarker(modelSpec, modelFile.getAbsolutePath(), options, profile, backend, "cpu");
                     }
                 } else {
                     throwIfLoadCancellationRequested();
@@ -452,15 +461,19 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
                     initializedFallbackReason = deviceCapabilities.pixel10 && profile.supports("gpu")
                         ? "Auto selected CPU because Google AI Edge Gallery disables GPU on Pixel 10 devices."
                         : AUTO_MODEL_CPU_REASON;
-                    initializedEngine = createAndInitializeEngine(modelSpec, modelFile.getAbsolutePath(), options, profile, backend);
+                    initializedEngine = createAndInitializeEngineWithCrashMarker(modelSpec, modelFile.getAbsolutePath(), options, profile, backend, "cpu");
                 }
             } else {
                 throwIfLoadCancellationRequested();
                 Backend backend = "gpu".equals(requestedAccelerator) ? new Backend.GPU() : new Backend.CPU(null);
                 initializedBackendName = backend.getName();
-                initializedEngine = createAndInitializeEngine(modelSpec, modelFile.getAbsolutePath(), options, profile, backend);
+                initializedEngine = createAndInitializeEngineWithCrashMarker(modelSpec, modelFile.getAbsolutePath(), options, profile, backend, requestedAccelerator);
             }
         } catch (Exception e) {
+            TaiRuntimeCrashMarker.clear(appContext);
+            TaiRuntimeHistory.recordFailure(appContext, modelSpec, deviceCapabilities,
+                TaiModelSpec.BACKEND_LITERT_LM, acceleratorFromBackendName(initializedBackendName, requestedAccelerator),
+                e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
             synchronized (this) {
                 boolean cancelled = loadCancellationRequested;
                 finishLoadingLocked();
@@ -486,6 +499,9 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
                 loadedAtMs = System.currentTimeMillis();
                 lastUsedAtMs = loadedAtMs;
                 keepWarmUntilMs = keepWarmMinutes > 0 ? loadedAtMs + TimeUnit.MINUTES.toMillis(keepWarmMinutes) : 0L;
+                TaiRuntimeCrashMarker.clear(appContext);
+                TaiRuntimeHistory.recordSuccess(appContext, modelSpec, deviceCapabilities,
+                    TaiModelSpec.BACKEND_LITERT_LM, acceleratorFromBackendName(backendName, requestedAccelerator));
                 finishLoadingLocked();
                 statusMessage = keepWarmUntilMs > 0L ? "Model loaded and warm." : "Model loaded.";
                 maybeRefreshStateLocked();
@@ -514,6 +530,7 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         }
 
         closeEngine(initializedEngine);
+        TaiRuntimeCrashMarker.clear(appContext);
         synchronized (this) {
             finishLoadingLocked();
             runtimeState = "unloaded";
@@ -612,6 +629,18 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         }
     }
 
+    private Engine createAndInitializeEngineWithCrashMarker(
+        @NonNull TaiModelSpec modelSpec,
+        @NonNull String modelPath,
+        @NonNull TaiRuntimeOptions options,
+        @NonNull TaiModelProfile profile,
+        @NonNull Backend backend,
+        @NonNull String accelerator
+    ) {
+        TaiRuntimeCrashMarker.markLoad(appContext, modelSpec, options.withAccelerator(accelerator), TaiModelSpec.BACKEND_LITERT_LM);
+        return createAndInitializeEngine(modelSpec, modelPath, options, profile, backend);
+    }
+
     @NonNull
     private Backend matchingBackend(@NonNull Backend backend) {
         return backend instanceof Backend.GPU ? new Backend.GPU() : new Backend.CPU(null);
@@ -622,6 +651,30 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         if (options.accelerator == null || options.accelerator.trim().isEmpty()
             || "auto".equalsIgnoreCase(options.accelerator)) return null;
         return options.accelerator.trim().toLowerCase(Locale.ROOT);
+    }
+
+    @NonNull
+    private List<String> safeAutoAccelerators(
+        @NonNull TaiModelSpec modelSpec,
+        @NonNull TaiDeviceCapabilities deviceCapabilities,
+        @NonNull TaiModelProfile profile
+    ) {
+        if (profile.supports("gpu") && deviceCapabilities.supportsAccelerator("gpu")
+            && TaiRuntimeHistory.hasSuccessfulGpu(appContext, modelSpec, deviceCapabilities)) {
+            return deviceCapabilities.compatibleAccelerators(profile);
+        }
+        if (profile.supports("cpu") && deviceCapabilities.supportsAccelerator("cpu")) {
+            return Collections.singletonList("cpu");
+        }
+        return Collections.emptyList();
+    }
+
+    @NonNull
+    private String acceleratorFromBackendName(@NonNull String backend, @Nullable String fallback) {
+        String value = backend.toLowerCase(Locale.ROOT);
+        if (value.contains("gpu")) return "gpu";
+        if (value.contains("cpu")) return "cpu";
+        return fallback == null ? "auto" : fallback;
     }
 
     private void applyExperimentalFlags(@NonNull TaiRuntimeOptions options, @NonNull String modelPath) {

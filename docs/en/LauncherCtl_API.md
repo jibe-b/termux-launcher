@@ -10,7 +10,7 @@ LauncherCtl is a localhost API bridge for exposing Android/app data to shell too
 
 Important behavior:
 - `launcherctl tty-doctor` validates the optional local `~/.rish/rish` setup.
-- `tai` uses the same authenticated bridge for the local Termux AI endpoint.
+- `tai` uses the same authenticated bridge for the local Termux AI endpoint; native AI runtime work is isolated in `:tai_runtime`.
 - Custom Shizuku shell commands should use `rish -c` directly.
 
 ## Files and Components
@@ -43,6 +43,7 @@ TAI endpoints are documented in [TAI / Termux AI](Termux_AI). They share this AP
 Common routes:
 - `GET /v1/ai/status`
 - `GET /v1/ai/runtime`
+- `POST /v1/ai/runtime/preflight`
 - `POST /v1/ai/runtime/load`
 - `POST /v1/ai/runtime/unload`
 - `POST /v1/ai/runtime/keep-warm`
@@ -61,6 +62,8 @@ Common routes:
 - `POST /v1/embeddings`
 
 `/v1/chat/completions` and `/v1/completions` support `stream: true` and return `text/event-stream` chunks ending with `data: [DONE]`.
+
+`POST /v1/ai/runtime/preflight` checks ABI, API level, bundled native libraries, model package readability/format, memory, accelerator policy, and known backend history without touching native LiteRT-LM/MNN runtime code.
 
 #### `GET /v1/models` metadata
 

@@ -54,9 +54,15 @@ qwen2.5-coder-1.5b-instruct-mnn
 
 Clients should not assume every model supports every content part. Check `_backend` and `_capabilities`.
 
+## Load Preflight And Isolation
+
+`tai preflight <model>` and `POST /v1/ai/runtime/preflight` check compatibility without touching native runtime code. The checks cover ABI, Android API level, bundled native libraries, model-file readability/format, sidecar files for MNN packages, recommended and available memory, accelerator support, known GPU exclusions, and prior backend failures recorded for this model/device.
+
+Actual native loading happens only in `:tai_runtime`. If LiteRT-LM GPU initialization or MNN native load crashes the runtime process, the launcher UI/API process remains alive and reports the last attempted model, backend, accelerator, and suggested fallback.
+
 ## LiteRT-LM Backend
 
-LiteRT-LM runs inside the Android app process and is used for Gemma 4 and MobileActions models.
+LiteRT-LM runs inside the isolated Android `:tai_runtime` process and is used for Gemma 4 and MobileActions models.
 
 Supported surfaces:
 
@@ -89,7 +95,7 @@ Gemma 4 uses a multimodal LiteRT engine configuration:
 - vision backend: selected accelerator, usually GPU
 - audio backend: CPU
 
-This matches the LiteRT-LM Android pattern used by Google AI Edge Gallery: GPU can run text and vision while audio decoding uses CPU. If `accelerator` is omitted or set to `auto`, TAI follows the model profile and device policy. You can force GPU for validation:
+This matches the LiteRT-LM Android pattern used by Google AI Edge Gallery: GPU can run text and vision while audio decoding uses CPU. If `accelerator` is omitted or set to `auto`, TAI defaults to CPU until the same model/device has a successful GPU load history. You can force GPU for validation:
 
 ```sh
 tai load gemma-4-e2b-it-litert-lm --gpu
@@ -164,7 +170,7 @@ MobileActions uses the LiteRT-LM runner but has its own profile:
 | --- | --- | ---: | ---: | ---: | ---: |
 | `functiongemma-270m-mobile-actions-litert-lm` | CPU only | 1024 | 64 | 0.95 | 0.0 |
 
-TAI keeps MobileActions in a separate CPU companion slot when available. Loading a Gemma assistant model can also load MobileActions without evicting the assistant slot.
+TAI keeps MobileActions in a separate CPU companion slot when available. Companion auto-load is opt-in in settings; loading a Gemma assistant model no longer loads MobileActions automatically unless that setting is enabled and preflight passes.
 
 TAI does not execute Android actions or shell commands by itself. It returns tool calls for the client to handle.
 
@@ -217,7 +223,7 @@ OpenAI request JSON can override supported runtime fields:
 }
 ```
 
-If `accelerator` is `auto` or omitted, TAI preserves the MNN config default. It does not force CPU in Java. Explicit `accelerator` can override `backend_type` for supported values.
+If `accelerator` is `auto` or omitted, TAI uses CPU for safety before native load. Explicit `accelerator` can override `backend_type` for supported values such as CPU or OpenCL/GPU.
 
 ### MNN Tools
 

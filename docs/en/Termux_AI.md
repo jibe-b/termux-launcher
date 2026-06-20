@@ -1,6 +1,6 @@
 # TAI / Termux AI
 
-TAI is the local on-device model endpoint for Termux Launcher. It runs inside the Android app process and exposes a small authenticated localhost API through the existing `launcherctl` bridge.
+TAI is the local on-device model endpoint for Termux Launcher. The localhost API stays in the launcher process, while native LiteRT-LM/MNN model loading and generation run in an isolated Android `:tai_runtime` process.
 
 TAI is intentionally not a shell agent. Use established shell/coding clients such as `aichat` or `tmuxai` for terminal workflows, pane context, command review, and coding UX. TAI provides the local model runtime those tools can call.
 
@@ -51,9 +51,9 @@ TAI stores user overrides separately from model metadata. Runtime tunables defau
 - speculative decoding
 - idle unload / keep-warm policy
 
-Auto accelerator follows the ordered compatible accelerator list from Google AI Edge Gallery's model allowlist. `functiongemma-270m-mobile-actions-litert-lm` is CPU-only with temperature 0.0, while Gemma 4 E2B/E4B prefer GPU with CPU fallback and use their Gallery defaults. TAI also applies Gallery's Pixel 10 GPU exclusion and minimum-memory metadata. Explicit `--gpu` or `--cpu` is accepted only when both the model profile and device support it.
+Before every load, TAI runs a hard preflight for ABI, Android API level, bundled native libraries, model-file readability/format, memory pressure, accelerator policy, and known per-device failures. Auto accelerator defaults to CPU on unknown devices. GPU is used automatically only after the same model/device/backend has loaded successfully on GPU before; explicit `--gpu` remains available for manual testing when the model profile and device support it. `functiongemma-270m-mobile-actions-litert-lm` is CPU-only with temperature 0.0, while Gemma 4 E2B/E4B retain their Gallery defaults.
 
-Device memory detection matches Gallery: Android 14 and newer use `ActivityManager.MemoryInfo.advertisedMem`; older versions use `totalMem`. `tai runtime` exposes the detected ABI, memory source, SoC, device model, available phase-one accelerators, active model profile, and any memory warning. A low-memory result is a warning, matching Gallery's proceed-anyway behavior, rather than an automatic load failure.
+Device memory detection matches Gallery for advertised/total RAM and also checks current available memory. Low available memory is a hard guard before native runtime initialization; below-recommendation RAM is reported as a warning and prevents surprise OpenAI auto-loads.
 
 Known profiles are synchronized with Edge Gallery 1.0.15:
 
@@ -83,6 +83,7 @@ tai models
 tai import ~/models/gemma.litertlm gemma-4-e2b-it-local
 tai download gemma-4-e2b-it-litert-lm https://example.invalid/path/to/model.litertlm --accept-terms
 tai downloads
+tai preflight gemma-4-e2b-it-litert-lm
 tai load gemma-4-e2b-it-litert-lm
 tai load gemma-4-e2b-it-litert-lm --gpu
 tai load gemma-4-e2b-it-litert-lm --cpu
@@ -102,6 +103,7 @@ Implemented endpoints:
 
 - `GET /v1/ai/status`
 - `GET /v1/ai/runtime`
+- `POST /v1/ai/runtime/preflight`
 - `POST /v1/ai/runtime/load`
 - `POST /v1/ai/runtime/unload`
 - `POST /v1/ai/runtime/keep-warm`
@@ -120,9 +122,9 @@ Implemented endpoints:
 - `POST /v1/embeddings`
 - `POST /v1/audio/speech`
 
-Model import and download registry persistence is implemented. Downloaded or imported `.litertlm` models can be loaded through the Android-side LiteRT-LM adapter on supported 64-bit devices.
+Model import and download registry persistence is implemented. Downloaded or imported `.litertlm` models can be loaded through the isolated Android LiteRT-LM adapter when preflight passes.
 
-The runtime supports non-streaming JSON responses and streaming `text/event-stream` responses. Streaming emits OpenAI-style chunks and finishes with `data: [DONE]`. Auto follows the model profile and device exclusions before initializing LiteRT-LM. The app manifest declares the same optional native libraries as Edge Gallery: `libvndksupport.so`, `libOpenCL.so`, `libcdsprpc.so`, and `libedgetpu_litert.so`. LiteRT-LM's `Capabilities` API is checked before speculative decoding is enabled. A future isolated GPU probe/runtime process should still be added so failed native GPU initialization cannot crash the main launcher process.
+The runtime supports non-streaming JSON responses and streaming `text/event-stream` responses. Streaming emits OpenAI-style chunks and finishes with `data: [DONE]`. The app manifest declares the same optional native libraries as Edge Gallery: `libvndksupport.so`, `libOpenCL.so`, `libcdsprpc.so`, and `libedgetpu_litert.so`. LiteRT-LM's `Capabilities` API is checked inside `:tai_runtime` before speculative decoding is enabled. If native initialization crashes the runtime process, the launcher survives and reports the last attempted model/backend plus CPU/smaller-model fallback guidance.
 
 Reference implementation and metadata:
 
@@ -178,6 +180,5 @@ For backend-specific details, including LiteRT-LM GPU multimodal behavior, MNN c
 ## Current Limitations / TODO
 
 - Expand benchmark counters and deeper runtime diagnostics.
-- Move LiteRT-LM GPU probing/loading into an isolated runtime process so native GPU failures cannot crash the main launcher process.
 - Add copy-into-private-storage import mode and UI file picker.
 - Add pause/cancel/retry controls for foreground downloads.

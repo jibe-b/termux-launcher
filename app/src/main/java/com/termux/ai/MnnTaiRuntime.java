@@ -177,7 +177,18 @@ public final class MnnTaiRuntime implements TaiRuntime {
         }
         JSONObject validationError = validateMnnPackage(config);
         if (validationError != null) return validationError;
+        TaiDeviceCapabilities deviceCapabilities = TaiDeviceCapabilities.detect(appContext);
+        if (!deviceCapabilities.mnnSupported) {
+            return error(501, "mnn_native_unavailable",
+                deviceCapabilities.mnnUnsupportedReason == null
+                    ? "Native MNN runtime libraries are not available for this APK/ABI."
+                    : deviceCapabilities.mnnUnsupportedReason);
+        }
+        TaiRuntimeCrashMarker.markLoad(appContext, modelSpec, options, TaiModelSpec.BACKEND_MNN_LLM);
         if (!isNativeRuntimeAvailable()) {
+            TaiRuntimeCrashMarker.clear(appContext);
+            TaiRuntimeHistory.recordFailure(appContext, modelSpec, deviceCapabilities,
+                TaiModelSpec.BACKEND_MNN_LLM, backendName(options), "Native MNN runtime libraries are not available for this APK/ABI.");
             return error(501, "mnn_native_unavailable", "Native MNN runtime libraries are not available for this APK/ABI.");
         }
 
@@ -188,12 +199,16 @@ public final class MnnTaiRuntime implements TaiRuntime {
             releaseSessionLocked();
         }
 
-        LlmSession initialized = new LlmSession();
-        String mergedConfig = mergedConfigJson(config, modelSpec, options);
-        String extraConfig = extraConfigJson(modelSpec);
+        LlmSession initialized;
         try {
+            String mergedConfig = mergedConfigJson(config, modelSpec, options);
+            String extraConfig = extraConfigJson(modelSpec);
+            initialized = new LlmSession();
             initialized.load(config.getAbsolutePath(), null, mergedConfig, extraConfig);
         } catch (Throwable t) {
+            TaiRuntimeCrashMarker.clear(appContext);
+            TaiRuntimeHistory.recordFailure(appContext, modelSpec, deviceCapabilities,
+                TaiModelSpec.BACKEND_MNN_LLM, backendName(options), message(t));
             synchronized (this) {
                 runtimeState = "failed";
                 statusMessage = "MNN load failed: " + message(t);
@@ -209,6 +224,9 @@ public final class MnnTaiRuntime implements TaiRuntime {
             loadedAtMs = System.currentTimeMillis();
             lastUsedAtMs = loadedAtMs;
             keepWarmUntilMs = keepWarmMinutes > 0 ? loadedAtMs + TimeUnit.MINUTES.toMillis(keepWarmMinutes) : 0L;
+            TaiRuntimeCrashMarker.clear(appContext);
+            TaiRuntimeHistory.recordSuccess(appContext, modelSpec, deviceCapabilities,
+                TaiModelSpec.BACKEND_MNN_LLM, backendName(options));
             runtimeState = "loaded";
             statusMessage = keepWarmUntilMs > 0L ? "MNN model loaded and warm." : "MNN model loaded.";
             JSONObject data = stateEnvelopeLocked(true);

@@ -14,6 +14,7 @@ import com.google.ai.edge.litertlm.OpenApiTool;
 import com.google.ai.edge.litertlm.ToolCall;
 import com.google.ai.edge.litertlm.ToolKt;
 import com.google.ai.edge.litertlm.ToolProvider;
+import com.termux.shared.android.ProcessUtils;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -43,7 +44,9 @@ public final class TaiManager {
     private final TaiModelRegistry registry;
     private final TaiModelStore modelStore;
     private final TaiModelDownloader modelDownloader;
-    private final TaiRuntime runtime;
+    @Nullable private TaiRuntime runtime;
+    @Nullable private final TaiRuntimeServiceClient runtimeClient;
+    private final boolean runtimeProcess;
 
     public interface OpenAiStreamSink {
         void onEvent(@NonNull JSONObject event) throws IOException;
@@ -52,15 +55,19 @@ public final class TaiManager {
 
     private TaiManager(@NonNull Context context) {
         appContext = context.getApplicationContext();
-        TaiRemoteCatalog.loadCached(appContext);
-        Thread catalogRefresh = new Thread(() -> TaiRemoteCatalog.refresh(appContext), "tai-catalog-refresh");
-        catalogRefresh.setDaemon(true);
-        catalogRefresh.start();
+        runtimeProcess = isTaiRuntimeProcess(appContext);
+        if (!runtimeProcess) {
+            TaiRemoteCatalog.loadCached(appContext);
+            Thread catalogRefresh = new Thread(() -> TaiRemoteCatalog.refresh(appContext), "tai-catalog-refresh");
+            catalogRefresh.setDaemon(true);
+            catalogRefresh.start();
+        }
         settings = new TaiSettings(appContext);
         registry = new TaiModelRegistry();
         modelStore = new TaiModelStore(appContext);
         modelDownloader = new TaiModelDownloader(appContext, modelStore);
-        runtime = new MultiBackendTaiRuntime(appContext);
+        runtime = runtimeProcess ? new MultiBackendTaiRuntime(appContext) : null;
+        runtimeClient = runtimeProcess ? null : new TaiRuntimeServiceClient(appContext);
     }
 
     @NonNull
@@ -72,18 +79,51 @@ public final class TaiManager {
     }
 
     @NonNull
+    static synchronized TaiManager getRuntimeProcessInstance(@NonNull Context context) {
+        return getInstance(context);
+    }
+
+    private boolean shouldDelegateRuntime() {
+        return !runtimeProcess && runtime == null;
+    }
+
+    private boolean hasInjectedRuntimeOverride() {
+        return !runtimeProcess && runtime != null;
+    }
+
+    @NonNull
+    private JSONObject runtimeRequest(@NonNull String operation, @Nullable String body) throws JSONException {
+        if (runtimeClient == null) return error(500, "runtime_client_unavailable", "TAI runtime service client is unavailable.");
+        return runtimeClient.request(operation, body == null ? "{}" : body);
+    }
+
+    @NonNull
+    private TaiRuntime localRuntime() {
+        if (runtime == null) throw new IllegalStateException("TAI native runtime is only available in " + TaiRuntimeIpc.RUNTIME_PROCESS_SUFFIX);
+        return runtime;
+    }
+
+    private static boolean isTaiRuntimeProcess(@NonNull Context context) {
+        String processName = ProcessUtils.getAppProcessNameForPid(context, android.os.Process.myPid());
+        return processName != null && processName.endsWith(TaiRuntimeIpc.RUNTIME_PROCESS_SUFFIX);
+    }
+
+    @NonNull
     public JSONObject status() throws JSONException {
+        TaiRuntimeState state = getRuntimeState();
         JSONObject data = new JSONObject();
         data.put("ok", true);
         data.put("name", "TAI");
         data.put("displayName", "Termux AI");
-        data.put("runtime", runtime.getState().toJson());
+        data.put("runtime", state.toJson());
         data.put("settings", settings.toJson());
-        data.put("appProcessRuntime", true);
+        data.put("appProcessRuntime", false);
+        data.put("runtimeProcess", TaiRuntimeIpc.RUNTIME_PROCESS_SUFFIX);
         data.put("modelsBundledInApk", false);
         data.put("downloadsRequireExplicitUserAction", true);
         data.put("limitations", currentLimitations());
-        appendDeviceCompatibility(data, runtime.getState());
+        appendCrashMarker(data);
+        appendDeviceCompatibility(data, state);
         JSONArray endpoints = new JSONArray();
         endpoints.put("/v1/models");
         endpoints.put("/v1/chat/completions");
@@ -95,13 +135,16 @@ public final class TaiManager {
 
     @NonNull
     public JSONObject runtimeStatus() throws JSONException {
-        TaiRuntimeState state = runtime.getState();
+        TaiRuntimeState state = getRuntimeState();
         JSONObject data = new JSONObject();
         data.put("ok", true);
         data.put("runtime", state.toJson());
         data.put("settings", settings.toJson());
-        data.put("appProcessRuntime", true);
-        data.put("backendPolicy", "LiteRT-LM uses the selected accelerator policy with runtime fallback where supported.");
+        data.put("appProcessRuntime", false);
+        data.put("runtimeProcess", TaiRuntimeIpc.RUNTIME_PROCESS_SUFFIX);
+        data.put("backendPolicy", "TAI loads native LiteRT-LM/MNN backends in an isolated Android process after preflight checks.");
+        data.put("runtimeHistory", TaiRuntimeHistory.summary(appContext));
+        appendCrashMarker(data);
         appendDeviceCompatibility(data, state);
         return data;
     }
@@ -112,7 +155,7 @@ public final class TaiManager {
         data.put("storageDirectory", modelStore.getModelsDirectory().getAbsolutePath());
         data.put("downloads", modelStore.getDownloads());
         data.put("catalog", catalogJson());
-        TaiRuntimeState state = runtime.getState();
+        TaiRuntimeState state = getRuntimeState();
         data.put("runtime", state.toJson());
         appendDeviceCompatibility(data, state);
         return data;
@@ -164,7 +207,7 @@ public final class TaiManager {
         data.put("model", spec.toJson());
         data.put("requiresUserApprovedPath", true);
         data.put("copiedIntoAppPrivateStorage", false);
-        data.put("message", "Model path registered. Load it with TAI to run through the Android-side LiteRT-LM runtime when the device ABI and model format are supported.");
+        data.put("message", "Model path registered. Load it with TAI to run through the isolated Android LiteRT-LM runtime when preflight passes.");
         return data;
     }
 
@@ -234,7 +277,7 @@ public final class TaiManager {
         JSONObject request = parseBody(body);
         String modelId = sanitizeModelId(request.optString("modelId", request.optString("model", "")));
         if (modelId.isEmpty()) return error(400, "bad_request", "Missing model id");
-        TaiRuntimeState state = runtime.getState();
+        TaiRuntimeState state = getRuntimeState();
         boolean activeModelLoaded = state.loadedModelId != null && state.loadedModelId.equals(modelId);
         TaiModelStore.DeleteResult deleteResult = modelStore.deleteUserModel(modelId,
             activeModelLoaded, request.optBoolean("confirm", false));
@@ -277,33 +320,57 @@ public final class TaiManager {
         if (!requestedBackend.isEmpty() && !requestedBackend.equalsIgnoreCase(spec.backend)) {
             return error(409, "backend_mismatch", "Model " + modelId + " requires backend " + spec.backend + ".");
         }
+        if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_LOAD_MODEL, body);
         TaiRuntimeOptions options = runtimeOptionsFromRequest(request, spec);
-        JSONObject result = runtime.load(spec, options);
+        if (hasInjectedRuntimeOverride()) {
+            JSONObject result = localRuntime().load(spec, options);
+            appendCompanionMobileActions(result, spec.id);
+            return result;
+        }
+        TaiLoadPreflight.Result preflight = TaiLoadPreflight.evaluate(appContext, spec, options, false);
+        if (preflight.blocked) {
+            TaiRuntimeHistory.recordFailure(appContext, spec, preflight.device, spec.backend,
+                preflight.effectiveAccelerator, preflight.message);
+            return preflight.blockingError(preflightStatusCode(preflight));
+        }
+        TaiRuntimeOptions loadOptions = optionsForPreflight(spec, options, preflight);
+        JSONObject result = localRuntime().load(spec, loadOptions);
+        result.put("preflight", preflight.toJson());
+        recordRuntimeResult(spec, preflight, result);
         appendCompanionMobileActions(result, spec.id);
         return result;
     }
 
     @NonNull
     public JSONObject unloadModel() throws JSONException {
-        return runtime.unload();
+        if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_UNLOAD_MODEL, "{}");
+        return localRuntime().unload();
     }
 
     @NonNull
     public JSONObject keepWarmRuntime(@NonNull String body) throws JSONException {
+        if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_KEEP_WARM, body);
         JSONObject request = parseBody(body);
-        TaiRuntimeState state = runtime.getState();
+        TaiRuntimeState state = localRuntime().getState();
         String fallbackModel = state.loadedModelId != null ? state.loadedModelId : settings.getDefaultAssistantModel();
         String modelId = requestedModelId(request, fallbackModel);
         TaiModelSpec spec = resolveModel(modelId);
         if (spec == null) return error(404, "model_not_found", "Unknown TAI model: " + modelId);
         int minutes = request.optInt("minutes", request.optInt("keepWarmMinutes", 0));
         if (minutes <= 0) minutes = settings.getIdleUnloadMinutes() > 0 ? settings.getIdleUnloadMinutes() : 30;
-        return runtime.keepWarm(spec, runtimeOptionsFromRequest(request, spec), minutes);
+        TaiRuntimeOptions options = runtimeOptionsFromRequest(request, spec);
+        TaiLoadPreflight.Result preflight = TaiLoadPreflight.evaluate(appContext, spec, options, false);
+        if (preflight.blocked) return preflight.blockingError(preflightStatusCode(preflight));
+        JSONObject result = localRuntime().keepWarm(spec, optionsForPreflight(spec, options, preflight), minutes);
+        result.put("preflight", preflight.toJson());
+        recordRuntimeResult(spec, preflight, result);
+        return result;
     }
 
     @NonNull
     public JSONObject cancelRuntime() throws JSONException {
-        return runtime.cancel();
+        if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_CANCEL, "{}");
+        return localRuntime().cancel();
     }
 
     /**
@@ -320,11 +387,20 @@ public final class TaiManager {
 
     @NonNull
     public TaiRuntimeState getRuntimeState() {
-        return runtime.getState();
+        if (!shouldDelegateRuntime()) return localRuntime().getState();
+        try {
+            JSONObject status = runtimeRequest(TaiRuntimeIpc.OP_RUNTIME_STATUS, "{}");
+            JSONObject runtimeJson = status.optJSONObject("runtime");
+            if (runtimeJson == null) runtimeJson = status.optJSONObject("state");
+            return TaiRuntimeState.fromJson(runtimeJson);
+        } catch (JSONException e) {
+            return TaiRuntimeState.fromJson(null);
+        }
     }
 
     @NonNull
     public JSONObject openAiChatCompletions(@NonNull String body) throws JSONException {
+        if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_OPENAI_CHAT, body);
         JSONObject request = parseBody(body);
         JSONArray messages = request.optJSONArray("messages");
         if (messages == null || messages.length() == 0) return error(400, "bad_request", "Missing messages");
@@ -344,7 +420,7 @@ public final class TaiManager {
         JSONObject loadError = ensureModelLoadedForGeneration(modelId, options);
         if (loadError != null) return openAiError(loadError);
 
-        JSONObject chat = runtime.chat(modelId, chatRequest.request, options);
+        JSONObject chat = localRuntime().chat(modelId, chatRequest.request, options);
         if (!chat.optBoolean("ok", false)) {
             return openAiError(chat);
         }
@@ -374,6 +450,7 @@ public final class TaiManager {
 
     @NonNull
     public JSONObject openAiCompletions(@NonNull String body) throws JSONException {
+        if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_OPENAI_COMPLETION, body);
         JSONObject request = parseBody(body);
         String prompt = promptFromCompletionRequest(request);
         if (prompt.trim().isEmpty()) return openAiError(error(400, "bad_request", "Missing prompt"));
@@ -385,7 +462,7 @@ public final class TaiManager {
         JSONObject loadError = ensureModelLoadedForGeneration(modelId, options);
         if (loadError != null) return openAiError(loadError);
 
-        JSONObject completion = runtime.complete(modelId, prompt, options);
+        JSONObject completion = localRuntime().complete(modelId, prompt, options);
         if (!completion.optBoolean("ok", false)) {
             return openAiError(completion);
         }
@@ -423,6 +500,14 @@ public final class TaiManager {
     }
 
     public void openAiChatCompletionsStream(@NonNull String body, @NonNull OpenAiStreamSink sink) throws JSONException, IOException {
+        if (shouldDelegateRuntime()) {
+            if (runtimeClient == null) {
+                emitOpenAiError(sink, error(503, "tai_runtime_unavailable", "TAI runtime service client is unavailable."));
+                return;
+            }
+            runtimeClient.stream(TaiRuntimeIpc.OP_OPENAI_CHAT_STREAM, body, sink);
+            return;
+        }
         JSONObject request = parseBody(body);
         JSONArray messages = request.optJSONArray("messages");
         if (messages == null || messages.length() == 0) {
@@ -460,7 +545,7 @@ public final class TaiManager {
 
         AtomicReference<IOException> ioError = new AtomicReference<>();
         AtomicReference<Boolean> emittedToolCalls = new AtomicReference<>(false);
-        JSONObject chat = runtime.chat(modelId, chatRequest.request, options, new TaiGenerationCallback() {
+        JSONObject chat = localRuntime().chat(modelId, chatRequest.request, options, new TaiGenerationCallback() {
             @Override
             public void onToken(@NonNull String text) {
                 if (text.isEmpty() || ioError.get() != null) return;
@@ -469,13 +554,13 @@ public final class TaiManager {
                 } catch (IOException e) {
                     ioError.set(e);
                     try {
-                        runtime.cancel();
+                        localRuntime().cancel();
                     } catch (JSONException ignored) {
                     }
                 } catch (JSONException e) {
                     ioError.set(new IOException(e));
                     try {
-                        runtime.cancel();
+                        localRuntime().cancel();
                     } catch (JSONException ignored) {
                     }
                 }
@@ -490,7 +575,7 @@ public final class TaiManager {
                 } catch (IOException | JSONException e) {
                     ioError.set(e instanceof IOException ? (IOException) e : new IOException(e));
                     try {
-                        runtime.cancel();
+                        localRuntime().cancel();
                     } catch (JSONException ignored) {
                     }
                 }
@@ -519,6 +604,14 @@ public final class TaiManager {
     }
 
     public void openAiCompletionsStream(@NonNull String body, @NonNull OpenAiStreamSink sink) throws JSONException, IOException {
+        if (shouldDelegateRuntime()) {
+            if (runtimeClient == null) {
+                emitOpenAiError(sink, error(503, "tai_runtime_unavailable", "TAI runtime service client is unavailable."));
+                return;
+            }
+            runtimeClient.stream(TaiRuntimeIpc.OP_OPENAI_COMPLETION_STREAM, body, sink);
+            return;
+        }
         JSONObject request = parseBody(body);
         String prompt = promptFromCompletionRequest(request);
         if (prompt.trim().isEmpty()) {
@@ -542,7 +635,7 @@ public final class TaiManager {
         String id = "tai-cmpl-" + System.currentTimeMillis();
         long created = System.currentTimeMillis() / 1000L;
         AtomicReference<IOException> ioError = new AtomicReference<>();
-        JSONObject completion = runtime.complete(modelId, prompt, options, new TaiGenerationCallback() {
+        JSONObject completion = localRuntime().complete(modelId, prompt, options, new TaiGenerationCallback() {
             @Override
             public void onToken(@NonNull String text) {
                 if (text.isEmpty() || ioError.get() != null) return;
@@ -551,13 +644,13 @@ public final class TaiManager {
                 } catch (IOException e) {
                     ioError.set(e);
                     try {
-                        runtime.cancel();
+                        localRuntime().cancel();
                     } catch (JSONException ignored) {
                     }
                 } catch (JSONException e) {
                     ioError.set(new IOException(e));
                     try {
-                        runtime.cancel();
+                        localRuntime().cancel();
                     } catch (JSONException ignored) {
                     }
                 }
@@ -635,6 +728,7 @@ public final class TaiManager {
 
     @NonNull
     public JSONObject embeddings(@NonNull String body) throws JSONException {
+        if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_EMBEDDINGS, body);
         JSONObject request = parseBody(body);
         String modelId = requestedModelId(request, settings.getDefaultAssistantModel());
         String input = request.optString("input", "");
@@ -661,7 +755,26 @@ public final class TaiManager {
             response.put("_statusCode", 501);
             return response;
         }
-        return ((MultiBackendTaiRuntime) runtime).embed(modelId, input);
+        return ((MultiBackendTaiRuntime) localRuntime()).embed(modelId, input);
+    }
+
+    @NonNull
+    public JSONObject preflight(@NonNull String body) throws JSONException {
+        JSONObject request = parseBody(body);
+        String modelId = requestedModelId(request, settings.getDefaultAssistantModel());
+        TaiModelSpec spec = resolveModel(modelId);
+        if (spec == null) return error(404, "model_not_found", "Unknown TAI model: " + modelId);
+        String requestedBackend = request.optString("backend", "").trim();
+        if (!requestedBackend.isEmpty() && !requestedBackend.equalsIgnoreCase(spec.backend)) {
+            return error(409, "backend_mismatch", "Model " + modelId + " requires backend " + spec.backend + ".");
+        }
+        TaiRuntimeOptions options = runtimeOptionsFromRequest(request, spec);
+        TaiLoadPreflight.Result preflight = TaiLoadPreflight.evaluate(appContext, spec, options,
+            request.optBoolean("autoLoad", request.optBoolean("auto_load", false)));
+        JSONObject data = preflight.toJson();
+        data.put("model", spec.toJson());
+        data.put("_statusCode", preflight.blocked ? preflightStatusCode(preflight) : 200);
+        return data;
     }
 
     @NonNull
@@ -672,10 +785,29 @@ public final class TaiManager {
 
     @Nullable
     private JSONObject ensureModelLoadedForGeneration(@NonNull String modelId, @NonNull TaiRuntimeOptions options) throws JSONException {
-        if (runtime.isModelLoaded(modelId)) return null;
+        if (localRuntime().isModelLoaded(modelId)) return null;
         TaiModelSpec spec = resolveModel(modelId);
         if (spec == null) return error(404, "model_not_found", "Unknown TAI model: " + modelId);
-        JSONObject load = runtime.load(spec, options);
+        if (hasInjectedRuntimeOverride()) {
+            JSONObject load = localRuntime().load(spec, options);
+            appendCompanionMobileActions(load, spec.id);
+            if (!load.optBoolean("ok", false)) return load;
+            return null;
+        }
+        if (!settings.isOpenAiAutoLoadEnabled()) {
+            JSONObject data = error(409, "model_not_loaded",
+                "Model is not loaded. Load it explicitly with tai load or from TAI settings.");
+            data.put("autoLoadEnabled", false);
+            return data;
+        }
+        TaiLoadPreflight.Result preflight = TaiLoadPreflight.evaluate(appContext, spec, options, true);
+        if (preflight.blocked) {
+            return preflight.blockingError(preflightStatusCode(preflight));
+        }
+        TaiRuntimeOptions loadOptions = optionsForPreflight(spec, options, preflight);
+        JSONObject load = localRuntime().load(spec, loadOptions);
+        load.put("preflight", preflight.toJson());
+        recordRuntimeResult(spec, preflight, load);
         appendCompanionMobileActions(load, spec.id);
         if (!load.optBoolean("ok", false)) return load;
         return null;
@@ -684,12 +816,68 @@ public final class TaiManager {
     private void appendCompanionMobileActions(@NonNull JSONObject result, @NonNull String loadedModelId) throws JSONException {
         if (!result.optBoolean("ok", false)) return;
         if (TaiModelRegistry.MODEL_MOBILE_ACTIONS_270M.equals(loadedModelId)) return;
-        if (runtime.isModelLoaded(TaiModelRegistry.MODEL_MOBILE_ACTIONS_270M)) return;
+        if (!settings.isCompanionAutoLoadEnabled()) {
+            result.put("companionMobileActionsSkipped", "FunctionGemma companion auto-load is disabled.");
+            return;
+        }
+        if (localRuntime().isModelLoaded(TaiModelRegistry.MODEL_MOBILE_ACTIONS_270M)) return;
         TaiModelSpec mobileActions = resolveModel(TaiModelRegistry.MODEL_MOBILE_ACTIONS_270M);
         if (mobileActions == null || mobileActions.localPath == null || mobileActions.localPath.trim().isEmpty()) return;
         TaiRuntimeOptions companionOptions = settings.getRuntimeOptions(mobileActions).withAccelerator("cpu");
-        JSONObject companion = runtime.load(mobileActions, companionOptions);
+        TaiLoadPreflight.Result preflight = TaiLoadPreflight.evaluate(appContext, mobileActions, companionOptions, false);
+        if (preflight.blocked) {
+            result.put("companionMobileActionsSkipped", preflight.toJson());
+            return;
+        }
+        JSONObject companion = localRuntime().load(mobileActions, companionOptions);
+        companion.put("preflight", preflight.toJson());
+        recordRuntimeResult(mobileActions, preflight, companion);
         result.put("companionMobileActions", companion);
+    }
+
+    @NonNull
+    private TaiRuntimeOptions optionsForPreflight(
+        @NonNull TaiModelSpec spec,
+        @NonNull TaiRuntimeOptions options,
+        @NonNull TaiLoadPreflight.Result preflight
+    ) {
+        if (!"auto".equals(preflight.requestedAccelerator)) return options;
+        if (!"cpu".equals(preflight.effectiveAccelerator) && !"gpu".equals(preflight.effectiveAccelerator)) return options;
+        if (TaiModelSpec.BACKEND_MNN_LLM.equals(spec.backend) && "gpu".equals(preflight.effectiveAccelerator)) {
+            return options.withAccelerator("opencl");
+        }
+        return options.withAccelerator(preflight.effectiveAccelerator);
+    }
+
+    private int preflightStatusCode(@NonNull TaiLoadPreflight.Result preflight) {
+        String code = preflight.errorCode;
+        if (code.startsWith("model_file_missing") || code.startsWith("model_file_not_readable")) return 404;
+        if (code.contains("native_unavailable") || code.contains("unsupported_abi")) return 501;
+        if (code.contains("low_available_memory") || code.contains("known_failed") || code.contains("requires_explicit")) return 409;
+        return 400;
+    }
+
+    private void recordRuntimeResult(
+        @NonNull TaiModelSpec spec,
+        @NonNull TaiLoadPreflight.Result preflight,
+        @NonNull JSONObject result
+    ) {
+        String accelerator = acceleratorFromRuntimeResult(result, preflight);
+        if (result.optBoolean("ok", false)) {
+            TaiRuntimeHistory.recordSuccess(appContext, spec, preflight.device, spec.backend, accelerator);
+            return;
+        }
+        TaiRuntimeHistory.recordFailure(appContext, spec, preflight.device, spec.backend, accelerator,
+            result.optString("message", result.optString("error", "load_failed")));
+    }
+
+    @NonNull
+    private String acceleratorFromRuntimeResult(@NonNull JSONObject result, @NonNull TaiLoadPreflight.Result preflight) {
+        String backend = result.optString("backend", preflight.effectiveAccelerator);
+        String normalized = backend == null ? "" : backend.toLowerCase(Locale.ROOT);
+        if (normalized.contains("gpu") || normalized.contains("opencl")) return "gpu";
+        if (normalized.contains("cpu")) return "cpu";
+        return preflight.effectiveAccelerator;
     }
 
     @NonNull
@@ -908,8 +1096,9 @@ public final class TaiManager {
     @NonNull
     private JSONArray currentLimitations() {
         JSONArray limitations = new JSONArray();
-        limitations.put("LiteRT-LM inference is available on supported device ABI builds.");
-        limitations.put("Auto follows Edge Gallery model accelerator allowlists, minimum-memory metadata, and Pixel 10 GPU exclusion; LiteRT-LM initialization remains the final backend check.");
+        limitations.put("Native LiteRT-LM and MNN inference runs in the isolated :tai_runtime Android process.");
+        limitations.put("Model loads run preflight checks for ABI, API level, bundled native libraries, model files, memory pressure, accelerator policy, and known failure history.");
+        limitations.put("Auto defaults to CPU on unknown devices; GPU is used automatically only after a successful model/device history.");
         limitations.put("Streaming text responses, cancellation, and keep-warm lifecycle controls are available through the localhost API.");
         limitations.put("LiteRT-LM image and audio input are accepted for models that declare those capabilities.");
         limitations.put("Audio output is not available from the local LiteRT-LM or MNN runners.");
@@ -1375,6 +1564,11 @@ public final class TaiManager {
             warnings.put("Device memory is below this model's recommendation of " + model.recommendedRamGb + " GiB.");
         }
         data.put("compatibilityWarnings", warnings);
+    }
+
+    private void appendCrashMarker(@NonNull JSONObject data) throws JSONException {
+        JSONObject marker = TaiRuntimeCrashMarker.read(appContext);
+        if (marker != null) data.put("lastRuntimeCrash", marker);
     }
 
     private static final class OpenAiChatRequest {

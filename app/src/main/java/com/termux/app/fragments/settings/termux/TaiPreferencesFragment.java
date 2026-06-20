@@ -772,6 +772,8 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
         String fallback = nullable(runtime, "backendFallbackReason", "");
         if (!fallback.isEmpty()) appendKv(body, "fallback", fallback);
         if (runtime.optBoolean("activeGeneration", false)) appendKv(body, "generate", "active");
+        String runtimeProcess = runtimeStatus.optString("runtimeProcess", "");
+        if (!runtimeProcess.isEmpty()) appendKv(body, "process", runtimeProcess);
         long keepWarmRemaining = runtime.optLong("keepWarmRemainingMs", 0L);
         if (keepWarmRemaining > 0L) appendKv(body, "warm", formatDuration(keepWarmRemaining));
         long idleRemaining = runtime.optLong("idleUnloadRemainingMs", 0L);
@@ -792,6 +794,14 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
                 String warning = warnings.optString(i, "");
                 if (!warning.isEmpty()) appendKv(body, "warning", warning);
             }
+        }
+        JSONObject crash = runtimeStatus.optJSONObject("lastRuntimeCrash");
+        if (crash != null) {
+            String model = crash.optString("modelId", "");
+            String accelerator = crash.optString("accelerator", "");
+            appendKv(body, "last", "AI runtime crashed while loading " + (model.isEmpty() ? "a model" : model)
+                + (accelerator.isEmpty() ? "" : " on " + accelerator));
+            appendKv(body, "fallback", crash.optString("suggestedFallback", "Try CPU or a smaller model."));
         }
         try {
             JSONObject endpoint = LauncherCtlApiServer.getInstance().endpointSettings(context);

@@ -4,7 +4,7 @@ Termux Launcher AI is a local AI service built into Termux Launcher. It lets app
 
 The short version:
 
-- The AI runs on your device, inside the Termux Launcher app process.
+- The AI runs on your device. Native model runtime work is isolated in the Android `:tai_runtime` process so launcher UI survives native runtime crashes.
 - It exposes an OpenAI-compatible API for tools such as `aichat`.
 - It supports LiteRT-LM and MNN model backends.
 - It does not bundle model files inside the APK. You download or import models yourself.
@@ -44,6 +44,7 @@ Useful commands:
 tai status
 tai runtime
 tai models
+tai preflight gemma-4-e2b-it-litert-lm
 tai load gemma-4-e2b-it-litert-lm
 tai unload
 tai keep-warm gemma-4-e2b-it-litert-lm --minutes 30
@@ -136,14 +137,14 @@ qwen2.5-coder-1.5b-instruct-mnn
 
 ## How Model Loading Works
 
-You do not always need to manually load a model first.
+You do not always need to manually load a model first, but auto-load is guarded.
 
 When an OpenAI-compatible client sends a generation request, Termux Launcher AI checks the requested model:
 
 - If the model is already loaded, it uses it.
-- If the model is installed but not loaded, it loads it automatically.
+- If the model is installed but not loaded, it loads it automatically only when compatibility preflight is clean.
 - If the request uses another assistant model, it switches the assistant slot to that model.
-- If the model is unknown or not installed, the request fails with an error.
+- If the model is unknown, not installed, low on memory, missing native libraries, or risky for automatic GPU load, the request fails with a clear error such as `model_not_loaded`, `device_not_supported`, or a preflight failure code.
 
 The loaded model is kept warm for the configured timeout, then unloaded when idle.
 
@@ -181,7 +182,7 @@ functiongemma-270m-mobile-actions-litert-lm
 
 This means the launcher can keep one main assistant model available while also keeping MobileActions available separately on CPU.
 
-The assistant model prefers GPU when supported. MobileActions is always CPU.
+The assistant model defaults to CPU on unknown devices. GPU is automatic only after a successful model/device GPU history, or you can test it explicitly with `tai load <model> --gpu`. MobileActions is always CPU and companion auto-load is disabled unless enabled in settings.
 
 ## Settings
 
@@ -198,6 +199,8 @@ From there you can:
 - import a local `.litertlm` or `.task` model with Android's file picker; the selected file is copied into app-private model storage
 - change generation defaults such as max tokens and temperature
 - choose Auto, GPU, or CPU acceleration where supported
+- enable or disable OpenAI-compatible auto-load
+- opt into FunctionGemma/MobileActions companion auto-load
 - configure the API port
 - randomize the API port
 - view or edit the API bearer token
