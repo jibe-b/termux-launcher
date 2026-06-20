@@ -36,7 +36,9 @@ import android.view.ViewParent;
 import android.view.accessibility.AccessibilityManager;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.widget.GridLayout;
+import android.widget.LinearLayout;
 import android.widget.PopupWindow;
+import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import com.google.android.material.button.MaterialButton;
@@ -258,6 +260,9 @@ public final class ExtraKeysView extends GridLayout {
      */
     protected boolean mKeyPressFeedbackBlurAvailable = true;
 
+    /** True for the floating capsule dock (vertical popup pill); false for the edge-to-edge dock. */
+    protected boolean mPopupVerticalPill = false;
+
     /**
      * Defines whether text for the extra keys button should be all capitalized automatically.
      */
@@ -398,6 +403,15 @@ public final class ExtraKeysView extends GridLayout {
     /** Tells the press feedback whether a blur backdrop is active (soft radial vs rounded fill). */
     public void setKeyPressFeedbackBlurAvailable(boolean available) {
         mKeyPressFeedbackBlurAvailable = available;
+    }
+
+    /**
+     * Swipe-up popup shape. {@code true} = a vertical "liquid" capsule that connects the source key
+     * up to the revealed key (the floating capsule dock); {@code false} = a rounded-rect chip above
+     * the source key (the edge-to-edge default dock).
+     */
+    public void setPopupCapsuleStyle(boolean verticalPill) {
+        mPopupVerticalPill = verticalPill;
     }
 
     public void setButtonColors(int buttonTextColor, int buttonActiveTextColor, int buttonBackgroundColor, int buttonActiveBackgroundColor) {
@@ -599,8 +613,11 @@ public final class ExtraKeysView extends GridLayout {
                             requestParentDisallowIntercept(view, true);
                             if (buttonInfo.getPopup() != null) {
                                 float upwardTravelPx = popupSwipeDownRawY[0] - event.getRawY();
-                                // Show popup on swipe up
-                                if (mPopupWindow == null && (event.getY() < 0 || upwardTravelPx >= popupSwipeThresholdPx)) {
+                                // Show popup only on a DELIBERATE upward swipe. (Previously any finger
+                                // drift above the key top — event.getY() < 0 — armed it, so a plain
+                                // press-and-hold would flip into the half-armed popup state and the
+                                // hold bloom never showed.)
+                                if (mPopupWindow == null && upwardTravelPx >= popupSwipeThresholdPx) {
                                     stopScheduledExecutors();
                                     showPopup(view, buttonInfo.getPopup());
                                     setButtonVisualState(button, buttonInfo, KeyVisualState.POPUP_ARMED);
@@ -821,44 +838,50 @@ public final class ExtraKeysView extends GridLayout {
     void showPopup(View view, ExtraKeyButton extraButton) {
         int width = Math.max(1, view.getMeasuredWidth());
         int height = Math.max(1, view.getMeasuredHeight());
-        MaterialButton button;
-        if (isSpecialButton(extraButton)) {
-            button = createSpecialButton(extraButton.getKey(), false);
-            if (button == null)
-                return;
+        dismissPopup();
+
+        CharSequence popupText = extraButton.getDisplay();
+        CharSequence sourceText = (view instanceof TextView) ? ((TextView) view).getText() : "";
+        float textSizePx = (view instanceof TextView) ? ((TextView) view).getTextSize() : dpToPx(14f);
+        android.graphics.Typeface tf = (view instanceof TextView) ? ((TextView) view).getTypeface() : null;
+        int tint = mKeyPressFeedbackColor != 0 ? mKeyPressFeedbackColor : mButtonActiveBackgroundColor;
+
+        final View content;
+        final int popupWidth;
+        final int popupHeight;
+        if (mPopupVerticalPill) {
+            // Vertical "liquid" capsule: the revealed key (highlighted) on top, the source key (dim)
+            // below — reads as the source key stretched up into a pill. Bottom-aligned over the source.
+            LinearLayout pill = new LinearLayout(getContext());
+            pill.setOrientation(LinearLayout.VERTICAL);
+            pill.setBackground(buildPopupPillBackground(tint, width, true));
+            pill.addView(makePopupGlyphView(popupText, textSizePx, tf, true),
+                new LinearLayout.LayoutParams(width, height));
+            pill.addView(makePopupGlyphView(sourceText, textSizePx, tf, false),
+                new LinearLayout.LayoutParams(width, height));
+            content = pill;
+            popupWidth = width;
+            popupHeight = height * 2;
         } else {
-            button = new MaterialButton(getContext(), null, android.R.attr.buttonBarButtonStyle);
-            button.setTextColor(mButtonTextColor);
+            // Rounded-rect chip floating just above the source key (edge-to-edge default dock).
+            TextView chip = makePopupGlyphView(popupText, textSizePx, tf, true);
+            chip.setBackground(buildPopupPillBackground(tint, width, false));
+            content = chip;
+            popupWidth = width;
+            popupHeight = height;
         }
-        button.setText(extraButton.getDisplay());
-        button.setAllCaps(mButtonTextAllCaps);
-        button.setGravity(Gravity.CENTER);
-        button.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
-        button.setIncludeFontPadding(false);
-        button.setPadding(0, 0, 0, 0);
-        button.setInsetTop(0);
-        button.setInsetBottom(0);
-        button.setMinWidth(0);
-        button.setMinHeight(0);
-        button.setMinimumWidth(width);
-        button.setMinimumHeight(height);
-        button.setWidth(width);
-        button.setHeight(height);
-        setPopupButtonVisualState(button);
 
-        int widthSpec = MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY);
-        int heightSpec = MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY);
-        button.measure(widthSpec, heightSpec);
-        int popupWidth = width;
-        int popupHeight = height;
+        content.measure(
+            MeasureSpec.makeMeasureSpec(popupWidth, MeasureSpec.EXACTLY),
+            MeasureSpec.makeMeasureSpec(popupHeight, MeasureSpec.EXACTLY));
 
-        mPopupWindow = new PopupWindow(button, popupWidth, popupHeight, false);
+        mPopupWindow = new PopupWindow(content, popupWidth, popupHeight, false);
         mPopupWindow.setOutsideTouchable(true);
         mPopupWindow.setFocusable(false);
-        mPopupWindow.setClippingEnabled(true);
+        mPopupWindow.setClippingEnabled(false);
         mPopupWindow.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            mPopupWindow.setElevation(dpToPx(6f));
+            mPopupWindow.setElevation(dpToPx(8f));
         }
         int[] viewLocation = new int[2];
         view.getLocationOnScreen(viewLocation);
@@ -867,14 +890,46 @@ public final class ExtraKeysView extends GridLayout {
             root = view;
         }
         int screenWidth = getResources().getDisplayMetrics().widthPixels;
-        int screenHeight = getResources().getDisplayMetrics().heightPixels;
         int desiredLeft = viewLocation[0] + Math.round((width - popupWidth) / 2f);
-        int desiredTop = viewLocation[1] - popupHeight - Math.round(dpToPx(5f));
+        // Vertical pill bottom-aligns over the source (covers it + one key up). The chip floats above.
+        int desiredTop = mPopupVerticalPill
+            ? (viewLocation[1] + height - popupHeight)
+            : (viewLocation[1] - popupHeight - Math.round(dpToPx(6f)));
         int maxLeft = Math.max(0, screenWidth - popupWidth);
-        int maxTop = Math.max(0, screenHeight - popupHeight);
         int clampedLeft = Math.max(0, Math.min(maxLeft, desiredLeft));
-        int clampedTop = Math.max(0, Math.min(maxTop, desiredTop));
+        int clampedTop = Math.max(0, desiredTop);
         mPopupWindow.showAtLocation(root, Gravity.NO_GRAVITY, clampedLeft, clampedTop);
+    }
+
+    /** A centred glyph for a popup pill, matching the source key's text size/typeface. */
+    @NonNull
+    private TextView makePopupGlyphView(CharSequence text, float textSizePx,
+                                        @Nullable android.graphics.Typeface tf, boolean highlighted) {
+        TextView tv = new TextView(getContext());
+        tv.setText(text);
+        tv.setAllCaps(mButtonTextAllCaps);
+        tv.setGravity(Gravity.CENTER);
+        tv.setIncludeFontPadding(false);
+        tv.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, textSizePx);
+        if (tf != null) {
+            tv.setTypeface(tf);
+        }
+        int active = mButtonActiveTextColor != 0 ? mButtonActiveTextColor : Color.WHITE;
+        tv.setTextColor(highlighted ? active : withAlpha(mButtonTextColor, 140));
+        return tv;
+    }
+
+    /** Opaque, accent-bordered pill background for the popup so it fully occludes the row beneath. */
+    @NonNull
+    private Drawable buildPopupPillBackground(int tint, int keyWidthPx, boolean verticalPill) {
+        GradientDrawable bg = new GradientDrawable();
+        bg.setShape(GradientDrawable.RECTANGLE);
+        // Vertical pill: corner = half the (narrow) width -> fully rounded capsule ends. Chip: 14dp.
+        bg.setCornerRadius(verticalPill ? (keyWidthPx / 2f) : dpToPx(14f));
+        bg.setColor(withAlpha(Color.rgb(12, 16, 22), mKeyPressFeedbackBlurAvailable ? 240 : 250));
+        bg.setStroke(Math.max(1, Math.round(dpToPx(1.2f))), withAlpha(tint, 235));
+        bg.setDither(true);
+        return bg;
     }
 
     private void setButtonPressedVisualState(@NonNull MaterialButton button, @NonNull ExtraKeyButton buttonInfo,
@@ -922,61 +977,44 @@ public final class ExtraKeysView extends GridLayout {
         }
 
         int tint = mKeyPressFeedbackColor != 0 ? mKeyPressFeedbackColor : mButtonActiveBackgroundColor;
-        // In-bounds key cap: a tinted rounded chip + white inner rim. The soft radial "bloom" that
-        // used to live here (and overflowed the short row, getting clipped to the top half) now
-        // lives in the view overlay via showKeyBloom(), so this drawable always fits the key.
+        // One clean rounded-rect pill: a hairline border defines it, with a faint material fill — no
+        // double inner-rim line. Borderless at rest; only the pressed/held/active key shows the pill.
         int fillAlpha;
         int rimAlpha;
-        int whiteRimAlpha;
         switch (state) {
             case REPEAT_HELD:
-                fillAlpha = mKeyPressFeedbackBlurAvailable ? 124 : 150;
+                fillAlpha = mKeyPressFeedbackBlurAvailable ? 110 : 140;
                 rimAlpha = 245;
-                whiteRimAlpha = 110;
                 break;
             case STICKY_LOCKED:
-                fillAlpha = mKeyPressFeedbackBlurAvailable ? 48 : 116;
-                rimAlpha = 210;
-                whiteRimAlpha = 86;
+                fillAlpha = mKeyPressFeedbackBlurAvailable ? 70 : 120;
+                rimAlpha = 230;
                 break;
             case STICKY_ACTIVE:
-                fillAlpha = mKeyPressFeedbackBlurAvailable ? 34 : 88;
-                rimAlpha = 138;
-                whiteRimAlpha = 42;
+                fillAlpha = mKeyPressFeedbackBlurAvailable ? 34 : 80;
+                rimAlpha = 150;
                 break;
             case POPUP_ARMED:
                 // Source key reads as a "lifted/empty socket" while the popup floats above it.
-                fillAlpha = mKeyPressFeedbackBlurAvailable ? 30 : 84;
-                rimAlpha = 210;
-                whiteRimAlpha = 64;
+                fillAlpha = mKeyPressFeedbackBlurAvailable ? 28 : 72;
+                rimAlpha = 200;
                 break;
             case PRESSED:
             default:
-                fillAlpha = mKeyPressFeedbackBlurAvailable ? 96 : 128;
-                rimAlpha = 230;
-                whiteRimAlpha = 96;
+                fillAlpha = mKeyPressFeedbackBlurAvailable ? 70 : 110;
+                rimAlpha = 220;
                 break;
         }
 
         GradientDrawable chip = new GradientDrawable();
         chip.setShape(GradientDrawable.RECTANGLE);
-        chip.setCornerRadius(dpToPx(13f));
+        chip.setCornerRadius(dpToPx(12f));
         chip.setColor(withAlpha(tint, fillAlpha));
-        chip.setStroke(Math.max(1, Math.round(dpToPx(1.1f))), withAlpha(tint, rimAlpha));
+        chip.setStroke(Math.max(1, Math.round(dpToPx(1f))), withAlpha(tint, rimAlpha));
         chip.setDither(true);
 
-        GradientDrawable innerRim = new GradientDrawable();
-        innerRim.setShape(GradientDrawable.RECTANGLE);
-        innerRim.setCornerRadius(dpToPx(11f));
-        innerRim.setColor(Color.TRANSPARENT);
-        innerRim.setStroke(Math.max(1, Math.round(dpToPx(0.75f))), withAlpha(Color.WHITE, whiteRimAlpha));
-
         int chipInset = Math.round(dpToPx(4f));
-        int rimInset = chipInset + Math.round(dpToPx(2f));
-        return new LayerDrawable(new Drawable[] {
-            new InsetDrawable(chip, chipInset, chipInset, chipInset, chipInset),
-            new InsetDrawable(innerRim, rimInset, rimInset, rimInset, rimInset)
-        });
+        return new InsetDrawable(chip, chipInset, chipInset, chipInset, chipInset);
     }
 
     private void animateKeyCapDip(@NonNull MaterialButton button, @NonNull KeyVisualState state) {
@@ -1148,15 +1186,6 @@ public final class ExtraKeysView extends GridLayout {
             }
         } else {
             applyButtonVisualState(button, KeyVisualState.RESTING, false);
-        }
-    }
-
-    private void setPopupButtonVisualState(@NonNull MaterialButton button) {
-        button.setTextColor(Color.WHITE);
-        button.setBackground(buildPopupKeyBackground(true));
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            button.setElevation(dpToPx(4f));
-            button.setTranslationZ(dpToPx(4f));
         }
     }
 

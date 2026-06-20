@@ -4838,6 +4838,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // Soft feathered wash when the dock blur is doing the work; a more present fill otherwise.
             boolean blurActive = mPreferences != null && mPreferences.getExtraKeysBlurRadius() > 0;
             extraKeysView.setKeyPressFeedbackBlurAvailable(blurActive);
+            // Floating capsule dock -> vertical liquid popup pill; edge-to-edge dock -> rounded-rect.
+            extraKeysView.setPopupCapsuleStyle(isValarieDockStyle());
         }
     }
 

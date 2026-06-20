@@ -67,6 +67,9 @@ public final class AzScrubRowView extends AppCompatTextView {
     @Nullable private ScrubCallback callback;
     private int currentSelectionIndex = 0;
     private final Paint letterPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    // Crisp dark outline drawn under each (light) letter so it stays legible over both light and dark
+    // wallpaper regions — a sharp stroke, unlike the old blurry drop-shadow which read as fuzzy.
+    private final Paint letterOutlinePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Rect glyphRect = new Rect();
     private float activeTouchX = -1f;
     private float waveStrength = 0f;
@@ -108,6 +111,10 @@ public final class AzScrubRowView extends AppCompatTextView {
         letterPaint.setTextAlign(Paint.Align.CENTER);
         letterPaint.setTextSize(getTextSize());
         letterPaint.setColor(getCurrentTextColor());
+        letterOutlinePaint.setTextAlign(Paint.Align.CENTER);
+        letterOutlinePaint.setStyle(Paint.Style.STROKE);
+        letterOutlinePaint.setStrokeJoin(Paint.Join.ROUND);
+        letterOutlinePaint.setStrokeCap(Paint.Cap.ROUND);
         ViewConfiguration viewConfiguration = ViewConfiguration.get(getContext());
         doubleTapTimeoutMs = ViewConfiguration.getDoubleTapTimeout();
         doubleTapSlopPx = viewConfiguration.getScaledDoubleTapSlop();
@@ -195,10 +202,17 @@ public final class AzScrubRowView extends AppCompatTextView {
                     : clamp01(envelope * waveStrength * 0.72f);
                 letterPaint.setColor(blendColors(baseColor, focusColor, colorProgress));
             }
-            applyLetterShadow(activeFocus, envelope);
-            canvas.drawText(String.valueOf(visibleLetters[i]), x, baseline, letterPaint);
+            // Crisp outline pass under the fill: a sharp dark stroke that keeps the light letter
+            // readable on any wallpaper, replacing the fuzzy drop-shadow.
+            String glyph = String.valueOf(visibleLetters[i]);
+            float density = getResources().getDisplayMetrics().density;
+            letterOutlinePaint.setTextSize(letterPaint.getTextSize());
+            letterOutlinePaint.setTypeface(letterPaint.getTypeface());
+            letterOutlinePaint.setStrokeWidth(density * (1.3f + 0.5f * envelope * waveStrength));
+            letterOutlinePaint.setColor(withAlpha(Color.BLACK, activeFocus ? 215 : 195));
+            canvas.drawText(glyph, x, baseline, letterOutlinePaint);
+            canvas.drawText(glyph, x, baseline, letterPaint);
         }
-        letterPaint.clearShadowLayer();
     }
 
     @Override
@@ -569,16 +583,6 @@ public final class AzScrubRowView extends AppCompatTextView {
         return blendColors(vivid, Color.WHITE, 0.22f);
     }
 
-    private void applyLetterShadow(boolean active, float envelope) {
-        float interaction = interactionMode == InteractionMode.INLINE_EMPHASIS_TRACK
-            ? (active ? 1f : 0f)
-            : clamp01(envelope * waveStrength);
-        // Stronger resting halo so light letters stay legible over bright wallpaper regions (the row
-        // sits on see-through glass, so a fixed letter colour alone can't contrast both dark & light).
-        float radius = dp(2.6f) + (dp(1.1f) * interaction);
-        int alpha = active ? 210 : Math.round(196f + (24f * interaction));
-        letterPaint.setShadowLayer(radius, 0f, dp(0.6f), withAlpha(Color.BLACK, alpha));
-    }
 
     private void applyLetterWeight(float envelope, boolean active) {
         float influence = interactionMode == InteractionMode.INLINE_EMPHASIS_TRACK
