@@ -1068,19 +1068,51 @@ public final class ExtraKeysView extends GridLayout {
         applyKeyGlow(button, level, glowRadiusDp(KEY_GLOW_RADIUS_TAP_DP), KEY_GLOW_WHITE_MIX_TAP);
     }
 
+    /** Our own pressed/held key background, so we can tell it apart from the flat resting one. */
+    private static class GlowBloomDrawable extends GradientDrawable {}
+
     /**
-     * Set a key's glyph glow to {@code level} (0..1): a coloured text shadow of {@code radiusDp} AND
-     * a shift of the glyph itself from its resting colour toward the bright accent. Resting glyphs
-     * are already white, so the colour shift (white → accent) is what actually makes a pressed/held
-     * key read as distinct; the halo alone is too faint over the wallpaper.
+     * A soft, feathered radial bloom in the accent colour — brightest behind the glyph, fading to
+     * nothing well before the key edges. No border or hard fill (not a pill); it reads as a glow.
+     */
+    @NonNull
+    private GlowBloomDrawable buildGlowBloom(@NonNull MaterialButton button) {
+        GlowBloomDrawable bloom = new GlowBloomDrawable();
+        bloom.setShape(GradientDrawable.RECTANGLE);
+        bloom.setGradientType(GradientDrawable.RADIAL_GRADIENT);
+        bloom.setGradientCenter(0.5f, 0.5f);
+        // Fall back to a sane dp radius if the button isn't laid out yet (e.g. a latched modifier
+        // restyled during a reload) so the bloom is never zero-sized / invisible.
+        int span = Math.max(button.getWidth(), button.getHeight());
+        float radius = (span > 0 ? span * 0.6f : dpToPx(26f));
+        bloom.setGradientRadius(radius);
+        int accent = glowAccent();
+        bloom.setColors(new int[]{withAlpha(accent, 165), withAlpha(accent, 70), withAlpha(accent, 0)});
+        bloom.setDither(true);
+        return bloom;
+    }
+
+    /**
+     * Set a key's glow to {@code level} (0..1): a soft accent bloom behind the glyph (the part that
+     * actually reads over the wallpaper), plus a shift of the glyph itself toward the bright accent
+     * and a faint text-shadow halo. Resting glyphs are already white, so the bloom + colour shift are
+     * what make a pressed/held/locked key unmistakable.
      */
     private void applyKeyGlow(@NonNull MaterialButton button, float level, float radiusDp, float whiteMix) {
         if (level <= 0.01f) {
             button.setShadowLayer(0f, 0f, 0f, 0);
             button.setTextColor(mButtonTextColor);
+            button.setBackground(new ColorDrawable(mButtonBackgroundColor));
             return;
         }
         float l = clamp01(level);
+        GlowBloomDrawable bloom = (button.getBackground() instanceof GlowBloomDrawable)
+            ? (GlowBloomDrawable) button.getBackground()
+            : buildGlowBloom(button);
+        if (button.getBackground() != bloom) {
+            button.setBackground(bloom);
+        }
+        bloom.setAlpha(Math.round(255 * l));
         button.setShadowLayer(dpToPx(radiusDp), 0f, 0f,
             withAlpha(keyGlowColor(whiteMix), Math.round(255 * l)));
         int hot = lerpColor(glowAccent(), Color.WHITE, 0.30f);
@@ -1216,26 +1248,19 @@ public final class ExtraKeysView extends GridLayout {
         // The bubble is larger than the key so the secondary glyph reads prominently. Recenter the
         // popup origin (its top-left) so the enlarged bubble stays centred over the key, and clamp
         // X so it never runs off-screen.
-        mBubbleW = Math.round(mTravelKeyW * 1.4f);
-        mBubbleH = Math.round(mTravelKeyH * 1.4f);
+        // A touch bigger than the key so the secondary glyph reads, but no card behind it.
+        mBubbleW = Math.round(mTravelKeyW * 1.2f);
+        mBubbleH = Math.round(mTravelKeyH * 1.2f);
         int screenW = getResources().getDisplayMetrics().widthPixels;
         int centeredX = loc[0] - (mBubbleW - mTravelKeyW) / 2;
         mTravelKeyScreenX = Math.max(0, Math.min(centeredX, Math.max(0, screenW - mBubbleW)));
         mTravelKeyScreenY = loc[1] - (mBubbleH - mTravelKeyH) / 2;
-        // Clear the row: the enlarged bubble rises a full key-height plus a little more.
+        // Clear the row: the bubble rises a full key-height plus a little more.
         mBubbleTravelDistPx = mTravelKeyH + dpToPx(16f);
         mTravelSourceText = button.getText();
         mTravelSecondaryText = popup.getDisplay();
         // The popup always previews the SECONDARY (revealed) key — that's what the swipe selects.
         mTravelShowingSecondary = true;
-
-        // A soft dark backing keeps the floating glyph legible over the row/wallpaper; no bright
-        // border — the glyph itself glows (matching the on-key glow language).
-        GradientDrawable bg = new GradientDrawable();
-        bg.setShape(GradientDrawable.RECTANGLE);
-        bg.setDither(true);
-        bg.setCornerRadius(Math.min(mBubbleW, mBubbleH) * 0.5f);
-        bg.setColor(withAlpha(Color.rgb(14, 17, 23), mKeyPressFeedbackBlurAvailable ? 200 : 230));
 
         TextView tv = new TextView(getContext());
         tv.setGravity(Gravity.CENTER);
@@ -1243,14 +1268,14 @@ public final class ExtraKeysView extends GridLayout {
         tv.setSingleLine(true);
         tv.setMaxLines(1);
         tv.setAllCaps(mButtonTextAllCaps);
-        tv.setTextSize(TypedValue.COMPLEX_UNIT_PX, button.getTextSize() * 1.45f);
+        tv.setTextSize(TypedValue.COMPLEX_UNIT_PX, button.getTextSize() * 1.25f);
         tv.setTypeface(button.getTypeface());
         tv.setTextColor(activeTextColor());
         tv.setText(mTravelSecondaryText);
-        tv.setBackground(bg);
+        // No background card — the glyph floats, kept legible by its own accent glow.
 
         mTravelBubble = tv;
-        mTravelBubbleBg = bg;
+        mTravelBubbleBg = null;
         mTravelPopup = new PopupWindow(tv, mBubbleW, mBubbleH, false);
         mTravelPopup.setClippingEnabled(false);
         mTravelPopup.setFocusable(false);
@@ -1269,15 +1294,13 @@ public final class ExtraKeysView extends GridLayout {
             mTravelBubbleBg = null;
             return;
         }
-        if (!shouldSnapKeyMotion()) {
-            tv.setPivotX(mBubbleW / 2f);
-            tv.setPivotY(mBubbleH / 2f);
-            tv.setAlpha(0f);
-            tv.setScaleX(0.85f);
-            tv.setScaleY(0.85f);
-            tv.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(80L)
-                .setInterpolator(new DecelerateInterpolator()).start();
-        }
+        // Alpha + scale track the swipe (set in updateBubbleTravel): the bubble grows in as the
+        // finger rises and fades/shrinks away smoothly as it slides back down. Start invisible.
+        tv.setPivotX(mBubbleW / 2f);
+        tv.setPivotY(mBubbleH / 2f);
+        tv.setAlpha(0f);
+        tv.setScaleX(0.85f);
+        tv.setScaleY(0.85f);
         updateBubbleTravel(0f);
     }
 
@@ -1300,6 +1323,15 @@ public final class ExtraKeysView extends GridLayout {
         }
         mTravelBubble.setShadowLayer(dpToPx(KEY_GLOW_RADIUS_HOLD_DP), 0f, 0f,
             withAlpha(keyGlowColor(KEY_GLOW_WHITE_MIX_HOLD), 255));
+        // Grow in as the finger rises, fade/shrink out smoothly as it slides back down.
+        if (!shouldSnapKeyMotion()) {
+            float a = clamp01(frac / 0.45f);
+            mTravelBubble.setAlpha(a);
+            mTravelBubble.setScaleX(0.85f + 0.15f * a);
+            mTravelBubble.setScaleY(0.85f + 0.15f * a);
+        } else {
+            mTravelBubble.setAlpha(1f);
+        }
         mTravelBubble.invalidate();
     }
 

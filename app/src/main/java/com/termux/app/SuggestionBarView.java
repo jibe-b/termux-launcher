@@ -45,6 +45,7 @@ import android.text.TextUtils;
 import android.view.DragEvent;
 import android.util.AttributeSet;
 import android.util.Log;
+import android.util.LruCache;
 import android.view.VelocityTracker;
 import android.view.Gravity;
 import android.view.MotionEvent;
@@ -143,6 +144,8 @@ public final class SuggestionBarView extends GridLayout {
     private float textSize = 12f;
     private boolean bandW = false;
     private boolean unifyIcons = true;
+    /** Cache of harmonized icon drawables so resting and swipe-preview icons are identical (no size jump) and we don't rebuild bitmaps per frame. */
+    private final LruCache<String, Drawable> normalizedIconCache = new LruCache<>(96);
     private int searchTolerance = 70;
     private float iconScale = 1.0f;
     private int appBarOpacity = 80;
@@ -406,6 +409,7 @@ public final class SuggestionBarView extends GridLayout {
     public void setUnifyIcons(boolean unifyIcons) {
         if (this.unifyIcons == unifyIcons) return;
         this.unifyIcons = unifyIcons;
+        normalizedIconCache.evictAll();
         lastSurfaceRenderSignature = 0;
     }
 
@@ -1778,6 +1782,28 @@ public final class SuggestionBarView extends GridLayout {
      * (derived from the icon's own alpha) that lifts it off the glass. Returns {@code src} unchanged
      * when the feature is off. The B&W color filter, if enabled, still stacks on top of the result.
      */
+    /**
+     * Harmonized icon for an entry at {@code sizePx}, cached so the resting button and the
+     * swipe-preview draw the exact same bitmap (no size jump) without rebuilding per frame.
+     */
+    @Nullable
+    private Drawable iconForDisplay(@NonNull LauncherAppEntry entry, int sizePx) {
+        Drawable raw = entry.icon != null ? entry.icon : getContext().getPackageManager().getDefaultActivityIcon();
+        if (!unifyIcons || sizePx <= 0) {
+            return raw;
+        }
+        String key = stableEntryKey(entry) + "@" + sizePx;
+        Drawable cached = normalizedIconCache.get(key);
+        if (cached != null) {
+            return cached;
+        }
+        Drawable normalized = normalizeIcon(raw, sizePx);
+        if (normalized != null) {
+            normalizedIconCache.put(key, normalized);
+        }
+        return normalized;
+    }
+
     private Drawable normalizeIcon(@Nullable Drawable src, int sizePx) {
         if (!unifyIcons || src == null || sizePx <= 0) {
             return src;
@@ -1785,12 +1811,13 @@ public final class SuggestionBarView extends GridLayout {
         Bitmap out = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(out);
 
-        // Consistent footprint: ~80% of the cell, centered and nudged up a hair to leave shadow room.
-        float inset = sizePx * 0.10f;
+        // Full-size footprint (only a hair of inset so the soft shadow has room) — icons fill the
+        // cell as they did before harmonization, just with a subtle shadow + vibrancy match.
+        float inset = sizePx * 0.02f;
         int left = Math.round(inset);
-        int top = Math.round(inset - sizePx * 0.015f);
+        int top = Math.round(inset);
         int right = Math.round(sizePx - inset);
-        int bottom = Math.round(sizePx - inset - sizePx * 0.015f);
+        int bottom = Math.round(sizePx - inset);
         Rect iconRect = new Rect(left, top, Math.max(left + 1, right), Math.max(top + 1, bottom));
 
         // Render the source at the footprint size so we can derive a silhouette shadow that follows
@@ -1804,8 +1831,8 @@ public final class SuggestionBarView extends GridLayout {
         Bitmap alpha = iconBmp.extractAlpha();
         Paint shadowPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         shadowPaint.setColor(0x66000000);
-        shadowPaint.setMaskFilter(new BlurMaskFilter(Math.max(1f, sizePx * 0.06f), BlurMaskFilter.Blur.NORMAL));
-        canvas.drawBitmap(alpha, iconRect.left, iconRect.top + (sizePx * 0.03f), shadowPaint);
+        shadowPaint.setMaskFilter(new BlurMaskFilter(Math.max(1f, sizePx * 0.045f), BlurMaskFilter.Blur.NORMAL));
+        canvas.drawBitmap(alpha, iconRect.left, iconRect.top + (sizePx * 0.02f), shadowPaint);
         alpha.recycle();
 
         // Saturation nudge toward the glass vibrancy (match, not grey), then draw the icon.
@@ -1828,8 +1855,7 @@ public final class SuggestionBarView extends GridLayout {
 
         ImageButton imageButton = new ImageButton(getContext());
         int size = iconSizePx();
-        Drawable icon = entry.icon != null ? entry.icon : getContext().getPackageManager().getDefaultActivityIcon();
-        icon = normalizeIcon(icon, size);
+        Drawable icon = iconForDisplay(entry, size);
         imageButton.setImageDrawable(icon);
         imageButton.setScaleType(ImageButton.ScaleType.CENTER_INSIDE);
         imageButton.setAdjustViewBounds(true);
@@ -5791,7 +5817,11 @@ public final class SuggestionBarView extends GridLayout {
         int alpha,
         boolean showBadge
     ) {
-        Drawable icon = entry.icon != null ? entry.icon : getContext().getPackageManager().getDefaultActivityIcon();
+        // Same harmonized/cached drawable as the resting buttons → no size jump entering a page.
+        Drawable icon = iconForDisplay(entry, iconSize);
+        if (icon == null) {
+            icon = entry.icon != null ? entry.icon : getContext().getPackageManager().getDefaultActivityIcon();
+        }
         int half = Math.max(1, iconSize / 2);
         int saveAlpha = icon.getAlpha();
         Rect oldBounds = new Rect(icon.getBounds());
@@ -6078,8 +6108,7 @@ public final class SuggestionBarView extends GridLayout {
 
     private View createPopupEntryButton(@NonNull LauncherAppEntry entry, int sizePx, @NonNull PinnedFolderItem sourceFolder) {
         ImageButton button = new ImageButton(getContext());
-        Drawable icon = entry.icon != null ? entry.icon : getContext().getPackageManager().getDefaultActivityIcon();
-        icon = normalizeIcon(icon, sizePx);
+        Drawable icon = iconForDisplay(entry, sizePx);
         button.setImageDrawable(icon);
         button.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         button.setAdjustViewBounds(true);

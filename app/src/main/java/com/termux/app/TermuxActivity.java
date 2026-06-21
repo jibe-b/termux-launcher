@@ -1588,9 +1588,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private int resolveDockCapsuleAppsTopPaddingPx() {
         // Push the icons down so they sit centered between the top-edge page indicator (now flush
-        // with the dock's top rim) and the A-Z row below. Tuned against the 9dp indicator band that
-        // sits beneath the icons, so the gap above the icons matches the gap below them.
-        return Math.round(dpToPx(14));
+        // with the dock's top rim) and the A-Z row below. This is a FIXED ~14dp at the largest dock
+        // size, but at smaller dock sizes a fixed pad eats too large a share of the (short) row and
+        // crushes the icons — so scale it down with dock size so every size gets a fair icon size.
+        float progress = mPreferences != null
+            ? resolveDockSizeProgress(mPreferences.getAppLauncherBarHeightScale())
+            : 1f;
+        return Math.round(dpToPx(7f + progress * 7f));
     }
 
     private int resolveDockCapsuleAppsBottomPaddingPx() {
