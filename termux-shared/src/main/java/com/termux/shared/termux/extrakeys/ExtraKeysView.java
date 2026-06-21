@@ -1090,17 +1090,12 @@ public final class ExtraKeysView extends GridLayout {
      * pressed/held/locked key unmistakable.
      */
     private void applyKeyGlow(@NonNull MaterialButton button, float level, float radiusDp, float whiteMix) {
+        // The glyph stays its own (white/active) colour for contrast; the bloom alone is the feedback.
         float l = clamp01(level);
         if (l <= 0.01f) {
             mGlowLevels.remove(button);
-            button.setShadowLayer(0f, 0f, 0f, 0);
-            button.setTextColor(mButtonTextColor);
         } else {
             mGlowLevels.put(button, l);
-            button.setShadowLayer(dpToPx(radiusDp), 0f, 0f,
-                withAlpha(keyGlowColor(whiteMix), Math.round(255 * l)));
-            int hot = lerpColor(glowAccent(), Color.WHITE, 0.30f);
-            button.setTextColor(lerpColor(mButtonTextColor, hot, l));
         }
         invalidate(); // repaint the glow layer
     }
@@ -1110,18 +1105,25 @@ public final class ExtraKeysView extends GridLayout {
         // Draw each lit key's glow behind the keys so it haloes the glyph (children draw on top).
         if (!mGlowLevels.isEmpty()) {
             int accent = glowAccent();
-            int core = lerpColor(accent, Color.WHITE, 0.35f);
+            // Mostly the accent (only a slight lift toward white) so the white glyph stays high-contrast
+            // on top, rather than being washed out by an over-bright bloom.
+            int core = lerpColor(accent, Color.WHITE, 0.12f);
+            int w = getWidth();
+            int h = getHeight();
             for (Map.Entry<MaterialButton, Float> entry : mGlowLevels.entrySet()) {
                 MaterialButton b = entry.getKey();
                 float l = clamp01(entry.getValue());
                 if (b.getParent() != this || b.getWidth() <= 0 || l <= 0.01f) continue;
                 float cx = b.getLeft() + b.getWidth() * 0.5f;
                 float cy = b.getTop() + b.getHeight() * 0.5f;
-                float radius = Math.max(b.getWidth(), b.getHeight()) * 0.85f;
+                // Keep the whole circle inside the view so it never hard-clips at the row edge / the
+                // A-Z bar divider above it — the gradient fades to nothing before any boundary.
+                float radius = Math.max(b.getWidth(), b.getHeight()) * 0.62f;
+                radius = Math.min(radius, Math.min(Math.min(cx, w - cx), Math.min(cy, h - cy)));
                 if (radius <= 0f) continue;
                 RadialGradient shader = new RadialGradient(cx, cy, radius,
-                    new int[]{withAlpha(core, Math.round(235 * l)), withAlpha(accent, Math.round(150 * l)), withAlpha(accent, 0)},
-                    new float[]{0f, 0.55f, 1f}, Shader.TileMode.CLAMP);
+                    new int[]{withAlpha(core, Math.round(150 * l)), withAlpha(accent, Math.round(80 * l)), withAlpha(accent, 0)},
+                    new float[]{0f, 0.5f, 1f}, Shader.TileMode.CLAMP);
                 mGlowPaint.setShader(shader);
                 canvas.drawCircle(cx, cy, radius, mGlowPaint);
             }
