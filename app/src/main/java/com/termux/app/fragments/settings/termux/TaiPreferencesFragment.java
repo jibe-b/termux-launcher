@@ -711,7 +711,11 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
 
     private String deriveModelIdFromUrl(String url) {
         try {
-            String lastSegment = Uri.parse(url).getLastPathSegment();
+            // For a .../resolve/main/<file> URL the file name (config.json) is useless as an id;
+            // use the repo name instead. For a bare repo URL the last segment is the repo name.
+            int resolve = url == null ? -1 : url.indexOf("/resolve/");
+            String basis = resolve > 0 ? url.substring(0, resolve) : url;
+            String lastSegment = Uri.parse(basis).getLastPathSegment();
             if (lastSegment != null && !lastSegment.isEmpty()) {
                 String sanitized = TaiModelImporter.sanitizeModelId(
                     TaiModelImporter.stripModelExtension(lastSegment));
@@ -1354,10 +1358,16 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
 
     private void showCatalogBrowser(Context context) {
         ArrayList<TaiModelCatalog.CatalogEntry> entries = new ArrayList<>(TaiModelCatalog.entries().values());
-        CharSequence[] labels = new CharSequence[entries.size()];
         TaiModelStore store = new TaiModelStore(context);
         Map<String, TaiModelSpec> installed = store.getInstalledUserModels();
         JSONArray downloads = store.getDownloads();
+        // Imported/URL-downloaded models that aren't catalog entries also belong here, with the same
+        // Parameters/Delete actions as installed catalog models.
+        ArrayList<TaiModelSpec> userOnly = new ArrayList<>();
+        for (TaiModelSpec spec : installed.values()) {
+            if (!TaiModelCatalog.entries().containsKey(spec.id)) userOnly.add(spec);
+        }
+        CharSequence[] labels = new CharSequence[entries.size() + userOnly.size()];
         for (int i = 0; i < entries.size(); i++) {
             TaiModelCatalog.CatalogEntry entry = entries.get(i);
             JSONObject download = findDownload(downloads, entry.modelId);
@@ -1366,9 +1376,18 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
                 : download == null ? getString(R.string.termux_ai_model_catalog_not_installed) : download.optString("status", "");
             labels[i] = entry.displayName + " · " + formatBytes(entry.sizeBytes) + " · " + state;
         }
+        for (int j = 0; j < userOnly.size(); j++) {
+            TaiModelSpec spec = userOnly.get(j);
+            labels[entries.size() + j] = spec.displayName + " · " + formatBytes(spec.sizeBytes)
+                + " · " + getString(R.string.termux_ai_model_pill_installed) + " (added)";
+        }
         new MaterialAlertDialogBuilder(context)
             .setTitle(R.string.termux_ai_models_browse_catalog_title)
             .setItems(labels, (dialog, which) -> {
+                if (which >= entries.size()) {
+                    showInstalledModelActions(context, userOnly.get(which - entries.size()));
+                    return;
+                }
                 TaiModelCatalog.CatalogEntry entry = entries.get(which);
                 TaiModelSpec installedSpec = new TaiModelStore(context).getInstalledUserModels().get(entry.modelId);
                 if (installedSpec != null) {
@@ -1657,6 +1676,13 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
         };
         applyModalityGates.run();
 
+        EditText hfUrlInput = new EditText(context);
+        hfUrlInput.setSingleLine(true);
+        hfUrlInput.setHint(R.string.termux_ai_model_import_hf_url_field_hint);
+        hfUrlInput.setInputType(InputType.TYPE_TEXT_VARIATION_URI);
+        hfUrlInput.setText(draft.hfUrl == null ? "" : draft.hfUrl);
+        layout.addView(hfUrlInput);
+
         EditText modelIdInput = new EditText(context);
         modelIdInput.setSingleLine(true);
         modelIdInput.setHint(R.string.termux_ai_model_import_id_hint);
@@ -1694,8 +1720,9 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
         Button positive = dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE);
         positive.setOnClickListener(view -> {
             draft.backend = backendGroup.getCheckedRadioButtonId() == mnn.getId() ? IMPORT_BACKEND_MNN : IMPORT_BACKEND_LITERT;
-            draft.hfUrl = "";
-            draft.hfToken = "";
+            String hfUrl = hfUrlInput.getText().toString().trim();
+            draft.hfUrl = hfUrl;
+            draft.hfToken = hfUrl.isEmpty() ? "" : new TaiSettings(context).getHuggingFaceToken();
             draft.modelId = modelIdInput.getText().toString().trim();
             captureModalities.run();
             if (startImportDraft(context, draft)) dialog.dismiss();

@@ -243,8 +243,25 @@ public final class TaiModelImporter {
         if (!trimmed.startsWith("https://")) {
             return ValidationResult.rejected(ERROR_INSECURE_URL, "Hugging Face imports require an https:// URL.");
         }
-        String name = fileNameFromUrl(trimmed);
-        return validateImportFileNameForBackend(backend, name);
+        // A bare repo URL is fine — the downloader resolves the entry file (config.json/.litertlm)
+        // from the repo's file list. Only validate the filename when a direct /resolve/ URL is given.
+        if (!trimmed.contains("/resolve/")) {
+            return looksLikeHuggingFaceRepoUrl(trimmed)
+                ? ValidationResult.accepted(false)
+                : ValidationResult.rejected(ERROR_UNSUPPORTED_MODEL_FILE,
+                    "Enter a Hugging Face repo URL (https://huggingface.co/<org>/<model>) or a direct .../resolve/main/<file> URL.");
+        }
+        return validateImportFileNameForBackend(backend, fileNameFromUrl(trimmed));
+    }
+
+    static boolean looksLikeHuggingFaceRepoUrl(@NonNull String url) {
+        String prefix = "https://huggingface.co/";
+        if (!url.startsWith(prefix)) return false;
+        String path = url.substring(prefix.length());
+        int cut = path.indexOf('?');
+        if (cut >= 0) path = path.substring(0, cut);
+        String[] parts = path.split("/");
+        return parts.length >= 2 && !parts[0].isEmpty() && !parts[1].isEmpty();
     }
 
     @NonNull

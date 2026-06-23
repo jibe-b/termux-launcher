@@ -19,6 +19,25 @@ public class TaiModelImporterTest {
     }
 
     @Test
+    public void huggingFaceImportUrl_acceptsBareRepoAndResolveUrls() {
+        // Bare repo URL: the downloader resolves the entry file, so it's accepted for either backend.
+        assertTrue(TaiModelImporter.validateHuggingFaceImportUrl(TaiModelSpec.BACKEND_MNN_LLM,
+            "https://huggingface.co/taobao-mnn/Qwen2.5-VL-3B-Instruct-MNN").supported);
+        assertTrue(TaiModelImporter.validateHuggingFaceImportUrl(TaiModelSpec.BACKEND_LITERT_LM,
+            "https://huggingface.co/litert-community/Gemma3-1B-IT").supported);
+        // Direct resolve URLs still validate by file name per backend.
+        assertTrue(TaiModelImporter.validateHuggingFaceImportUrl(TaiModelSpec.BACKEND_MNN_LLM,
+            "https://huggingface.co/taobao-mnn/Foo-MNN/resolve/main/config.json").supported);
+        assertFalse(TaiModelImporter.validateHuggingFaceImportUrl(TaiModelSpec.BACKEND_LITERT_LM,
+            "https://huggingface.co/foo/bar/resolve/main/model.gguf").supported);
+        // Not a repo / not https.
+        assertFalse(TaiModelImporter.validateHuggingFaceImportUrl(TaiModelSpec.BACKEND_MNN_LLM,
+            "https://huggingface.co/taobao-mnn").supported);
+        assertFalse(TaiModelImporter.validateHuggingFaceImportUrl(TaiModelSpec.BACKEND_MNN_LLM,
+            "http://huggingface.co/a/b").supported);
+    }
+
+    @Test
     public void unsupportedRawWeightsAndNativeLibraries_reportStableCodes() {
         TaiModelImporter.ValidationResult safetensors = TaiModelImporter.validateSupportedImportFileName("model.safetensors");
         assertFalse(safetensors.supported);

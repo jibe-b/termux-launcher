@@ -262,13 +262,24 @@ public final class TaiManager {
         String url = request.optString("url", "").trim();
         if (modelId.isEmpty()) return error(400, "bad_request", "Missing model id");
         if (url.isEmpty()) return error(400, "bad_request", "Missing download URL");
+        String token = request.optString("huggingFaceToken", settings.getHuggingFaceToken());
+        // Accept a bare repo URL: resolve it to the package entry file (config.json / .litertlm) so
+        // the user never has to find the right file in the Hugging Face file list.
+        if (!url.contains("/resolve/")) {
+            String resolved = modelDownloader.resolveHuggingFaceEntryUrl(url, request.optString("backend", "").trim(), token);
+            if (resolved.isEmpty()) {
+                return error(400, "hf_resolve_failed", "Could not find a downloadable model file in that Hugging Face repo. "
+                    + "Paste the repo URL (e.g. https://huggingface.co/taobao-mnn/Qwen2.5-VL-3B-Instruct-MNN) or a direct .../resolve/main/<file> URL.");
+            }
+            url = resolved;
+        }
         JSONObject data = modelDownloader.startDownload(
             modelId,
             url,
             request.optString("displayName", modelId),
             request.optString("license", "User accepted provider terms externally"),
             capabilitiesFromRequest(request),
-            request.optString("huggingFaceToken", settings.getHuggingFaceToken())
+            token
         );
         data.put("downloadsRequireExplicitUserAction", true);
         data.put("huggingFaceTokenBundled", false);

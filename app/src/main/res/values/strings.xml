@@ -318,7 +318,8 @@
         <string name="termux_ai_model_import_title">Import file</string>
         <string name="termux_ai_model_import_summary">Import a local LiteRT .litertlm or .task file into app-private storage</string>
         <string name="termux_ai_model_import_dialog_title">Local import</string>
-        <string name="termux_ai_model_import_dialog_message">Choose one local SAF model file. MNN folder packages should be downloaded from the catalog. Tick the modalities this model supports — you can change them later in the model\'s Parameters.</string>
+        <string name="termux_ai_model_import_dialog_message">Paste a Hugging Face URL (repo or file) to download, or choose a local LiteRT file. Tick the modalities this model supports — you can change them later in the model\'s Parameters.</string>
+        <string name="termux_ai_model_import_hf_url_field_hint">Hugging Face URL (repo or file) — blank for local file</string>
         <string name="termux_ai_model_import_hf_url_hint">Hugging Face HTTPS URL</string>
         <string name="termux_ai_model_import_hf_token_hint">Optional Hugging Face token</string>
         <string name="termux_ai_model_import_id_hint">Model id (optional)</string>
