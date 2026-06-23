@@ -93,6 +93,13 @@ public final class TaiModelStore {
         preferences.edit().putString(KEY_EXPOSURE_PREFIX + modelId, exposure).apply();
     }
 
+    /** Re-applies any user capability override to a spec resolved outside the user-model store
+     *  (on-disk/registry built-ins), so generation honours the same modalities /v1/models advertises. */
+    @NonNull
+    public synchronized TaiModelSpec withCapabilityOverride(@NonNull TaiModelSpec spec) {
+        return applyCapabilityOverride(spec);
+    }
+
     @NonNull
     private TaiModelSpec applyCapabilityOverride(@NonNull TaiModelSpec spec) {
         String raw = preferences.getString(KEY_CAPS_PREFIX + spec.id, null);

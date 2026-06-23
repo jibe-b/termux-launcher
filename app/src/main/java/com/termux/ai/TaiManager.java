@@ -1090,10 +1090,14 @@ public final class TaiManager {
         if (spec != null && spec.localPath != null && !spec.localPath.trim().isEmpty()) return spec;
         // Self-heal: a catalog model whose package is on disk but isn't registered (e.g. an
         // interrupted download) is still loadable. Prefer it over an unusable/empty registration.
+        // onDisk/registry specs come from the catalog, so re-apply any user capability override
+        // (e.g. vision enabled on a built-in model) — otherwise generation ignores what /v1/models
+        // advertises and the endpoint media gate rejects declared modalities.
         TaiModelSpec onDisk = modelStore.onDiskModelSpec(modelId);
-        if (onDisk != null) return onDisk;
+        if (onDisk != null) return modelStore.withCapabilityOverride(onDisk);
         if (spec != null) return spec;
-        return registry.getModel(modelId);
+        TaiModelSpec registryModel = registry.getModel(modelId);
+        return registryModel == null ? null : modelStore.withCapabilityOverride(registryModel);
     }
 
     @NonNull
