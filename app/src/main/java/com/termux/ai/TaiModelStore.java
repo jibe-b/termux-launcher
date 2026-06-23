@@ -80,6 +80,58 @@ public final class TaiModelStore {
         return installed;
     }
 
+    /**
+     * Builds a spec for a catalog model whose package is already present on disk under
+     * {@code tai/models/&lt;id&gt;/}, even when it was never registered in user-models (e.g. a
+     * download whose files completed but whose final registration step was interrupted). Returns
+     * {@code null} unless the package is a known catalog entry and is readable. Self-heals the
+     * "Download or import this model before loading it" state for models that are physically there.
+     */
+    @Nullable
+    public synchronized TaiModelSpec onDiskModelSpec(@Nullable String modelId) {
+        if (modelId == null || modelId.trim().isEmpty()) return null;
+        String id = TaiSettings.migrateBuiltInModelId(modelId);
+        TaiModelCatalog.CatalogEntry entry = TaiModelCatalog.get(id);
+        if (entry == null) return null;
+        File dir = new File(getModelsDirectory(), id);
+        if (!dir.isDirectory()) return null;
+        String path;
+        if (TaiModelSpec.BACKEND_MNN_LLM.equals(entry.backend)) {
+            File config = new File(dir, "config.json");
+            if (!config.isFile()) return null;
+            path = config.getAbsolutePath();
+        } else {
+            File pkg = firstLiteRtPackage(dir);
+            if (pkg == null) return null;
+            path = pkg.getAbsolutePath();
+        }
+        LinkedHashSet<String> endpointCapabilities = new LinkedHashSet<>(TaiModelSpec.endpointCapabilitiesFor(
+            entry.modelId, entry.backend, entry.format, entry.sourceCapabilities, path));
+        try {
+            TaiModelSpec spec = new TaiModelSpec(
+                entry.modelId, entry.displayName, entry.roleHint, "downloaded", path, entry.license,
+                localModelSize(dir), new LinkedHashSet<>(entry.sourceCapabilities), false, null,
+                entry.backend, entry.format, entry.architecture, entry.quantization,
+                entry.endpointContextWindow, entry.sourceContextWindow, entry.defaultMaxOutputTokens,
+                entry.recommendedRamGb, entry.sha256, endpointCapabilities,
+                TaiModelSpec.toolModeFor(entry.backend, endpointCapabilities));
+            return isModelReadable(spec) ? spec : null;
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
+
+    @Nullable
+    private File firstLiteRtPackage(@NonNull File dir) {
+        File[] children = dir.listFiles();
+        if (children == null) return null;
+        for (File child : children) {
+            String name = child.getName().toLowerCase(java.util.Locale.ROOT);
+            if (child.isFile() && (name.endsWith(".litertlm") || name.endsWith(".task"))) return child;
+        }
+        return null;
+    }
+
     @NonNull
     public synchronized Map<String, TaiModelSpec> getDownloadedReadableModels() {
         LinkedHashMap<String, TaiModelSpec> models = new LinkedHashMap<>();

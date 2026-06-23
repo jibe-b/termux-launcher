@@ -154,7 +154,11 @@ public final class TaiRuntimeHistory {
 
     @NonNull
     private static String key(@NonNull TaiModelSpec model, @NonNull TaiDeviceCapabilities device, @NonNull String accelerator) {
-        return model.id + "|" + deviceKey(device) + "|" + normalizeAccelerator(accelerator);
+        // Key by the underlying model, not the per-modality virtual variant (…-vision/…-audio):
+        // GPU load stability is a property of the model file + device and is shared across modalities.
+        // Otherwise a vision request can never auto-load because the variant id has no GPU history,
+        // even after the base model has loaded successfully on GPU.
+        return TaiModelVariants.baseModelId(model.id) + "|" + deviceKey(device) + "|" + normalizeAccelerator(accelerator);
     }
 
     @NonNull

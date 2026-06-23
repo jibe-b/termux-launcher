@@ -116,6 +116,19 @@ final class TaiModelVariants {
         return id.substring(0, id.length() - suffix.length());
     }
 
+    /**
+     * Strips the {@code -vision}/{@code -audio} modality suffix so a variant id maps back to the
+     * underlying model. Returns {@code id} unchanged when it is already a base id. Used so
+     * device/model state that is shared across modalities (e.g. GPU load stability) is keyed by the
+     * underlying model rather than each virtual variant.
+     */
+    @NonNull
+    static String baseModelId(@NonNull String id) {
+        if (id.endsWith(SUFFIX_VISION)) return baseId(id, SUFFIX_VISION);
+        if (id.endsWith(SUFFIX_AUDIO)) return baseId(id, SUFFIX_AUDIO);
+        return id;
+    }
+
     @NonNull
     private static TaiModelSpec scoped(@NonNull TaiModelSpec base, @NonNull String variantId, @NonNull Scope scope) {
         Set<String> source = scopeCapabilities(base.sourceCapabilities, scope);

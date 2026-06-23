@@ -24,14 +24,18 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
 public final class TaiRuntimeServiceClient {
     private static final long CONNECT_TIMEOUT_MS = 5_000L;
     private static final long REQUEST_TIMEOUT_MS = 120_000L;
     private static final int INLINE_BODY_LIMIT_BYTES = 512 * 1024;
+    /** Sentinel placed on a streaming request's queue to mark the end of the stream. */
+    private static final Object STREAM_END = new Object();
 
     private final Context appContext;
     private final Object connectionLock = new Object();
@@ -70,15 +74,29 @@ public final class TaiRuntimeServiceClient {
     public void stream(@NonNull String operation, @Nullable String body, @NonNull TaiManager.OpenAiStreamSink sink)
         throws JSONException, IOException {
         PendingRequest request = send(operation, body, true, sink);
+        BlockingQueue<Object> events = request.events;
+        // Drain stream events on this (background) caller thread. The IPC reply Handler runs on the
+        // main looper, so it only enqueues events here — performing the SSE socket writes from the
+        // main thread would throw NetworkOnMainThreadException and abort the stream.
         try {
-            request.done.await();
+            Object item;
+            while (events != null && (item = events.take()) != STREAM_END) {
+                sink.onEvent((JSONObject) item);
+            }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             pending.remove(request.requestId);
             emitRuntimeError(sink, runtimeUnavailable("tai_runtime_interrupted", "TAI runtime stream interrupted."));
+            return;
+        } catch (IOException | RuntimeException e) {
+            // Client disconnected or write failed: stop tracking so late events are dropped.
+            pending.remove(request.requestId);
+            throw e;
         }
         if (request.result != null && !request.result.optBoolean("ok", true)) {
             emitRuntimeError(sink, request.result);
+        } else {
+            sink.onDone();
         }
     }
 
@@ -93,6 +111,7 @@ public final class TaiRuntimeServiceClient {
         if (target == null) {
             PendingRequest failed = new PendingRequest(UUID.randomUUID().toString(), stream, sink);
             failed.result = runtimeUnavailable("tai_runtime_unavailable", "TAI runtime service is not connected.");
+            failed.signalEnd();
             failed.done.countDown();
             return failed;
         }
@@ -106,6 +125,7 @@ public final class TaiRuntimeServiceClient {
         } catch (IOException e) {
             pending.remove(requestId);
             pendingRequest.result = runtimeUnavailable("tai_runtime_transport_failed", e.getMessage());
+            pendingRequest.signalEnd();
             pendingRequest.done.countDown();
             return pendingRequest;
         }
@@ -123,6 +143,7 @@ public final class TaiRuntimeServiceClient {
         } catch (RemoteException e) {
             pending.remove(requestId);
             pendingRequest.result = runtimeCrashed("tai_runtime_send_failed", "TAI runtime service disconnected while starting the request.");
+            pendingRequest.signalEnd();
             pendingRequest.done.countDown();
         }
         return pendingRequest;
@@ -203,12 +224,9 @@ public final class TaiRuntimeServiceClient {
             "AI runtime crashed while loading or running a model. Try CPU or a smaller model.");
         for (PendingRequest request : pending.values()) {
             request.result = error;
-            if (request.stream && request.sink != null) {
-                try {
-                    emitRuntimeError(request.sink, error);
-                } catch (IOException | JSONException ignored) {
-                }
-            }
+            // Don't write to the sink here (this runs on the main thread). The stream consumer on
+            // the background thread emits the error after it observes the end sentinel.
+            request.signalEnd();
             request.done.countDown();
         }
         pending.clear();
@@ -237,13 +255,14 @@ public final class TaiRuntimeServiceClient {
                     return;
                 }
                 if (message.what == TaiRuntimeIpc.MSG_STREAM_EVENT) {
+                    // Hand the parsed event to the background consumer; never touch the socket here.
                     String event = data.getString(TaiRuntimeIpc.KEY_EVENT, "{}");
-                    if (request.sink != null) request.sink.onEvent(new JSONObject(event));
+                    if (request.events != null) request.events.offer(new JSONObject(event));
                     return;
                 }
                 if (message.what == TaiRuntimeIpc.MSG_STREAM_DONE) {
-                    if (request.sink != null) request.sink.onDone();
                     pending.remove(requestId);
+                    request.signalEnd();
                     request.done.countDown();
                     return;
                 }
@@ -251,6 +270,7 @@ public final class TaiRuntimeServiceClient {
                 request.result = runtimeUnavailable("tai_runtime_stream_failed",
                     e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
                 pending.remove(requestId);
+                request.signalEnd();
                 request.done.countDown();
                 return;
             }
@@ -326,6 +346,9 @@ public final class TaiRuntimeServiceClient {
         final String requestId;
         final boolean stream;
         @Nullable final TaiManager.OpenAiStreamSink sink;
+        /** Non-null for streaming requests: events are produced on the main-looper Handler and
+         *  consumed (written to the socket) on the background caller thread. */
+        @Nullable final BlockingQueue<Object> events;
         final CountDownLatch done = new CountDownLatch(1);
         @Nullable JSONObject result;
 
@@ -333,6 +356,12 @@ public final class TaiRuntimeServiceClient {
             this.requestId = requestId;
             this.stream = stream;
             this.sink = sink;
+            this.events = stream ? new LinkedBlockingQueue<>() : null;
+        }
+
+        /** Releases a waiting stream consumer; safe to call more than once. */
+        void signalEnd() {
+            if (events != null) events.offer(STREAM_END);
         }
     }
 }

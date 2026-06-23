@@ -1081,8 +1081,13 @@ public final class TaiManager {
     private TaiModelSpec lookupBaseModel(@Nullable String modelId) {
         if (modelId == null) return null;
         TaiModelSpec spec = modelStore.getUserModel(modelId);
-        if (spec == null) spec = registry.getModel(modelId);
-        return spec;
+        if (spec != null && spec.localPath != null && !spec.localPath.trim().isEmpty()) return spec;
+        // Self-heal: a catalog model whose package is on disk but isn't registered (e.g. an
+        // interrupted download) is still loadable. Prefer it over an unusable/empty registration.
+        TaiModelSpec onDisk = modelStore.onDiskModelSpec(modelId);
+        if (onDisk != null) return onDisk;
+        if (spec != null) return spec;
+        return registry.getModel(modelId);
     }
 
     @NonNull

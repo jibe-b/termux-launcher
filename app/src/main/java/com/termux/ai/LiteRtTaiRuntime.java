@@ -613,12 +613,20 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
             || modelSpec.capabilities.contains(TaiModelSpec.CAPABILITY_IMAGE_INPUT);
         boolean audioInput = modelSpec.sourceCapabilities.contains(TaiModelSpec.CAPABILITY_AUDIO_INPUT)
             || modelSpec.capabilities.contains(TaiModelSpec.CAPABILITY_AUDIO_INPUT);
+        // The 5th EngineConfig arg is the engine's TOTAL token budget (KV-cache / max sequence),
+        // not the per-request output cap. Size it to the model's context window (or an explicit
+        // context_window override) so the input prompt always fits. Using the request's max_tokens
+        // here made short max_tokens (e.g. 12) reject any longer prompt with "Input token ids are
+        // too long" and reloaded the engine on every distinct max_tokens value.
+        int engineMaxTokens = options.contextWindow != null
+            ? options.contextWindow
+            : Math.max(profile.defaultMaxTokens, modelSpec.endpointContextWindow);
         EngineConfig config = new EngineConfig(
             modelPath,
             backend,
             imageInput ? matchingBackend(backend) : null,
             audioInput ? new Backend.CPU(null) : null,
-            options.maxTokens == null ? profile.defaultMaxTokens : options.maxTokens,
+            engineMaxTokens,
             imageInput ? 8 : null,
             cacheDir
         );
@@ -941,7 +949,8 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
 
     @NonNull
     private String optionsKey(@NonNull TaiRuntimeOptions options) {
-        return String.valueOf(options.maxTokens) + "|"
+        // contextWindow (not maxTokens) sizes the engine, so reload only when it changes.
+        return String.valueOf(options.contextWindow) + "|"
             + options.topK + "|"
             + options.topP + "|"
             + options.temperature + "|"
