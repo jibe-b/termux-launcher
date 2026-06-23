@@ -1,5 +1,14 @@
 # TAI / Termux AI
 
+Termux-Launcher now has native AI backends powered by [Google LiteRT](https://developers.google.com/edge/litert)/[MediaPipe](https://developers.google.com/edge/mediapipe/solutions/guide) and [TaoBao/alibaba MNN](https://github.com/alibaba/mnn). 
+
+I wanted fast interference abovfe everything else and therefore, the LiteRT and MNN backends were chosen. I tried MLC backend as well, but it requires the model weights to be bundled along with the APK, and did not present any meaningful benefit for this tradeoff. 
+
+It does not support GGUF models, but you can always just use termux native llamacpp to run those. 
+
+Provides you with a openai compatible API endpoint and key (bearer token), which you may plug into any cli AI apps/tools. 
+The app loads the requested models automatically upon first request and will be automatically unloaded after 10 minutes of no interaction. 
+
 TAI is the local on-device model endpoint for Termux Launcher. The localhost API stays in the launcher process, while native LiteRT-LM/MNN model loading and generation run in an isolated Android `:tai_runtime` process. This APK is a LiteRT-LM/MNN host; it is not a GGUF or llama.cpp runner.
 
 TAI is intentionally not a shell agent. Use established shell/coding clients such as `aichat` or `tmuxai` for terminal workflows, pane context, command review, and coding UX. TAI provides the local model runtime those tools can call.
