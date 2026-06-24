@@ -29,6 +29,7 @@
             app:key="app_launcher_az_lock_method"
             app:title="@string/termux_app_launcher_az_double_tap_lock_title"
             app:summary="@string/termux_app_launcher_az_double_tap_lock_summary"
+            app:dialogTitle="@string/termux_app_launcher_az_lock_method_dialog_title"
             android:defaultValue="off"
             app:entries="@array/app_launcher_az_lock_method_entries"
             app:entryValues="@array/app_launcher_az_lock_method_values" />

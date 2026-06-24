@@ -582,11 +582,12 @@
                 <string name="termux_app_launcher_permission_settings_unavailable">Permission settings are unavailable on this device.</string>
                 <string name="termux_app_launcher_az_row_enabled_title">Alphabets row</string>
                 <string name="termux_app_launcher_az_row_enabled_summary">Show the alphabet scrubber below the dock.</string>
-                <string name="termux_app_launcher_az_double_tap_lock_title">Double tap alphabets row</string>
+                <string name="termux_app_launcher_az_double_tap_lock_title">Double tap alphabets row lockscreen</string>
                 <string name="termux_app_launcher_az_double_tap_lock_summary">Choose what double tapping the alphabets row does.</string>
+                <string name="termux_app_launcher_az_lock_method_dialog_title">Choose method</string>
                 <string name="termux_app_launcher_az_lock_method_off">Off</string>
-                <string name="termux_app_launcher_az_lock_method_shizuku">Shizuku</string>
-                <string name="termux_app_launcher_az_lock_method_accessibility">Accessibility</string>
+                <string name="termux_app_launcher_az_lock_method_shizuku">Shizuku\nSends a power-button keypress via Shizuku — preserves the system screen-off animation.</string>
+                <string name="termux_app_launcher_az_lock_method_accessibility">Accessibility\nUses the accessibility service to lock — the screen may flicker while turning off.</string>
                 <string name="termux_app_launcher_set_home_title">Set as home launcher</string>
                 <string name="termux_app_launcher_set_home_summary">Open Android default home app settings.</string>
                 <string name="termux_app_launcher_set_home_unavailable">Home launcher settings are unavailable on this device.</string>
