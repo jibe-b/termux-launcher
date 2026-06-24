@@ -145,6 +145,8 @@ public final class SuggestionBarView extends GridLayout {
     private float textSize = 12f;
     private boolean bandW = false;
     private boolean unifyIcons = true;
+    private boolean iconShadowEnabled = true;
+    private static final int ICON_SHADOW_COLOR = 0x73000000;
     /** Cache of harmonized icon drawables so resting and swipe-preview icons are identical (no size jump) and we don't rebuild bitmaps per frame. */
     private final LruCache<String, Drawable> normalizedIconCache = new LruCache<>(96);
     private int searchTolerance = 70;
@@ -412,6 +414,13 @@ public final class SuggestionBarView extends GridLayout {
     public void setUnifyIcons(boolean unifyIcons) {
         if (this.unifyIcons == unifyIcons) return;
         this.unifyIcons = unifyIcons;
+        normalizedIconCache.evictAll();
+        lastSurfaceRenderSignature = 0;
+    }
+
+    public void setIconShadowEnabled(boolean enabled) {
+        if (this.iconShadowEnabled == enabled) return;
+        this.iconShadowEnabled = enabled;
         normalizedIconCache.evictAll();
         lastSurfaceRenderSignature = 0;
     }
@@ -1651,6 +1660,7 @@ public final class SuggestionBarView extends GridLayout {
         signature = (31 * signature) + (pinnedSurface ? 1 : 0);
         signature = (31 * signature) + (bandW ? 1 : 0);
         signature = (31 * signature) + (unifyIcons ? 1 : 0);
+        signature = (31 * signature) + (iconShadowEnabled ? 1 : 0);
         signature = (31 * signature) + Math.max(1, buttonCount);
         signature = (31 * signature) + pinnedPageIndex;
         signature = (31 * signature) + activeAzPageIndex;
@@ -1794,19 +1804,20 @@ public final class SuggestionBarView extends GridLayout {
     @Nullable
     private Drawable iconForDisplay(@NonNull LauncherAppEntry entry, int sizePx) {
         Drawable raw = entry.icon != null ? entry.icon : getContext().getPackageManager().getDefaultActivityIcon();
-        if (!unifyIcons || sizePx <= 0) {
+        // Both harmonization and the standalone shadow rebuild the bitmap; if neither is on, pass through.
+        if ((!unifyIcons && !iconShadowEnabled) || sizePx <= 0) {
             return raw;
         }
-        String key = stableEntryKey(entry) + "@" + sizePx;
+        String key = (unifyIcons ? "u" : "") + (iconShadowEnabled ? "s" : "") + stableEntryKey(entry) + "@" + sizePx;
         Drawable cached = normalizedIconCache.get(key);
         if (cached != null) {
             return cached;
         }
-        Drawable normalized = normalizeIcon(raw, sizePx);
-        if (normalized != null) {
-            normalizedIconCache.put(key, normalized);
+        Drawable built = unifyIcons ? normalizeIcon(raw, sizePx) : shadowedIcon(raw, sizePx);
+        if (built != null) {
+            normalizedIconCache.put(key, built);
         }
-        return normalized;
+        return built != null ? built : raw;
     }
 
     private Drawable normalizeIcon(@Nullable Drawable src, int sizePx) {
@@ -1816,9 +1827,8 @@ public final class SuggestionBarView extends GridLayout {
         Bitmap out = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(out);
 
-        // Full-size footprint (only a hair of inset so the soft shadow has room) — icons fill the
-        // cell as they did before harmonization, just with a subtle shadow + vibrancy match.
-        float inset = sizePx * 0.02f;
+        // Inset leaves room for the soft shadow when it's on; otherwise icons fill the cell.
+        float inset = sizePx * (iconShadowEnabled ? 0.035f : 0.02f);
         int left = Math.round(inset);
         int top = Math.round(inset);
         int right = Math.round(sizePx - inset);
@@ -1832,13 +1842,9 @@ public final class SuggestionBarView extends GridLayout {
         src.setBounds(0, 0, iconBmp.getWidth(), iconBmp.getHeight());
         src.draw(iconCanvas);
 
-        // Soft drop shadow from the icon's own alpha → lifts it off the glass.
-        Bitmap alpha = iconBmp.extractAlpha();
-        Paint shadowPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        shadowPaint.setColor(0x66000000);
-        shadowPaint.setMaskFilter(new BlurMaskFilter(Math.max(1f, sizePx * 0.045f), BlurMaskFilter.Blur.NORMAL));
-        canvas.drawBitmap(alpha, iconRect.left, iconRect.top + (sizePx * 0.02f), shadowPaint);
-        alpha.recycle();
+        if (iconShadowEnabled) {
+            drawIconShadow(canvas, iconBmp, iconRect, sizePx);
+        }
 
         // Saturation nudge toward the glass vibrancy (match, not grey), then draw the icon.
         Paint iconPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
@@ -1849,6 +1855,36 @@ public final class SuggestionBarView extends GridLayout {
         iconBmp.recycle();
 
         return new BitmapDrawable(getResources(), out);
+    }
+
+    /** Wraps a raw icon (no harmonization) with just the soft drop shadow, preserving its colours. */
+    @Nullable
+    private Drawable shadowedIcon(@Nullable Drawable src, int sizePx) {
+        if (src == null || sizePx <= 0) return src;
+        Bitmap out = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(out);
+        float inset = sizePx * 0.035f;
+        Rect iconRect = new Rect(Math.round(inset), Math.round(inset),
+            Math.round(sizePx - inset), Math.round(sizePx - inset));
+        Bitmap iconBmp = Bitmap.createBitmap(iconRect.width(), iconRect.height(), Bitmap.Config.ARGB_8888);
+        Canvas iconCanvas = new Canvas(iconBmp);
+        src.setBounds(0, 0, iconBmp.getWidth(), iconBmp.getHeight());
+        src.draw(iconCanvas);
+        drawIconShadow(canvas, iconBmp, iconRect, sizePx);
+        Paint iconPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+        canvas.drawBitmap(iconBmp, null, iconRect, iconPaint);
+        iconBmp.recycle();
+        return new BitmapDrawable(getResources(), out);
+    }
+
+    /** Soft drop shadow derived from the icon's own alpha silhouette — lifts it off the glass. */
+    private void drawIconShadow(@NonNull Canvas canvas, @NonNull Bitmap iconBmp, @NonNull Rect iconRect, int sizePx) {
+        Bitmap alpha = iconBmp.extractAlpha();
+        Paint shadowPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        shadowPaint.setColor(ICON_SHADOW_COLOR);
+        shadowPaint.setMaskFilter(new BlurMaskFilter(Math.max(1f, sizePx * 0.06f), BlurMaskFilter.Blur.NORMAL));
+        canvas.drawBitmap(alpha, iconRect.left, iconRect.top + (sizePx * 0.045f), shadowPaint);
+        alpha.recycle();
     }
 
     private View createEntryButton(@NonNull LauncherAppEntry entry) {

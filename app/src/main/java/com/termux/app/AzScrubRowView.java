@@ -77,10 +77,11 @@ public final class AzScrubRowView extends AppCompatTextView {
     // Softer than pure black: a desaturated near-black that keeps letters legible over any
     // wallpaper without the harsh hard-edged look the old #000 stroke had.
     private static final int OUTLINE_DARK = 0xFF1A1F2A;
-    // Continuous 0..1 hue phase driving the outline colour-shift while the row is being scrubbed.
-    private float interactionColorPhase = 0f;
-    @Nullable private ValueAnimator colorShiftAnimator;
-    private final float[] colorShiftHsv = new float[] {0f, 0.82f, 1f};
+    // A slow "sword-glint" sweep position (runs off-screen to off-screen) that, while the row is
+    // touched, brushes a soft material-colour shimmer across every letter's outline in turn.
+    private float shimmerPhase = 0f;
+    private boolean shimmerActive;
+    @Nullable private ValueAnimator shimmerAnimator;
     @Nullable private ValueAnimator settleAnimator;
     private long lastTapUpTimeMs;
     private float lastTapUpX = Float.NaN;
@@ -210,19 +211,23 @@ public final class AzScrubRowView extends AppCompatTextView {
                 letterPaint.setColor(blendColors(baseColor, focusColor, colorProgress));
             }
             // Crisp outline pass under the fill: a sharp dark stroke that keeps the light letter
-            // readable on any wallpaper, replacing the fuzzy drop-shadow.
+            // readable on any wallpaper, replacing the fuzzy drop-shadow. Constant width so the
+            // stroke never thickens enough to fill the letters' inner holes (no "bloat").
             String glyph = String.valueOf(visibleLetters[i]);
             float density = getResources().getDisplayMetrics().density;
             letterOutlinePaint.setTextSize(letterPaint.getTextSize());
             letterOutlinePaint.setTypeface(letterPaint.getTypeface());
-            letterOutlinePaint.setStrokeWidth(density * (1.3f + 0.5f * envelope * waveStrength));
-            // Outline colour-shift: while scrubbing, letters near the finger blend their dark
-            // stroke toward a hue-cycling accent, easing back to the soft dark when idle/far.
-            float shiftAmount = clamp01(envelope * waveStrength);
+            letterOutlinePaint.setStrokeWidth(density * 1.4f);
+            // Sword-glint shimmer: a soft material-accent highlight that the sweep brushes across
+            // each outline in turn. Gaussian falloff around the sweep position; soothing, capped.
             int outlineBase = OUTLINE_DARK;
-            if (shiftAmount > 0.001f) {
-                colorShiftHsv[0] = (interactionColorPhase * 360f) % 360f;
-                outlineBase = blendColors(OUTLINE_DARK, Color.HSVToColor(colorShiftHsv), shiftAmount);
+            if (shimmerActive) {
+                float lx = x / width;
+                float d = (lx - shimmerPhase) / 0.16f;
+                float glint = (float) Math.exp(-(d * d));
+                if (glint > 0.001f) {
+                    outlineBase = blendColors(OUTLINE_DARK, accentColor, clamp01(glint) * 0.6f);
+                }
             }
             letterOutlinePaint.setColor(withAlpha(outlineBase, activeFocus ? 215 : 195));
             canvas.drawText(glyph, x, baseline, letterOutlinePaint);
@@ -417,7 +422,7 @@ public final class AzScrubRowView extends AppCompatTextView {
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
                 stopSettleAnimation();
-                startColorShift();
+                startShimmer();
                 updateInteractionRenderLayer(true);
                 activeTouchX = x;
                 activeLetterIndex = indexOfVisibleLetter(letter);
@@ -461,7 +466,7 @@ public final class AzScrubRowView extends AppCompatTextView {
                     waveStrength = 0f;
                     activeTouchX = -1f;
                     activeLetterIndex = -1;
-                    stopColorShift();
+                    stopShimmer();
                     updateInteractionRenderLayer(false);
                     invalidate();
                 }
@@ -476,7 +481,7 @@ public final class AzScrubRowView extends AppCompatTextView {
                     waveStrength = 0f;
                     activeTouchX = -1f;
                     activeLetterIndex = -1;
-                    stopColorShift();
+                    stopShimmer();
                     updateInteractionRenderLayer(false);
                     invalidate();
                 }
@@ -491,7 +496,7 @@ public final class AzScrubRowView extends AppCompatTextView {
         if (!isAttachedToWindow()) {
             waveStrength = 0f;
             activeTouchX = -1f;
-            stopColorShift();
+            stopShimmer();
             updateInteractionRenderLayer(false);
             invalidate();
             return;
@@ -508,39 +513,42 @@ public final class AzScrubRowView extends AppCompatTextView {
             public void onAnimationEnd(android.animation.Animator animation) {
                 waveStrength = 0f;
                 activeTouchX = -1f;
-                stopColorShift();
+                stopShimmer();
                 updateInteractionRenderLayer(false);
                 invalidate();
             }
 
             @Override
             public void onAnimationCancel(android.animation.Animator animation) {
-                stopColorShift();
+                stopShimmer();
                 updateInteractionRenderLayer(false);
             }
         });
         settleAnimator.start();
     }
 
-    private void startColorShift() {
-        if (colorShiftAnimator != null && colorShiftAnimator.isRunning()) return;
+    private void startShimmer() {
+        shimmerActive = true;
+        if (shimmerAnimator != null && shimmerAnimator.isRunning()) return;
         if (!isAttachedToWindow()) return;
-        colorShiftAnimator = ValueAnimator.ofFloat(interactionColorPhase, interactionColorPhase + 1f);
-        colorShiftAnimator.setDuration(2400L);
-        colorShiftAnimator.setRepeatCount(ValueAnimator.INFINITE);
-        colorShiftAnimator.setRepeatMode(ValueAnimator.RESTART);
-        colorShiftAnimator.setInterpolator(new android.view.animation.LinearInterpolator());
-        colorShiftAnimator.addUpdateListener(animation -> {
-            interactionColorPhase = (float) animation.getAnimatedValue();
-            if (waveStrength > 0.01f) invalidate();
+        // Sweep from just off the left edge to just off the right, slow and linear, repeating.
+        shimmerAnimator = ValueAnimator.ofFloat(-0.2f, 1.2f);
+        shimmerAnimator.setDuration(1700L);
+        shimmerAnimator.setRepeatCount(ValueAnimator.INFINITE);
+        shimmerAnimator.setRepeatMode(ValueAnimator.RESTART);
+        shimmerAnimator.setInterpolator(new android.view.animation.LinearInterpolator());
+        shimmerAnimator.addUpdateListener(animation -> {
+            shimmerPhase = (float) animation.getAnimatedValue();
+            if (shimmerActive) invalidate();
         });
-        colorShiftAnimator.start();
+        shimmerAnimator.start();
     }
 
-    private void stopColorShift() {
-        if (colorShiftAnimator != null) {
-            colorShiftAnimator.cancel();
-            colorShiftAnimator = null;
+    private void stopShimmer() {
+        shimmerActive = false;
+        if (shimmerAnimator != null) {
+            shimmerAnimator.cancel();
+            shimmerAnimator = null;
         }
     }
 
@@ -548,7 +556,7 @@ public final class AzScrubRowView extends AppCompatTextView {
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
         stopSettleAnimation();
-        stopColorShift();
+        stopShimmer();
     }
 
     private void stopSettleAnimation() {

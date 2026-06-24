@@ -6,7 +6,6 @@ import android.text.InputType;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
 import android.text.style.ForegroundColorSpan;
-import android.text.style.RelativeSizeSpan;
 import android.text.style.StyleSpan;
 import android.view.View;
 import android.widget.EditText;
@@ -108,16 +107,16 @@ public final class SettingsMaterialDialogs {
             }
             String titleLine = text.substring(0, newline).trim();
             String description = text.substring(newline + 1).trim();
+            // Inline "bold title — dim description" as one flowing paragraph so the row's radio
+            // stays vertically centred over a uniform text block (a stacked title floats above it).
             SpannableStringBuilder builder = new SpannableStringBuilder();
             builder.append(titleLine);
             builder.setSpan(new StyleSpan(Typeface.BOLD), 0, builder.length(),
                 Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
             if (!description.isEmpty()) {
-                builder.append("\n\n");
+                builder.append("  ");
                 int descStart = builder.length();
                 builder.append(description);
-                builder.setSpan(new RelativeSizeSpan(0.82f), descStart, builder.length(),
-                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
                 builder.setSpan(new ForegroundColorSpan(descriptionColor), descStart, builder.length(),
                     Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
             }

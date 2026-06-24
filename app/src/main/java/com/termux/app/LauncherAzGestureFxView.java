@@ -127,7 +127,7 @@ public final class LauncherAzGestureFxView extends View {
     private static final long FOCUS_HOLD_MS = 140L;
     private static final long PINNED_INDICATOR_IDLE_DELAY_MS = 5000L;
     private static final long PINNED_INDICATOR_FADE_DURATION_MS = 520L;
-    private static final float PINNED_INDICATOR_IDLE_ATTENTION = 0.82f;
+    private static final float PINNED_INDICATOR_IDLE_ATTENTION = 0.42f;
 
     private boolean launchBloomActive;
     private float launchBloomRawX;
@@ -898,63 +898,76 @@ public final class LauncherAzGestureFxView extends View {
             return;
         }
 
-        // Geometry (spec tokens) — widened/heightened vs the original for stronger presence.
         float wInactive = dp(13f);
         float wActive = dp(24f);
         float h = dp(2.5f);
         float r = h * 0.5f;
-        float step = dp(22f); // 13 tick + 9 gap, centre-to-centre
+        float gap = dp(9f);
         float cx = getWidth() * 0.5f;
         float cy = dp(7f); // in the dock's top band, just under the rim
-
-        float totalW = ((totalPages - 1) * step) + wInactive;
-        float maxW = getWidth() - dp(36f);
-        if (totalW > maxW) {
-            step = (maxW - wInactive) / (totalPages - 1);
-            totalW = ((totalPages - 1) * step) + wInactive;
-        }
-        float boxLeft = cx - (totalW * 0.5f);
         float pos = clamp(activePagePosition, 0f, totalPages - 1f);
+
+        // Per-tick widths (the active page's tick widens), then laid out left-to-right with a
+        // CONSTANT gap so the spacing reads evenly no matter which page is active.
+        float[] widths = new float[totalPages];
+        float sumW = 0f;
+        for (int p = 0; p < totalPages; p++) {
+            float prox = Math.max(0f, 1f - Math.abs(p - pos));
+            widths[p] = wInactive + ((wActive - wInactive) * prox);
+            sumW += widths[p];
+        }
+        float maxW = getWidth() - dp(36f);
+        float total = sumW + (totalPages - 1) * gap;
+        if (total > maxW && totalPages > 1) {
+            gap = Math.max(dp(4f), (maxW - sumW) / (totalPages - 1));
+            total = sumW + (totalPages - 1) * gap;
+        }
+        float[] centers = new float[totalPages];
+        float x = cx - (total * 0.5f);
+        for (int p = 0; p < totalPages; p++) {
+            centers[p] = x + (widths[p] * 0.5f);
+            x += widths[p] + gap;
+        }
 
         // Accent from the dock's wallpaper-derived edge tint, saturation-boosted so the ticks read
         // clearly in both the active and sleeping states.
         int accent = boostSaturation(edgeTintColor);
-        // When the active position sits over the dynamic page, the underglow takes its amber colour.
         boolean dynamicActive = dynamicPageIndex >= 0 && Math.abs(pos - dynamicPageIndex) < 0.5f;
         int glowColor = dynamicActive ? DYNAMIC_PAGE_TICK_COLOR : accent;
 
-        // Underglow: a soft blob behind the active position (continuous), drawn first so the tick
-        // sits on top of it.
+        // Neon glow: a blurred capsule that hugs the active tick (same pill shape, slightly larger),
+        // following the fractional position across a swipe — reads like a neon outline, not a blob.
+        int lo = (int) Math.floor(pos);
+        int hi = Math.min(totalPages - 1, lo + 1);
+        float frac = pos - lo;
+        float glowCx = centers[lo] + (centers[hi] - centers[lo]) * frac;
+        float glowW = (widths[lo] + (widths[hi] - widths[lo]) * frac) + dp(8f);
+        float glowH = h + dp(7f);
+        float glowR = glowH * 0.5f;
         if (pageTickGlow == null) {
-            pageTickGlow = new BlurMaskFilter(dp(4f), BlurMaskFilter.Blur.NORMAL);
+            pageTickGlow = new BlurMaskFilter(dp(5f), BlurMaskFilter.Blur.NORMAL);
         }
-        float glowCx = boxLeft + (pos * step) + (wInactive * 0.5f);
-        float glowHalfW = dp(9f);
-        float glowHalfH = dp(5.5f);
         pageIndicatorPaint.setStyle(Paint.Style.FILL);
-        pageIndicatorPaint.setColor(withAlpha(glowColor, Math.round(72f * master))); // ~0.28
+        pageIndicatorPaint.setColor(withAlpha(glowColor, Math.round(90f * master)));
         pageIndicatorPaint.setMaskFilter(pageTickGlow);
-        tmpRect.set(glowCx - glowHalfW, cy - glowHalfH, glowCx + glowHalfW, cy + glowHalfH);
-        canvas.drawRoundRect(tmpRect, glowHalfH, glowHalfH, pageIndicatorPaint);
+        tmpRect.set(glowCx - glowW * 0.5f, cy - glowH * 0.5f, glowCx + glowW * 0.5f, cy + glowH * 0.5f);
+        canvas.drawRoundRect(tmpRect, glowR, glowR, pageIndicatorPaint);
         pageIndicatorPaint.setMaskFilter(null);
 
-        // Ticks: width and alpha interpolate by proximity to the active position. Inactive floor is
-        // raised so unfocused pages stay legible.
+        // Ticks: alpha interpolates by proximity to the active position; inactive floor kept legible.
         for (int p = 0; p < totalPages; p++) {
             float prox = Math.max(0f, 1f - Math.abs(p - pos));
-            float width = wInactive + ((wActive - wInactive) * prox);
             float alpha = 0.40f + (0.60f * prox);
             int tickColor = accent;
             if (p == dynamicPageIndex) {
                 tickColor = DYNAMIC_PAGE_TICK_COLOR;
-                // Extra idle damp: the vivid amber only pops when this page is active; when it's
-                // sleeping (far from the active position) it must not steal attention.
+                // Extra idle damp: the vivid amber only pops when this page is active; sleeping it
+                // must not steal attention.
                 alpha *= (0.55f + (0.45f * prox));
             }
-            float center = boxLeft + (p * step) + (wInactive * 0.5f);
-            float left = center - (width * 0.5f);
+            float left = centers[p] - (widths[p] * 0.5f);
             pageIndicatorPaint.setColor(withAlpha(tickColor, Math.round(255f * alpha * master)));
-            tmpRect.set(left, cy - r, left + width, cy + r);
+            tmpRect.set(left, cy - r, left + widths[p], cy + r);
             canvas.drawRoundRect(tmpRect, r, r, pageIndicatorPaint);
         }
     }
