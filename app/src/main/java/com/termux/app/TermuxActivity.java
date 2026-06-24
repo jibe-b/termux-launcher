@@ -3569,7 +3569,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean canRight = mSuggestionBarView != null && mSuggestionBarView.canAzPageRight();
         float currentPagePosition = mSuggestionBarView != null ? mSuggestionBarView.getAzVisualPagePosition() : 0f;
         int pageCount = mSuggestionBarView != null ? mSuggestionBarView.getAzVisiblePageCount() : 1;
-        applyAzFxInteractionOverflowState(overflowActive, canLeft, canRight, currentPagePosition, pageCount, overflowActive, true);
+        applyAzFxInteractionOverflowState(overflowActive, canLeft, canRight, currentPagePosition, pageCount, overflowActive, true, -1);
 
         float leftProximity = 0f;
         float rightProximity = 0f;
