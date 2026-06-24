@@ -437,9 +437,27 @@ public final class TaiModelDownloader {
                 }
             }
             String entry = chooseEntryFile(files);
-            return new HfResolve(entry.isEmpty() ? "" : "https://huggingface.co/" + repoId + "/resolve/main/" + entry, false);
+            if (entry.isEmpty()) return new HfResolve("", false);
+            String fileUrl = "https://huggingface.co/" + repoId + "/resolve/main/" + entry;
+            // License-gated repos (e.g. Gemma) expose metadata publicly but 401/403 on the actual
+            // file unless a token is set; a HEAD-style check surfaces that as "needs token" up front.
+            if (requiresAuth(fileUrl, authToken)) return new HfResolve("", true);
+            return new HfResolve(fileUrl, false);
         } catch (Exception ignored) {
             return new HfResolve("", false);
+        }
+    }
+
+    /** True when the resolved file URL returns 401/403 (gated/private and the token is missing or
+     *  unaccepted). Reads only the status line, not the body. */
+    private boolean requiresAuth(@NonNull String fileUrl, @Nullable String authToken) {
+        try {
+            HttpURLConnection connection = open(fileUrl, authToken, 0);
+            int code = connection.getResponseCode();
+            connection.disconnect();
+            return code == 401 || code == 403;
+        } catch (Exception ignored) {
+            return false;
         }
     }
 
