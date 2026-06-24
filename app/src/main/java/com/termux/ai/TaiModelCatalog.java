@@ -20,6 +20,23 @@ public final class TaiModelCatalog {
     @NonNull public static Map<String, CatalogEntry> entries() { return entries; }
     @Nullable public static CatalogEntry get(@Nullable String modelId) { return modelId == null ? null : entries.get(modelId); }
 
+    /** Synthetic catalog entry for an installed model that isn't in the curated catalog (imported or
+     *  added by Hugging Face URL), so the catalog screen lists and manages it alongside built-ins. */
+    @NonNull
+    public static CatalogEntry installedModelEntry(@NonNull TaiModelSpec spec) {
+        return new CatalogEntry(
+            spec.id, spec.displayName,
+            spec.roleHint == null || spec.roleHint.isEmpty() ? "Added model" : spec.roleHint,
+            "", "main", null, spec.license, spec.sizeBytes, false,
+            spec.backend, spec.format, spec.architecture, spec.quantization,
+            spec.endpointContextWindow, spec.sourceContextWindow, spec.defaultMaxOutputTokens,
+            spec.recommendedRamGb, spec.sha256,
+            new LinkedHashSet<>(spec.sourceCapabilities),
+            new LinkedHashSet<>(spec.endpointCapabilities), spec.toolMode,
+            "installed", "installed",
+            new LinkedHashSet<>(), "", "", false, false, "Already installed");
+    }
+
     static synchronized void applyRemotePayload(@NonNull JSONObject payload, boolean allowEqualVersion) {
         JSONArray remoteEntries = payload.optJSONArray("entries");
         if (remoteEntries == null) return;

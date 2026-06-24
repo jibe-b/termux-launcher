@@ -137,14 +137,22 @@ public class TaiModelCatalogPreferencesFragment extends MaterialPreferenceFragme
         results.removeAll();
 
         TaiModelStore store = new TaiModelStore(context);
-        Map<String, TaiModelSpec> installed = store.getInstalledUserModels();
+        // Same union /v1/models advertises: registered user models plus completed downloads.
+        Map<String, TaiModelSpec> installed = new java.util.LinkedHashMap<>();
+        installed.putAll(store.getDownloadedReadableModels());
+        installed.putAll(store.getInstalledUserModels());
         JSONArray downloads = store.getDownloads();
         String activeModelId = new TaiSettings(context).getDefaultAssistantModel();
         TaiDeviceCapabilities capabilities = TaiDeviceCapabilities.detect(context);
 
+        // Surface imported / URL-downloaded models that aren't curated catalog entries.
+        List<TaiModelCatalog.CatalogEntry> all = new ArrayList<>(TaiModelCatalog.entries().values());
+        for (TaiModelSpec spec : installed.values()) {
+            if (!TaiModelCatalog.entries().containsKey(spec.id)) all.add(TaiModelCatalog.installedModelEntry(spec));
+        }
         List<TaiModelCatalog.CatalogEntry> entries = sortForDisplay(
             filterByInstallStatus(
-                filterEntries(TaiModelCatalog.entries().values(), backendFilter, searchQuery, installed, capabilities),
+                filterEntries(all, backendFilter, searchQuery, installed, capabilities),
                 installed));
         if (entries.isEmpty()) {
             Preference empty = new Preference(context);
