@@ -1106,6 +1106,11 @@ public final class TaiManager {
         // advertises and the endpoint media gate rejects declared modalities.
         TaiModelSpec onDisk = modelStore.onDiskModelSpec(modelId);
         if (onDisk != null) return modelStore.withCapabilityOverride(onDisk);
+        // A URL/imported download that registered only in the downloads list (not user-models, and
+        // not a catalog entry) is advertised by /v1/models via getDownloadedReadableModels; resolve
+        // it here too so it can actually be loaded and not just listed.
+        TaiModelSpec downloaded = modelStore.getDownloadedReadableModels().get(modelId);
+        if (downloaded != null) return modelStore.withCapabilityOverride(downloaded);
         if (spec != null) return spec;
         TaiModelSpec registryModel = registry.getModel(modelId);
         return registryModel == null ? null : modelStore.withCapabilityOverride(registryModel);
