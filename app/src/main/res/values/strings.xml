@@ -313,6 +313,8 @@
         <string name="termux_ai_huggingface_token_summary">Optional. Stored in app-private preferences and used only for Hugging Face model downloads that need authentication.</string>
         <string name="termux_ai_huggingface_token_set_summary">Token saved. It will be sent as a Bearer token only to Hugging Face download URLs.</string>
         <string name="termux_ai_huggingface_token_dialog_message">Paste a Hugging Face access token after signing in and accepting any model terms. The app sends it only to Hugging Face download URLs.</string>
+        <string name="termux_ai_huggingface_token_gated_hint">Gated model? A token alone is not enough — open the model\'s huggingface.co page and accept its terms (tap \"Acknowledge access\") before retrying the download.</string>
+        <string name="termux_ai_huggingface_token_permissions_hint">Minimal token scope: a classic \"Read\" token, or a fine-grained token with \"Contents: Read\" on the repo, is enough.</string>
         <string name="termux_ai_huggingface_token_get_action">Get token</string>
         <string name="termux_ai_huggingface_token_saved">Hugging Face token saved</string>
         <string name="termux_ai_model_import_title">Import model</string>

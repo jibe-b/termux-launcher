@@ -575,6 +575,16 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
         return layout;
     }
 
+    private TextView buildTokenHintView(Context context, int textRes) {
+        float density = context.getResources().getDisplayMetrics().density;
+        TextView hint = new TextView(context);
+        hint.setText(textRes);
+        hint.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        hint.setTextColor(resolveAttrColor(com.termux.shared.R.attr.termuxColorOnSurfaceVariant));
+        hint.setPadding(0, Math.round(10 * density), 0, 0);
+        return hint;
+    }
+
     private void refreshEndpointPreferences(Context context) {
         try {
             JSONObject endpoint = LauncherCtlApiServer.getInstance().endpointSettings(context);
@@ -977,6 +987,9 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
             .getString(TaiSettings.KEY_HUGGINGFACE_TOKEN, ""));
         input.setSelectAllOnFocus(true);
         layout.addView(input);
+
+        layout.addView(buildTokenHintView(context, R.string.termux_ai_huggingface_token_permissions_hint));
+        layout.addView(buildTokenHintView(context, R.string.termux_ai_huggingface_token_gated_hint));
 
         new MaterialAlertDialogBuilder(context)
             .setTitle(R.string.termux_ai_huggingface_token_title)
@@ -1818,9 +1831,13 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
         input.setHint(R.string.termux_ai_huggingface_token_title);
         input.setText(new TaiSettings(context).getHuggingFaceToken());
         input.setSelectAllOnFocus(true);
+        LinearLayout layout = wrapDialogView(context,
+            getString(R.string.termux_ai_huggingface_token_dialog_message), input);
+        layout.addView(buildTokenHintView(context, R.string.termux_ai_huggingface_token_permissions_hint));
+        layout.addView(buildTokenHintView(context, R.string.termux_ai_huggingface_token_gated_hint));
         new MaterialAlertDialogBuilder(context)
             .setTitle(R.string.termux_ai_huggingface_token_title)
-            .setView(wrapDialogView(context, getString(R.string.termux_ai_huggingface_token_dialog_message), input))
+            .setView(layout)
             .setPositiveButton(R.string.termux_ai_dialog_save, (dialog, which) -> {
                 new TaiSettings(context).setHuggingFaceToken(input.getText().toString().trim());
                 if (onSaved != null) onSaved.run();
