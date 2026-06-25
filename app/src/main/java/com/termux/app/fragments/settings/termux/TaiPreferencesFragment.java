@@ -57,6 +57,7 @@ import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -856,6 +857,10 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
         Preference importModel = findPreference("tai_model_import");
         if (importModel != null) {
             importModel.setSummary(R.string.termux_ai_model_import_summary);
+            importModel.setOnPreferenceClickListener(preference -> {
+                showImportFlowDialog(context, new ImportDraft());
+                return true;
+            });
         }
 
         Preference refresh = findPreference("tai_models_refresh");
@@ -1626,6 +1631,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
             draft.modelId = TaiModelImporter.sanitizeModelId(
                 TaiModelImporter.stripModelExtension(metadata.displayName));
         }
+        fillGuessedImportCapabilities(draft.capabilities, metadata.displayName);
         pendingImportDraft = draft;
         showImportFlowDialog(context, draft);
     }
@@ -1645,23 +1651,44 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
         hfUrlInput.setText(draft.hfUrl == null ? "" : draft.hfUrl);
         layout.addView(hfUrlInput);
 
+        if (draft.capabilities.isEmpty()) {
+            fillGuessedImportCapabilities(draft.capabilities,
+                draft.hfUrl == null || draft.hfUrl.trim().isEmpty()
+                    ? (draft.documentMetadata == null ? "" : draft.documentMetadata.displayName)
+                    : draft.hfUrl);
+        }
+
         TextView modalityLabel = new TextView(context);
         modalityLabel.setText(R.string.termux_ai_model_import_modalities_label);
         modalityLabel.setPadding(0, padding / 2, 0, 0);
         layout.addView(modalityLabel);
 
-        CheckBox vision = new CheckBox(context);
-        vision.setText(R.string.termux_ai_caps_vision);
-        vision.setChecked(draft.capabilities.contains(TaiModelSpec.CAPABILITY_IMAGE_INPUT));
-        CheckBox audio = new CheckBox(context);
-        audio.setText(R.string.termux_ai_caps_audio);
-        audio.setChecked(draft.capabilities.contains(TaiModelSpec.CAPABILITY_AUDIO_INPUT));
-        CheckBox video = new CheckBox(context);
-        video.setText(R.string.termux_ai_caps_video);
-        video.setChecked(draft.capabilities.contains(TaiModelSpec.CAPABILITY_VIDEO_INPUT));
-        layout.addView(vision);
-        layout.addView(audio);
-        layout.addView(video);
+        CheckBox chat = new CheckBox(context);
+        chat.setText(R.string.termux_ai_import_cap_chat);
+        chat.setChecked(draft.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_CHAT));
+        CheckBox embeddings = new CheckBox(context);
+        embeddings.setText(R.string.termux_ai_import_cap_embeddings);
+        embeddings.setChecked(draft.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS));
+        CheckBox media = new CheckBox(context);
+        media.setText(R.string.termux_ai_import_cap_media);
+        media.setChecked(draft.capabilities.contains(TaiModelSpec.CAPABILITY_IMAGE_INPUT)
+            || draft.capabilities.contains(TaiModelSpec.CAPABILITY_AUDIO_INPUT));
+        layout.addView(chat);
+        layout.addView(embeddings);
+        layout.addView(media);
+
+        hfUrlInput.addTextChangedListener(new android.text.TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
+                LinkedHashSet<String> guessed = new LinkedHashSet<>();
+                fillGuessedImportCapabilities(guessed, s == null ? "" : s.toString());
+                chat.setChecked(guessed.contains(TaiModelSpec.CAPABILITY_TEXT_CHAT));
+                embeddings.setChecked(guessed.contains(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS));
+                media.setChecked(guessed.contains(TaiModelSpec.CAPABILITY_IMAGE_INPUT)
+                    || guessed.contains(TaiModelSpec.CAPABILITY_AUDIO_INPUT));
+            }
+            @Override public void afterTextChanged(android.text.Editable s) {}
+        });
 
         EditText modelIdInput = new EditText(context);
         modelIdInput.setSingleLine(true);
@@ -1689,9 +1716,12 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
 
         Runnable captureModalities = () -> {
             draft.capabilities.clear();
-            if (vision.isChecked()) draft.capabilities.add(TaiModelSpec.CAPABILITY_IMAGE_INPUT);
-            if (audio.isChecked()) draft.capabilities.add(TaiModelSpec.CAPABILITY_AUDIO_INPUT);
-            if (video.isChecked()) draft.capabilities.add(TaiModelSpec.CAPABILITY_VIDEO_INPUT);
+            if (chat.isChecked()) draft.capabilities.add(TaiModelSpec.CAPABILITY_TEXT_CHAT);
+            if (embeddings.isChecked()) draft.capabilities.add(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS);
+            if (media.isChecked()) {
+                draft.capabilities.add(TaiModelSpec.CAPABILITY_IMAGE_INPUT);
+                draft.capabilities.add(TaiModelSpec.CAPABILITY_AUDIO_INPUT);
+            }
         };
 
         androidx.appcompat.app.AlertDialog dialog = new MaterialAlertDialogBuilder(context)
@@ -1710,6 +1740,10 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
             draft.hfToken = hfUrl.isEmpty() ? "" : new TaiSettings(context).getHuggingFaceToken();
             draft.modelId = modelIdInput.getText().toString().trim();
             captureModalities.run();
+            if (draft.capabilities.isEmpty()) {
+                Toast.makeText(context, R.string.termux_ai_import_no_capability, Toast.LENGTH_LONG).show();
+                return;
+            }
             if (startImportDraft(context, draft)) dialog.dismiss();
         });
         Button neutral = dialog.getButton(android.content.DialogInterface.BUTTON_NEUTRAL);
@@ -1719,10 +1753,36 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
             draft.hfToken = "";
             draft.modelId = modelIdInput.getText().toString().trim();
             captureModalities.run();
+            if (draft.capabilities.isEmpty()) {
+                Toast.makeText(context, R.string.termux_ai_import_no_capability, Toast.LENGTH_LONG).show();
+                return;
+            }
             pendingImportDraft = draft;
             modelPicker.launch(new String[]{"application/octet-stream", "application/json", "*/*"});
             dialog.dismiss();
         });
+    }
+
+    private void fillGuessedImportCapabilities(@NonNull LinkedHashSet<String> capabilities, @Nullable String source) {
+        capabilities.clear();
+        String value = source == null ? "" : source.toLowerCase(Locale.ROOT);
+        boolean embedding = value.contains("embeddinggemma-300m")
+            || value.contains("qwen3-embedding-0.6b-mnn")
+            || value.contains("qwen3-embedding-4b-mnn")
+            || value.contains("qwen3-embedding-8b-mnn")
+            || value.contains("bge-")
+            || value.contains("e5-")
+            || value.contains("gte-")
+            || value.contains("jina-embedding")
+            || value.contains("embed");
+        if (embedding) capabilities.add(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS);
+        else capabilities.add(TaiModelSpec.CAPABILITY_TEXT_CHAT);
+        if (value.contains("vl") || value.contains("vision") || value.contains("image")
+            || value.contains("audio") || value.contains("multimodal")
+            || value.contains("gemma-4-e2b") || value.contains("gemma-4-e4b")) {
+            capabilities.add(TaiModelSpec.CAPABILITY_IMAGE_INPUT);
+            capabilities.add(TaiModelSpec.CAPABILITY_AUDIO_INPUT);
+        }
     }
 
     private CharSequence importSelectionText(Context context, ImportDraft draft) {
@@ -1800,7 +1860,6 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
                 request.put("acceptedTerms", true);
                 // Backend/format are auto-detected by downloadModel from the resolved file.
                 JSONArray capabilities = new JSONArray();
-                capabilities.put(TaiModelSpec.CAPABILITY_TEXT_CHAT);
                 for (String capability : draft.capabilities) capabilities.put(capability);
                 request.put("capabilities", capabilities);
                 if (draft.hfToken != null && !draft.hfToken.trim().isEmpty()) {
