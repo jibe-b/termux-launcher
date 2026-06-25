@@ -101,7 +101,7 @@ tmux is recommended if you want a persistent terminal workspace. My broader shel
 Install the common packages first if you want that style of setup:
 
 ```sh
-pkg i -y tmux curl jq git fish oh-my-posh termux-api
+pkg i -y tmux curl jq git fish oh-my-posh eza zoxide termux-api
 ```
 
 Before running the setup, turn on Material colors if you want the tmux theme to follow your wallpaper:
@@ -109,6 +109,18 @@ Before running the setup, turn on Material colors if you want the tmux theme to 
 ```text
 Long press Terminal -> More -> Appearance -> Terminal Material colors
 ```
+
+Download the repo dotfiles if you want the matching fish, Oh My Posh, and tmux defaults:
+
+```sh
+mkdir -p ~/.config/fish ~/.config/ohmyposh ~/.tmux
+curl -fsSL "https://raw.githubusercontent.com/PickleHik3/termux-launcher/main/docs/en/examples/config.fish" -o ~/.config/fish/config.fish
+curl -fsSL "https://raw.githubusercontent.com/PickleHik3/termux-launcher/main/docs/en/examples/termux-launcher.omp.json" -o ~/.config/ohmyposh/termux-launcher.omp.json
+curl -fsSL "https://raw.githubusercontent.com/PickleHik3/termux-launcher/main/docs/en/examples/tmux.conf" -o ~/.tmux.conf
+curl -fsSL "https://raw.githubusercontent.com/PickleHik3/termux-launcher/main/docs/en/examples/material-theme.tmux" -o ~/.tmux/material-theme.tmux
+```
+
+The fish config keeps a single `fish_auto_tmux` toggle, loads the `termux-launcher` Oh My Posh theme, and uses `eza` and `zoxide` when they are installed.
 
 The optional setup script can install the [termux-launcher-tmux](https://github.com/PickleHik3/termux-launcher-tmux) theme/plugin integration and the optional `btop` wrapper that runs through Shizuku `rish`:
 

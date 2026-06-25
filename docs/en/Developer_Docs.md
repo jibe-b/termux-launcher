@@ -227,6 +227,7 @@ Scripts:
 - `launcher-weather-widget`: cached weather formatter using wttr.in.
 - `setup-btop-rish`: installs Linux `btop` under `/data/local/tmp` through Shizuku `rish`.
 - `kew-tmux-status`: optional second tmux status row for `kew-now-playing`.
+- `config.fish` and `termux-launcher.omp.json`: optional fish and Oh My Posh defaults.
 - `tmux.conf` and `material-theme.tmux`: manual tmux examples.
 
 `launcher-system-monitor` prefers `launcherctl resources`. It keeps a `rish` fallback for plain Termux plus Shizuku setups, but that path is less efficient because it starts a Shizuku shell to sample system files.
