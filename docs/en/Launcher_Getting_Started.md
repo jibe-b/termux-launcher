@@ -1,66 +1,116 @@
 # Getting Started
 
-## Install & Setup
+This page is the main setup guide for Termux Launcher. Start here, then use the smaller reference pages only when you need them:
+
+- [LauncherCtl](LauncherCtl_API.md) for launching apps and reading launcher data from the shell.
+- [Termux AI](Termux_AI.md) for the local on-device AI endpoint.
+- [Developer docs](Developer_Docs.md) for advanced API, runtime, helper-script, and security details.
+
+## 1. Install Termux Launcher
 
 1. Download and install the latest APK from [Releases](https://github.com/PickleHik3/termux-launcher/releases).
+2. Open the app normally once. This lets Termux finish its first-run bootstrap.
+3. If you want to switch Termux from `pkg`/`apt` to `pacman`, do that before setting Termux Launcher as your Home app. That keeps fail-safe mode easy to reach. See the Termux wiki page for [switching package manager](https://wiki.termux.com/wiki/Switching_package_manager).
+4. Set Termux Launcher as your Android Home app.
 
-2. Open the app normally at first to finish Termux's bootstrap process.
+You can do that from Android settings, or from inside Termux Launcher:
 
-   - If you want to change the package manager to pacman, do it before setting Termux Launcher as the Home app so that you can still get into fail-safe mode. See [Switching package manager](https://wiki.termux.com/wiki/Switching_package_manager).
-   - Switching to pacman has benefits, such as having all repositories preconfigured for you, including glibc, tur, etc.
-   - Speed-wise, there is no meaningful difference between pacman and the default pkg/apt setup, provided you have chosen a single fastest mirror for the default package manager.
+```text
+Long press Terminal -> More -> Apps Bar -> Set as home launcher
+```
 
-3. Open Android settings and select Termux Launcher as the default Home app. There is also a shortcut available in Termux Launcher:
+Termux Launcher cannot be installed beside the regular Termux app because both use the same package identity. If terminal drawing or input becomes slow after an update, run:
 
-   ```text
-   Long press on Terminal & more -> Apps Bar -> Set as home launcher
-   ```
+```sh
+termux-reload-settings
+```
 
-4. That's it to get started. Everything works as it would in native Termux.
+## 2. Install Helpful Apps
 
-## Recommended Apps
+Recommended:
 
-- [Unexpected Keyboard](https://github.com/Julow/Unexpected-Keyboard) is recommended for terminal and tmux-heavy use.
-- [Shizuku](https://github.com/rikkaapps/shizuku) is optional. Install it only if you want the optional privileged features.
+- [Unexpected Keyboard](https://github.com/Julow/Unexpected-Keyboard), especially for terminal and tmux use. It is also available on [Play Store](https://play.google.com/store/apps/details?id=juloo.keyboard2).
+- [Shizuku](https://github.com/rikkaapps/shizuku), only if you want optional lock-screen, Shizuku shell, or `btop` helper features.
 
-Use these matching companion forks if you install Termux add-ons:
+If you use Termux add-ons, use the matching companion forks:
 
-- [Termux:API](https://github.com/PickleHik3/termux-api)
-- [Termux:Styling](https://github.com/PickleHik3/termux-styling)
+- [Termux:API](https://github.com/PickleHik3/termux-api/releases)
+- [Termux:Styling](https://github.com/PickleHik3/termux-styling/releases)
 
-Using mismatched Termux add-ons can cause shared UID or signing problems.
+Mixing differently signed Termux add-ons can cause shared UID or signing errors.
 
-## Notes on App Preferences
+## 3. Learn the Launcher Surface
 
-You can long press on the terminal and click **More** to access relevant preference pages. A few noteworthy ones are listed below.
+The terminal is the home screen. Launcher controls sit around the Termux session.
 
-### 1. Appearance
+- **Apps row:** Long press an app icon to pin, move, or place it in a folder. Long press empty space in the apps row for list-based management.
+- **A-Z row:** Swipe across the row to filter installed apps by letter. Swipe upward from a letter to launch an app from that group.
+- **Terminal search:** Type the input split character before a query to search apps from terminal input. The default is `%`, so `%whatsapp` searches for WhatsApp.
+- **Lock screen:** Double tapping the alphabet row can lock the phone if you configure a lock method in Apps Bar settings.
 
-Control the opacity and blur of the terminal, dock, and Termux sessions menu.
+Most settings are under:
 
-- **Terminal Material colors toggle:** Turn this on if you want the Termux shell to inherit the Material colors from the system. It will apply the color scheme to the terminal background, text, cursor, and ANSI colors. Turning this on will create `material-colors.properties` and `material-colors.sh` inside the `~/.termux` directory, which you can source for your specific needs. More information is available at [Launcher Material Colors](https://github.com/PickleHik3/termux-launcher/blob/main/docs/en/Launcher_Material_Colors.md).
-- **Dock Blur:** Dock blur does not work if you are using a live wallpaper. It will be automatically disabled if a live wallpaper is detected.
-- **Dock Size:** Controls the height of the app icons row.
-- **Compact dock spacing:** Tightens the distance between various rows in the dock, including Extra Keys, the A-Z row, and app icons. It also uses a smaller page indicator. It is recommended to turn this on if you want two rows of Termux Extra Keys; otherwise, the terminal size becomes too small. You can find a few examples at [Termux Extra Keys](https://github.com/PickleHik3/termux-launcher/blob/main/docs/en/Termux_Extrakeys.md).
+```text
+Long press Terminal -> More
+```
 
-### 2. Apps Bar
+Useful places:
 
-All launcher-specific settings are configured here.
+- **Appearance:** Terminal opacity, blur, dock size, compact dock spacing, monochrome icons, and Terminal Material colors.
+- **Apps Bar:** Input split character, app ranking reset, Home launcher shortcut, and lock-screen behavior.
+- **TAI / Termux AI:** Local model downloads, imports, runtime settings, API port, and API token.
 
-- **Double tap alphabets row lockscreen:** You have two options: Shizuku, which provides the system screen-off animation, and Accessibility service, which is the typical method used by other launchers but may cause the screen to flicker once.
-- **Search Strictness:** This is something inherited from TEL. I haven't seen a use for it yet.
-- **Input Split Character:** The default is `%`. Typing the character specified here will trigger app search, and the results will be displayed on the Apps Bar. It is recommended to choose a seldom-used character.
-- **Reset App Order:** By default, app icons are ranked based on the number of times each app has been launched. This was done to make it easier to launch apps with a swipe gesture from the A-Z row to the app icons. The most launched app icon will be directly above its respective alphabet, so you can swipe up to choose and launch it. This button resets the ranking.
+Live wallpapers can disable dock blur. If you use two rows of Extra Keys, turn on compact dock spacing so the terminal has more room.
 
-## Additional Notes
+## 4. Use LauncherCtl From the Shell
 
-This section is sort of guided setup for setting up tmux and btop (without root, using shizuku), you can read through and copy paste each snippet, or you can use the  optional installation script.
+`launcherctl` is installed by the app when the launcher session starts. It lets shell tools talk to the launcher.
 
-Prerequisites;
-* turn on **Terminal Material colors** from Appearance settings first. 
-* ensure rish is available in your $PATH.
+Try:
 
-Then run:
+```sh
+launcherctl status
+launcherctl apps
+launcherctl launch whatsapp
+```
+
+Useful commands:
+
+```sh
+launcherctl resources
+launcherctl media
+launcherctl notifications
+launcherctl restart
+launcherctl update-scripts
+launcherctl token rotate
+```
+
+Media and notification commands need Android notification listener access. For endpoint files, authentication, and scripting examples, see [LauncherCtl](LauncherCtl_API.md).
+
+## 5. Optional Shell and tmux Setup
+
+tmux is recommended if you want a persistent terminal workspace. My broader shell setup usually includes:
+
+- fish
+- oh-my-posh
+- tmux
+- eza
+- zoxide
+- btop through Shizuku `rish`
+
+Install the common packages first if you want that style of setup:
+
+```sh
+pkg i -y tmux curl jq git fish oh-my-posh termux-api
+```
+
+Before running the setup, turn on Material colors if you want the tmux theme to follow your wallpaper:
+
+```text
+Long press Terminal -> More -> Appearance -> Terminal Material colors
+```
+
+The optional setup script can install the [termux-launcher-tmux](https://github.com/PickleHik3/termux-launcher-tmux) theme/plugin integration and the optional `btop` wrapper that runs through Shizuku `rish`:
 
 ```sh
 curl -fsSL "https://raw.githubusercontent.com/PickleHik3/termux-launcher/main/docs/en/examples/setup-tmux-btop" -o ~/setup-tmux-btop
@@ -68,82 +118,170 @@ chmod 700 ~/setup-tmux-btop
 ~/setup-tmux-btop
 ```
 
-If you have already completed this flow and later update the APK, refresh the shell helper scripts with:
+The script asks what to install:
+
+- **All:** tmux theme plus the optional Shizuku `btop` helper.
+- **tmux only:** theme and status helpers only.
+- **btop only:** only the Shizuku `btop` helper.
+
+The tmux plugin includes an `Alt + e` keybind reference.
+
+If you have already completed setup and later update the APK, refresh only the repo-owned helper scripts with:
 
 ```sh
 launcherctl update-scripts
 ```
 
-This keeps your tmux config intact and updates only the repo-owned helper scripts.
+This keeps your tmux config intact.
 
-### Terminal Multiplexer
-
-[tmux](https://github.com/tmux/tmux/wiki) is recommended. You can read about my setup, which uses Material colors and the Shizuku backend for real system stats, at [tmux setup](https://github.com/PickleHik3/termux-launcher/blob/main/docs/en/Launcher_Tmux_Status_Setup.md).
-
-You can create tmux key bindings to launch Android apps using the example below. In this example, `Alt + w` opens WhatsApp:
+You can create tmux key bindings to launch Android apps. This example makes `Alt + w` open WhatsApp:
 
 ```tmux
 bind -n M-w run-shell 'tmux display-message "Opening WhatsApp"; launcherctl launch whatsapp >/dev/null 2>&1 || tmux display-message "Launch failed: WhatsApp"'
 ```
 
-Although you could use [zellij](https://zellij.dev/) as well, tmux may be slightly better for battery life.
+## 6. Optional Shizuku and rish Setup
 
-### btop with Real Android System Usage
+You do not need Shizuku for normal launcher use. Set up Shizuku only if you want Shizuku-backed lock-screen behavior, a Shizuku shell, or the optional `btop-shizuku` and `mini-btop-shizuku` commands.
 
-This setup works without root, uses Shizuku/rish, and works in vanilla Termux.
+For `btop`, set up `rish` before choosing the `btop` option in the tmux setup script:
 
-You can pull actual system usage statistics using local ADB through [Shizuku](https://github.com/rikkaapps/shizuku) or its fork, [Shizuku](https://github.com/thedjchi/Shizuku).
+1. Install and start [Shizuku](https://github.com/rikkaapps/shizuku). The [official Shizuku setup guide](https://shizuku.rikka.app/guide/setup/) has the Android-side steps.
+2. In the Shizuku app, open **Use Shizuku in terminal apps**.
+3. Let Shizuku create `rish` and `rish_shizuku.dex`.
+4. Copy both files into a Termux directory that is in your `$PATH`.
 
-Follow the [official guide](https://shizuku.rikka.app/guide/setup/) to set up Shizuku. After setup, open the Shizuku app and tap **Use Shizuku in terminal apps**. It will ask for storage permission and create two files:
+For example:
 
-- `rish`
-- `rish_shizuku.dex`
+```sh
+mkdir -p ~/.local/bin
+```
 
-Copy both files somewhere in Termux's `$PATH`, such as `../usr/bin/`, or create a `~/.local/bin` directory and add it to your shell's path.
+If `~/.local/bin` is not already in your path, add this to your shell startup file:
 
-Then, use your favorite text editor to open `rish`, scroll down to the bottom, and change the second-to-last line to:
+```sh
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+Then edit the bottom of `rish` and set:
 
 ```sh
 RISH_APPLICATION_ID="com.termux"
 ```
 
-Now run `rish` from the terminal. The Shizuku permission window should appear. After you grant permission, `rish` will drop you into your phone's ADB shell.
-
-You can then pipe commands to this shell directly from Termux using `rish -c`. You can read more about this [here](https://github.com/RikkaApps/Shizuku-API/tree/master/rish).
-
-If permissions are missing, you can run:
+Make `rish` executable and run it once:
 
 ```sh
 chmod +x "$(command -v rish)"
+rish
 ```
 
-Once `rish` is available in your path, you can use my script, [setup-btop-rish](https://github.com/PickleHik3/termux-launcher/blob/main/docs/en/examples/setup-btop-rish), to configure it properly.
-
-For tmux status widgets, Termux Launcher users should use the `launcherctl resources` path. The helper keeps a `rish` fallback for vanilla Termux, but that fallback is less efficient because it starts a Shizuku shell to sample system files.
-
-The script does the following:
-
-1. Downloads the generic Linux binary for btop from its [releases page](https://github.com/aristocratos/btop/releases).
-2. Copies it to `/data/local/tmp`, which is your phone's temporary directory, and creates two config files in the same directory.
-
-   Although this has not happened to me, your device may clear the shared temp folder on reboot. If that happens, you will need to run the script again to restore the binary and configs to the appropriate locations.
-
-3. Creates two wrappers inside Termux's `$PATH`, usually `../usr/bin/`:
-
-   - `btop-shizuku`
-   - `mini-btop-shizuku`
-
-4. Disables network and storage information because Android's ADB limitations prevent access to those details.
-
-Two variants are created:
-
-- **btop-shizuku:** The full layout. You may need to zoom out the terminal to make it fit.
-- **mini-btop-shizuku:** A smaller layout that is more suitable for smaller terminal windows.
-
-You can use the command below to download and run the script:
+Grant the Shizuku permission prompt. After that, check the setup:
 
 ```sh
-curl -fsSL "https://raw.githubusercontent.com/PickleHik3/termux-launcher/main/docs/en/examples/setup-btop-rish" -o ~/setup-btop-rish
-chmod 700 ~/setup-btop-rish
-~/setup-btop-rish
+launcherctl tty-doctor
 ```
+
+Now you can run `~/setup-tmux-btop` again and choose **All** or **btop only**.
+
+## 7. Optional Extra Keys
+
+Termux Launcher includes the regular Termux Extra Keys support and adds a convenient paste popup. Extra Keys are configured in:
+
+```sh
+~/.termux/termux.properties
+```
+
+After changing that file, reload settings:
+
+```sh
+termux-reload-settings
+```
+
+### Compact tmux Row
+
+This one-row layout is the easiest default for tmux. It assumes the tmux setup above is installed and uses `CTRL b` as the tmux prefix.
+
+```properties
+extra-keys = [[ \
+  {macro: "CTRL b F12", display: "♼"}, \
+  {macro: "CTRL b h", display: "𝍣", popup: {macro: "CTRL b v", display: "𝍬"}}, \
+  {macro: "CTRL b 1", display: "⓵"}, \
+  {macro: "CTRL b 2", display: "⓶"}, \
+  {macro: "CTRL b 3", display: "⓷"}, \
+  {macro: "CTRL b [", display: "✎"}, \
+  {key: KEYBOARD, popup: PASTE}, \
+  {macro: "CTRL b", display: "㋡"} \
+]]
+```
+
+### Two-Row tmux Layout
+
+Use this if you want dedicated modifier keys and more tmux controls. Turn on compact dock spacing first.
+
+```properties
+extra-keys = [[ \
+  {macro: "CTRL b h", display: "𝍣"}, \
+  {macro: "CTRL b v", display: "𝍬"}, \
+  {macro: "ALT LEFT", display: "⬸"}, \
+  {macro: "CTRL b c", display: "+"}, \
+  {macro: "ALT RIGHT", display: "⤑"}, \
+  {macro: "CTRL b [", display: "✏"}, \
+  {macro: "CTRL b z", display: "□"}, \
+  {macro: "CTRL b x", display: "×", popup: {macro: "CTRL b k", display: "⊠"}} \
+], [ \
+  {key: ESC, display: "Esc", popup: {macro: "CTRL b F12", display: "⟲"}}, \
+  {key: TAB, display: "TAB"}, \
+  {key: SHIFT, display: "SHFT"}, \
+  {key: CTRL, display: "CTRL"}, \
+  {key: ALT, display: "ALT"}, \
+  {key: LEFT, popup: DOWN}, \
+  {key: RIGHT, popup: UP}, \
+  {key: KEYBOARD, popup: PASTE} \
+]]
+```
+
+## 8. Optional Termux AI
+
+Termux AI, also called TAI, is a local model host built into Termux Launcher. It exposes an OpenAI-compatible localhost endpoint for tools such as `aichat`.
+
+Start here:
+
+```text
+Long press Terminal -> More -> TAI / Termux AI
+```
+
+Then download or import a model and check the shell helper:
+
+```sh
+tai status
+tai models
+tai runtime
+```
+
+For model setup, OpenAI-compatible client configuration, and troubleshooting, see [Termux AI](Termux_AI.md).
+
+## 9. Quick Troubleshooting
+
+If terminal drawing, input, or colors feel stale:
+
+```sh
+termux-reload-settings
+```
+
+If the launcher bridge is not responding:
+
+```sh
+launcherctl status
+launcherctl restart
+```
+
+If `launcherctl` is missing, restart Termux Launcher. The app installs the command when the launcher activity starts.
+
+If Shizuku features do not work, confirm Shizuku is running, grant permission to Termux Launcher, and run:
+
+```sh
+launcherctl tty-doctor
+```
+
+If media or notification commands return empty data, grant notification listener access to Termux Launcher in Android settings.
