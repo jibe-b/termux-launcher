@@ -141,7 +141,10 @@ public class TaiModelDownloaderStateTest {
             .put("path", output.getAbsolutePath())
             .put("status", "complete")
             .put("bytesRead", output.length())
-            .put("totalBytes", output.length()));
+            .put("totalBytes", output.length())
+            .put("capabilities", new org.json.JSONArray()
+                .put(TaiModelSpec.CAPABILITY_TEXT_CHAT)
+                .put("stale_false_capability")));
 
         TaiModelSpec advertised = store.getDownloadedReadableModels().get(TaiModelRegistry.MODEL_GEMMA_4_E2B_IT);
 
@@ -151,6 +154,8 @@ public class TaiModelDownloaderStateTest {
         assertTrue(advertised.capabilities.contains("audio_input"));
         assertFalse(advertised.capabilities.contains(TaiModelSpec.CAPABILITY_LLM_THINKING));
         assertTrue(advertised.sourceCapabilities.contains(TaiModelSpec.CAPABILITY_LLM_THINKING));
+        assertFalse(advertised.sourceCapabilities.contains("stale_false_capability"));
+        assertTrue(advertised.builtInCatalogEntry);
         assertEquals(4096, advertised.endpointContextWindow);
         assertEquals(32768, advertised.sourceContextWindow);
         assertEquals(4000, advertised.defaultMaxOutputTokens);
@@ -271,6 +276,7 @@ public class TaiModelDownloaderStateTest {
         assertEquals(32768, rebuilt.sourceContextWindow);
         assertEquals(4000, rebuilt.defaultMaxOutputTokens);
         assertEquals(output.length(), rebuilt.sizeBytes);
+        assertTrue(rebuilt.builtInCatalogEntry);
         store.deleteUserModel(TaiModelRegistry.MODEL_GEMMA_4_E4B_IT);
     }
 

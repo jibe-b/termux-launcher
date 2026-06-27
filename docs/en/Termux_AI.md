@@ -22,14 +22,14 @@ The catalog can change as compatible models are added. The following table expla
 | --- | --- | ---: | ---: | --- |
 | Gemma 4 E2B IT | General chat, images, audio, and tools | 2.4 GB | 8 GB+ | Recommended general model |
 | Gemma 4 E4B IT | Better coding and reasoning | 3.7 GB | 12 GB+ | Larger and slower |
-| Qwen2.5 Coder 1.5B MNN | Coding and terminal clients | 1.3 GB | 4–6 GB+ | Recommended coding model; supports tools |
-| Qwen2.5 Coder 7B MNN | Higher-quality coding | 5.1 GB | 10–12 GB+ | Does not currently advertise tool use |
+| Qwen2.5 Coder 1.5B MNN | Coding and terminal clients | 971 MB | 4–6 GB+ | Recommended coding model; supports tools |
+| Qwen2.5 Coder 7B MNN | Higher-quality coding | 4.4 GB | 10–12 GB+ | Does not currently advertise tool use |
 | Qwen2.5 0.5B MNN | Very small, fast text model | 557 MB | 3 GB+ | Lower answer quality |
 | Qwen2.5 1.5B MNN | Lightweight general chat | 879 MB | 4–6 GB+ | Text and multilingual prompts |
 | Qwen2.5 3B MNN | Balanced general chat | 2.4 GB | 6–8 GB+ | Better quality than the smaller Qwen models |
-| DeepSeek-R1 1.5B MNN | Small reasoning tasks | 1.6 GB | 4–6 GB+ | Reasoning-focused |
+| DeepSeek-R1 1.5B MNN | Small reasoning tasks | 1.0 GB | 4–6 GB+ | Reasoning-focused |
 | DeepSeek-R1 Distill 1.5B LiteRT | Small reasoning tasks | 1.7 GB | 6 GB+ | LiteRT package |
-| FunctionGemma 270M | Choosing a function or device tool | 0.3 GB | 4 GB+ | CPU-only, 1,024-token context; not a general assistant |
+| FunctionGemma 270M | Choosing a function or device tool | 0.3 GB | 6 GB+ | CPU-only, 1,024-token context; not a general assistant |
 | Qwen2.5 1.5B LiteRT | Imported lightweight model | 1.5 GB | 6 GB+ | Import-only until a verified direct artifact is available |
 
 Only one chat/generation model is active at a time. Loading FunctionGemma is the same as loading any other model: it replaces the currently loaded chat model. TAI does not silently load it beside another assistant.
@@ -128,7 +128,7 @@ You do not need these routes for normal use, but they help when configuring anot
 | Method | Path | Purpose |
 | --- | --- | --- |
 | GET | `/v1/models` | List installed, loadable models and capabilities |
-| POST | `/v1/responses` | Responses API text, streaming, and function calls |
+| POST | `/v1/responses` | Responses API text, image/audio input, streaming, and function calls |
 | POST | `/v1/chat/completions` | Chat Completions text, streaming, media, and tools |
 | POST | `/v1/completions` | Legacy text completions |
 | POST | `/v1/embeddings` | Embeddings for models advertising `text_embeddings` |

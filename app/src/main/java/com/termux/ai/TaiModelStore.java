@@ -79,7 +79,6 @@ public final class TaiModelStore {
     /** User-declared capability set for a model (e.g. enable vision/audio/tools on an import). */
     public synchronized void setCapabilityOverride(@NonNull String modelId, @NonNull java.util.Set<String> capabilities) {
         LinkedHashSet<String> caps = new LinkedHashSet<>(capabilities);
-        caps.add(TaiModelSpec.CAPABILITY_TEXT_CHAT);
         preferences.edit().putString(KEY_CAPS_PREFIX + modelId, android.text.TextUtils.join(",", caps)).apply();
     }
 
@@ -102,10 +101,12 @@ public final class TaiModelStore {
 
     @NonNull
     private TaiModelSpec applyCapabilityOverride(@NonNull TaiModelSpec spec) {
+        // Curated IDs are immutable endpoint truth. Overrides are only for user-imported models;
+        // otherwise stale preferences can turn a text/code model into a falsely advertised VL one.
+        if (TaiModelCatalog.get(spec.id) != null) return spec;
         String raw = preferences.getString(KEY_CAPS_PREFIX + spec.id, null);
         if (raw == null || raw.trim().isEmpty()) return spec;
         LinkedHashSet<String> source = new LinkedHashSet<>();
-        source.add(TaiModelSpec.CAPABILITY_TEXT_CHAT);
         for (String capability : raw.split(",")) {
             String trimmed = capability.trim();
             if (!trimmed.isEmpty()) source.add(trimmed);
@@ -158,7 +159,7 @@ public final class TaiModelStore {
         try {
             TaiModelSpec spec = new TaiModelSpec(
                 entry.modelId, entry.displayName, entry.roleHint, "downloaded", path, entry.license,
-                localModelSize(dir), new LinkedHashSet<>(entry.sourceCapabilities), false, null,
+                localModelSize(dir), new LinkedHashSet<>(entry.sourceCapabilities), true, null,
                 entry.backend, entry.format, entry.architecture, entry.quantization,
                 entry.endpointContextWindow, entry.sourceContextWindow, entry.defaultMaxOutputTokens,
                 entry.recommendedRamGb, entry.sha256, endpointCapabilities,
@@ -408,7 +409,7 @@ public final class TaiModelStore {
             recommendedRamGb = entry.recommendedRamGb;
             sha256 = entry.sha256;
         }
-        if (!declaredCapabilities.isEmpty()) {
+        if (entry == null && !declaredCapabilities.isEmpty()) {
             capabilities.clear();
             capabilities.addAll(declaredCapabilities);
         }
@@ -427,7 +428,7 @@ public final class TaiModelStore {
                 license,
                 sizeBytes,
                 capabilities,
-                false,
+                entry != null,
                 null,
                 backend,
                 format,
@@ -523,7 +524,7 @@ public final class TaiModelStore {
             entry.license,
             localSize > 0L ? localSize : spec.sizeBytes,
             entry.sourceCapabilities,
-            spec.builtInCatalogEntry,
+            true,
             spec.runtimeProfile,
             entry.backend,
             entry.format,

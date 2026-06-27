@@ -172,10 +172,14 @@ public final class TaiModelSpec {
         this.quantization = quantization;
         LinkedHashSet<String> sourceCaps = normalizedCapabilities(sourceCapabilities);
         if (sourceCaps.isEmpty()) sourceCaps.add(CAPABILITY_TEXT_CHAT);
+        LinkedHashSet<String> supportedEndpointCaps = endpointCapabilitiesFor(
+            id, this.backend, this.format, sourceCaps, localPath);
         LinkedHashSet<String> endpointCaps = endpointCapabilities == null
-            ? endpointCapabilitiesFor(id, this.backend, this.format, sourceCaps, localPath)
+            ? supportedEndpointCaps
             : normalizedCapabilities(endpointCapabilities);
-        if (endpointCaps.isEmpty()) endpointCaps.add(CAPABILITY_TEXT_CHAT);
+        // Explicit endpoint metadata may narrow a model (for example a -vision variant), but it
+        // may never widen what this backend and package shape can actually execute.
+        endpointCaps.retainAll(supportedEndpointCaps);
         this.sourceCapabilities = Collections.unmodifiableSet(sourceCaps);
         this.endpointCapabilities = Collections.unmodifiableSet(endpointCaps);
         this.capabilities = this.endpointCapabilities;
@@ -300,7 +304,6 @@ public final class TaiModelSpec {
 
         if (BACKEND_MNN_LLM.equals(backend)) {
             addIfPresent(endpoint, source, CAPABILITY_TEXT_CHAT, source.isEmpty());
-            addIfPresent(endpoint, source, CAPABILITY_TEXT_EMBEDDINGS, false);
             // MNN VL models (Qwen-VL, SmolVLM, MiniCPM-V) take images; the runtime injects them as
             // inline <img> markup. Audio/video have no MNN runtime path, so they stay source-only.
             addIfPresent(endpoint, source, CAPABILITY_IMAGE_INPUT, false);
@@ -308,7 +311,13 @@ public final class TaiModelSpec {
             addIfPresent(endpoint, source, "multilingual", false);
             addIfPresent(endpoint, source, "reasoning", false);
             addIfPresent(endpoint, source, CAPABILITY_TOOL_USE, false);
-            if (endpoint.isEmpty()) endpoint.add(CAPABILITY_TEXT_CHAT);
+            return endpoint;
+        }
+
+        // The only raw .tflite path in this app is the LiteRT embedding runtime. Chat packages
+        // must be .litertlm/.task containers even if user metadata incorrectly declares chat.
+        if (localPath != null && localPath.toLowerCase(Locale.ROOT).endsWith(".tflite")) {
+            addIfPresent(endpoint, source, CAPABILITY_TEXT_EMBEDDINGS, false);
             return endpoint;
         }
 
@@ -330,7 +339,6 @@ public final class TaiModelSpec {
         if (source.contains(CAPABILITY_SPECULATIVE_DECODING) && liteRtPackageHasSpeculativeDecoding(localPath)) {
             endpoint.add(CAPABILITY_SPECULATIVE_DECODING);
         }
-        if (endpoint.isEmpty()) endpoint.add(CAPABILITY_TEXT_CHAT);
         return endpoint;
     }
 

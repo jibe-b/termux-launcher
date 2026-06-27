@@ -1679,13 +1679,46 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
         CheckBox embeddings = new CheckBox(context);
         embeddings.setText(R.string.termux_ai_import_cap_embeddings);
         embeddings.setChecked(draft.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS));
-        CheckBox media = new CheckBox(context);
-        media.setText(R.string.termux_ai_import_cap_media);
-        media.setChecked(draft.capabilities.contains(TaiModelSpec.CAPABILITY_IMAGE_INPUT)
-            || draft.capabilities.contains(TaiModelSpec.CAPABILITY_AUDIO_INPUT));
+        CheckBox image = new CheckBox(context);
+        image.setText(R.string.termux_ai_import_cap_image);
+        image.setChecked(draft.capabilities.contains(TaiModelSpec.CAPABILITY_IMAGE_INPUT));
+        CheckBox audio = new CheckBox(context);
+        audio.setText(R.string.termux_ai_import_cap_audio);
+        audio.setChecked(draft.capabilities.contains(TaiModelSpec.CAPABILITY_AUDIO_INPUT));
+        CheckBox tools = new CheckBox(context);
+        tools.setText(R.string.termux_ai_import_cap_tools);
+        tools.setChecked(draft.capabilities.contains(TaiModelSpec.CAPABILITY_TOOL_USE));
+        CheckBox code = new CheckBox(context);
+        code.setText(R.string.termux_ai_import_cap_code);
+        code.setChecked(draft.capabilities.contains(TaiModelSpec.CAPABILITY_CODE));
+        CheckBox reasoning = new CheckBox(context);
+        reasoning.setText(R.string.termux_ai_import_cap_reasoning);
+        reasoning.setChecked(draft.capabilities.contains("reasoning"));
+        CheckBox multilingual = new CheckBox(context);
+        multilingual.setText(R.string.termux_ai_import_cap_multilingual);
+        multilingual.setChecked(draft.capabilities.contains("multilingual"));
         layout.addView(chat);
         layout.addView(embeddings);
-        layout.addView(media);
+        layout.addView(image);
+        layout.addView(audio);
+        layout.addView(tools);
+        layout.addView(code);
+        layout.addView(reasoning);
+        layout.addView(multilingual);
+
+        boolean rawTflite = draft.documentMetadata != null
+            && draft.documentMetadata.displayName.toLowerCase(Locale.ROOT).endsWith(".tflite");
+        if (rawTflite) {
+            chat.setChecked(false);
+            chat.setEnabled(false);
+            embeddings.setChecked(true);
+            image.setChecked(false); image.setEnabled(false);
+            audio.setChecked(false); audio.setEnabled(false);
+            tools.setChecked(false); tools.setEnabled(false);
+            code.setChecked(false); code.setEnabled(false);
+            reasoning.setChecked(false); reasoning.setEnabled(false);
+            multilingual.setChecked(false); multilingual.setEnabled(false);
+        }
 
         hfUrlInput.addTextChangedListener(new android.text.TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
@@ -1694,8 +1727,12 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
                 fillGuessedImportCapabilities(guessed, s == null ? "" : s.toString());
                 chat.setChecked(guessed.contains(TaiModelSpec.CAPABILITY_TEXT_CHAT));
                 embeddings.setChecked(guessed.contains(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS));
-                media.setChecked(guessed.contains(TaiModelSpec.CAPABILITY_IMAGE_INPUT)
-                    || guessed.contains(TaiModelSpec.CAPABILITY_AUDIO_INPUT));
+                image.setChecked(guessed.contains(TaiModelSpec.CAPABILITY_IMAGE_INPUT));
+                audio.setChecked(guessed.contains(TaiModelSpec.CAPABILITY_AUDIO_INPUT));
+                tools.setChecked(guessed.contains(TaiModelSpec.CAPABILITY_TOOL_USE));
+                code.setChecked(guessed.contains(TaiModelSpec.CAPABILITY_CODE));
+                reasoning.setChecked(guessed.contains("reasoning"));
+                multilingual.setChecked(guessed.contains("multilingual"));
             }
             @Override public void afterTextChanged(android.text.Editable s) {}
         });
@@ -1731,10 +1768,12 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
             draft.capabilities.clear();
             if (chat.isChecked()) draft.capabilities.add(TaiModelSpec.CAPABILITY_TEXT_CHAT);
             if (embeddings.isChecked()) draft.capabilities.add(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS);
-            if (media.isChecked()) {
-                draft.capabilities.add(TaiModelSpec.CAPABILITY_IMAGE_INPUT);
-                draft.capabilities.add(TaiModelSpec.CAPABILITY_AUDIO_INPUT);
-            }
+            if (image.isChecked()) draft.capabilities.add(TaiModelSpec.CAPABILITY_IMAGE_INPUT);
+            if (audio.isChecked()) draft.capabilities.add(TaiModelSpec.CAPABILITY_AUDIO_INPUT);
+            if (tools.isChecked()) draft.capabilities.add(TaiModelSpec.CAPABILITY_TOOL_USE);
+            if (code.isChecked()) draft.capabilities.add(TaiModelSpec.CAPABILITY_CODE);
+            if (reasoning.isChecked()) draft.capabilities.add("reasoning");
+            if (multilingual.isChecked()) draft.capabilities.add("multilingual");
         };
 
         androidx.appcompat.app.AlertDialog dialog = new MaterialAlertDialogBuilder(context)
@@ -1801,12 +1840,21 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
             || value.contains("embed");
         if (embedding) capabilities.add(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS);
         else capabilities.add(TaiModelSpec.CAPABILITY_TEXT_CHAT);
-        if (value.contains("vl") || value.contains("vision") || value.contains("image")
-            || value.contains("audio") || value.contains("multimodal")
-            || value.contains("gemma-4-e2b") || value.contains("gemma-4-e4b")) {
+        boolean gemma4 = value.contains("gemma-4-e2b") || value.contains("gemma-4-e4b");
+        if (value.contains("-vl") || value.contains("_vl") || value.contains("vision")
+            || value.contains("image") || value.contains("multimodal") || gemma4) {
             capabilities.add(TaiModelSpec.CAPABILITY_IMAGE_INPUT);
+        }
+        if (value.contains("audio") || value.contains("speech") || gemma4) {
             capabilities.add(TaiModelSpec.CAPABILITY_AUDIO_INPUT);
         }
+        if (value.contains("functiongemma") || value.contains("function-calling")
+            || value.contains("tool-use") || value.contains("tool_use")) {
+            capabilities.add(TaiModelSpec.CAPABILITY_TOOL_USE);
+        }
+        if (value.contains("coder") || value.contains("code-")) capabilities.add(TaiModelSpec.CAPABILITY_CODE);
+        if (value.contains("deepseek-r1") || value.contains("reasoning")) capabilities.add("reasoning");
+        if (value.contains("qwen") || value.contains("multilingual")) capabilities.add("multilingual");
     }
 
     private CharSequence importSelectionText(Context context, ImportDraft draft) {

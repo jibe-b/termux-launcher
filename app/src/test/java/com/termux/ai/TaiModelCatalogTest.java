@@ -79,6 +79,9 @@ public class TaiModelCatalogTest {
         assertEquals("3.7 GB", e4b.sizeEstimate);
         assertTrue(e4b.sourceCapabilities.contains(TaiModelSpec.CAPABILITY_AUDIO_INPUT));
         assertTrue(e4b.endpointCapabilities.contains(TaiModelSpec.CAPABILITY_AUDIO_INPUT));
+        assertTrue(e4b.endpointCapabilities.contains(TaiModelSpec.CAPABILITY_TOOL_USE));
+        assertTrue(e4b.endpointCapabilities.contains(TaiModelSpec.CAPABILITY_CODE));
+        assertTrue(e4b.sourceCapabilities.contains(TaiModelSpec.CAPABILITY_SPECULATIVE_DECODING));
         assertFalse(e4b.endpointCapabilities.contains(TaiModelSpec.CAPABILITY_LLM_THINKING));
 
         assertNotNull(mobileActions);
@@ -86,6 +89,8 @@ public class TaiModelCatalogTest {
         assertEquals(1024, mobileActions.endpointContextWindow);
         assertEquals(1024, mobileActions.sourceContextWindow);
         assertEquals(1024, mobileActions.defaultMaxOutputTokens);
+        assertEquals(6, mobileActions.recommendedRamGb);
+        assertEquals("6GB+", mobileActions.ramTier);
         assertTrue(mobileActions.endpointCapabilities.contains(TaiModelSpec.CAPABILITY_TOOL_USE));
         assertTrue(mobileActions.endpointCapabilities.contains(TaiModelSpec.CAPABILITY_MOBILE_ACTIONS));
         assertEquals(TaiModelSpec.TOOL_MODE_NATIVE, mobileActions.toolMode);

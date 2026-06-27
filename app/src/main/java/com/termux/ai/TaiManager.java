@@ -451,6 +451,9 @@ public final class TaiManager {
         String modelId = requestedModelId(request, settings.getDefaultAssistantModel());
         TaiModelSpec spec = resolveModel(modelId);
         if (spec == null) return openAiError(error(404, "model_not_found", "Unknown TAI model: " + modelId));
+        if (!spec.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_CHAT)) {
+            return openAiError(generationCapabilityError(spec));
+        }
         if (!modelSupportsRequestedTools(request, spec)) {
             return openAiError(error(400, "capability_not_supported",
                 "Model " + spec.id + " does not support tool use through this endpoint."));
@@ -505,6 +508,9 @@ public final class TaiManager {
         String modelId = requestedModelId(request, settings.getDefaultAssistantModel());
         TaiModelSpec spec = resolveModel(modelId);
         if (spec == null) return openAiError(error(404, "model_not_found", "Unknown TAI model: " + modelId));
+        if (!spec.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_CHAT)) {
+            return openAiError(generationCapabilityError(spec));
+        }
         TaiRuntimeOptions options = runtimeOptionsFromRequest(request, spec);
         JSONObject loadError = ensureModelLoadedForGeneration(modelId, options);
         if (loadError != null) return openAiError(loadError);
@@ -566,6 +572,10 @@ public final class TaiManager {
         TaiModelSpec spec = resolveModel(modelId);
         if (spec == null) {
             emitOpenAiError(sink, error(404, "model_not_found", "Unknown TAI model: " + modelId));
+            return;
+        }
+        if (!spec.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_CHAT)) {
+            emitOpenAiError(sink, generationCapabilityError(spec));
             return;
         }
         if (!modelSupportsRequestedTools(request, spec)) {
@@ -677,6 +687,10 @@ public final class TaiManager {
             emitOpenAiError(sink, error(404, "model_not_found", "Unknown TAI model: " + modelId));
             return;
         }
+        if (!spec.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_CHAT)) {
+            emitOpenAiError(sink, generationCapabilityError(spec));
+            return;
+        }
         TaiRuntimeOptions options = runtimeOptionsFromRequest(request, spec);
         JSONObject loadError = ensureModelLoadedForGeneration(modelId, options);
         if (loadError != null) {
@@ -736,6 +750,9 @@ public final class TaiManager {
         availableModels.putAll(modelStore.getInstalledUserModels());
         for (TaiModelSpec spec : availableModels.values()) {
             if (TaiModelSpec.BACKEND_MNN_LLM.equals(spec.backend) && !mnnSupported) continue;
+            // Management can retain imported packages whose backend is not executable yet, but
+            // generation discovery must publish only models with at least one runnable endpoint.
+            if (spec.endpointCapabilities.isEmpty()) continue;
             // Advertise multimodal LiteRT models as separate modality-scoped ids (chat / -vision /
             // -audio), matching Edge Gallery's per-task loading. See TaiModelVariants.
             for (TaiModelSpec variant : TaiModelVariants.expand(spec,
@@ -819,16 +836,14 @@ public final class TaiManager {
             item.put("_size", model.optLong("sizeBytes", 0L));
             item.put("_sha256", model.isNull("sha256") ? "" : model.optString("sha256", ""));
             item.put("_license", model.optString("license", ""));
-            String capabilityId = model.optString("id", "")
-                .replaceFirst("-(vision|audio|text)$", "");
-            boolean catalogCapabilities = TaiModelCatalog.get(capabilityId) != null;
-            item.put("_capabilities_verified", catalogCapabilities || model.optBoolean("capabilitiesVerified", false));
-            item.put("_capability_source", catalogCapabilities ? "catalog"
+            boolean capabilitiesVerified = model.optBoolean("capabilitiesVerified", false);
+            item.put("_capabilities_verified", capabilitiesVerified);
+            item.put("_capability_source", capabilitiesVerified ? "catalog"
                 : model.optString("capabilitySource", "import_or_user_metadata"));
             JSONArray sourceCapabilities = model.optJSONArray("sourceCapabilities");
             JSONArray declaredEndpointCapabilities = model.optJSONArray("endpointCapabilities");
             JSONArray capabilities = declaredEndpointCapabilities == null ? model.optJSONArray("capabilities") : declaredEndpointCapabilities;
-            if (capabilities == null || capabilities.length() == 0) capabilities = new JSONArray().put(TaiModelSpec.CAPABILITY_TEXT_CHAT);
+            if (capabilities == null) capabilities = new JSONArray().put(TaiModelSpec.CAPABILITY_TEXT_CHAT);
             JSONArray endpointCapabilities = declaredEndpointCapabilities == null
                 ? openAiEndpointCapabilities(model.optString("id", ""), capabilities, backend,
                     model.optString("format", TaiModelSpec.FORMAT_LITERTLM))
@@ -862,13 +877,19 @@ public final class TaiManager {
         JSONArray models = new JSONArray();
         for (int i = 0; i < data.length(); i++) {
             JSONObject source = data.optJSONObject(i);
-            if (source == null || !contains(source.optJSONArray("_capabilities"), TaiModelSpec.CAPABILITY_TEXT_CHAT)) continue;
-            int context = source.optInt("_endpoint_context_window", 4096);
-            boolean image = contains(source.optJSONArray("_capabilities"), TaiModelSpec.CAPABILITY_IMAGE_INPUT);
+            JSONArray capabilities = source == null ? null : source.optJSONArray("_capabilities");
+            int context = source == null ? 0 : source.optInt("_endpoint_context_window", 4096);
+            if (source == null
+                || !contains(capabilities, TaiModelSpec.CAPABILITY_TEXT_CHAT)
+                || !contains(capabilities, TaiModelSpec.CAPABILITY_TOOL_USE)
+                || context < 16_384) continue;
+            boolean image = contains(capabilities, TaiModelSpec.CAPABILITY_IMAGE_INPUT);
+            boolean code = contains(capabilities, TaiModelSpec.CAPABILITY_CODE);
             JSONObject model = new JSONObject();
             model.put("slug", source.optString("id", ""));
             model.put("display_name", source.optString("_display_name", source.optString("id", "")));
-            model.put("description", "On-device " + source.optString("_backend", "") + " model served by Termux Launcher");
+            model.put("description", "On-device " + (code ? "coding " : "tool-capable ")
+                + source.optString("_backend", "") + " model served by Termux Launcher");
             model.put("default_reasoning_level", "none");
             model.put("supported_reasoning_levels", new JSONArray());
             model.put("shell_type", "local");
@@ -877,7 +898,9 @@ public final class TaiManager {
             model.put("priority", i);
             model.put("availability_nux", JSONObject.NULL);
             model.put("upgrade", JSONObject.NULL);
-            model.put("base_instructions", "You are an on-device coding assistant. Use the provided tools when needed.");
+            model.put("base_instructions", code
+                ? "You are an on-device coding assistant. Use the provided tools when needed. Keep changes scoped and verify your work."
+                : "You are an on-device assistant. Use the provided tools when needed and report tool results accurately.");
             model.put("supports_reasoning_summaries", false);
             model.put("support_verbosity", false);
             model.put("default_verbosity", JSONObject.NULL);
@@ -1263,6 +1286,12 @@ public final class TaiManager {
         JSONArray tools = request.optJSONArray("tools");
         if (tools == null || tools.length() == 0 || "none".equals(String.valueOf(request.opt("tool_choice")))) return true;
         return spec.capabilities.contains(TaiModelSpec.CAPABILITY_TOOL_USE);
+    }
+
+    @NonNull
+    private static JSONObject generationCapabilityError(@NonNull TaiModelSpec spec) throws JSONException {
+        return error(400, "capability_not_supported",
+            "Model " + spec.id + " does not support chat or text generation. Use an embeddings endpoint for embedding-only models.");
     }
 
     private void emitChatChunk(
@@ -1743,7 +1772,6 @@ public final class TaiManager {
         LinkedHashSet<String> endpoint = TaiModelSpec.endpointCapabilitiesFor(id, backend, format, source, null);
         JSONArray filtered = new JSONArray();
         for (String capability : endpoint) filtered.put(capability);
-        if (filtered.length() == 0) filtered.put(TaiModelSpec.CAPABILITY_TEXT_CHAT);
         return filtered;
     }
 
@@ -1759,7 +1787,7 @@ public final class TaiManager {
         }
         if (capabilities.isEmpty()) {
             String normalized = artifactHint == null ? "" : artifactHint.toLowerCase(Locale.ROOT);
-            if (normalized.endsWith(".tflite") && (normalized.contains("embedding") || normalized.contains("embedder"))) {
+            if (normalized.endsWith(".tflite")) {
                 capabilities.add(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS);
             } else {
                 capabilities.add(TaiModelSpec.CAPABILITY_TEXT_CHAT);

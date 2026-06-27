@@ -32,6 +32,21 @@ public class TaiApiCompatibilityTest {
     }
 
     @Test
+    public void responsesRequest_preservesInputAudio() throws Exception {
+        JSONObject request = new JSONObject().put("model", "audio-model")
+            .put("input", new JSONArray().put(new JSONObject().put("role", "user")
+                .put("content", new JSONArray().put(new JSONObject().put("type", "input_audio")
+                    .put("input_audio", new JSONObject().put("data", "AQID").put("format", "wav"))))));
+
+        JSONObject chat = TaiApiCompatibility.responsesRequestToChat(request.toString());
+
+        JSONObject part = chat.getJSONArray("messages").getJSONObject(0)
+            .getJSONArray("content").getJSONObject(0);
+        assertEquals("input_audio", part.getString("type"));
+        assertEquals("AQID", part.getJSONObject("input_audio").getString("data"));
+    }
+
+    @Test
     public void ollamaDiscovery_mapsEndpointCapabilities() throws Exception {
         JSONObject model = new JSONObject().put("id", "gemma-vision").put("_backend", "litert-lm")
             .put("_format", "litertlm").put("_endpoint_context_window", 4096)
@@ -72,5 +87,18 @@ public class TaiApiCompatibilityTest {
         JSONObject item = tags.getJSONArray("models").getJSONObject(0);
         assertEquals("", item.getString("digest"));
         assertEquals("", item.getJSONObject("details").getString("quantization_level"));
+    }
+
+    @Test
+    public void ollamaShow_embeddingOnlyModelDoesNotClaimCompletion() throws Exception {
+        JSONObject model = new JSONObject().put("id", "embedder")
+            .put("_capabilities", new JSONArray().put(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS));
+
+        JSONObject show = TaiApiCompatibility.ollamaShow(
+            new JSONObject().put("data", new JSONArray().put(model)),
+            new JSONObject().put("model", "embedder").toString());
+
+        assertTrue(show.getJSONArray("capabilities").toString().contains("embedding"));
+        assertTrue(!show.getJSONArray("capabilities").toString().contains("completion"));
     }
 }

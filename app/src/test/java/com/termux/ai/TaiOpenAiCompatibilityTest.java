@@ -76,11 +76,14 @@ public class TaiOpenAiCompatibilityTest {
             .put("ok", true)
             .put("models", new JSONArray()
                 .put(new JSONObject().put("id", "gemma").put("backend", "litert-lm")
+                    .put("endpointContextWindow", 16384)
                     .put("capabilities", new JSONArray()
                         .put("text_chat")
                         .put("image_input")
-                        .put("audio_input")))
+                        .put("audio_input")
+                        .put("tool_use")))
                 .put(new JSONObject().put("id", "gemma").put("backend", "litert-lm")
+                    .put("endpointContextWindow", 16384)
                     .put("capabilities", new JSONArray().put("text_chat").put("image_input")))
                 .put(new JSONObject().put("id", "qwen")));
 
@@ -88,10 +91,10 @@ public class TaiOpenAiCompatibilityTest {
 
         assertEquals("list", response.getString("object"));
         assertEquals(2, response.getJSONArray("data").length());
-        assertEquals(2, response.getJSONArray("models").length());
+        assertEquals(1, response.getJSONArray("models").length());
         assertEquals("gemma", response.getJSONArray("models").getJSONObject(0).getString("slug"));
         assertEquals("local", response.getJSONArray("models").getJSONObject(0).getString("shell_type"));
-        assertEquals(4096, response.getJSONArray("models").getJSONObject(0).getInt("context_window"));
+        assertEquals(16384, response.getJSONArray("models").getJSONObject(0).getInt("context_window"));
         assertEquals("gemma", response.getJSONArray("data").getJSONObject(0).getString("id"));
         assertEquals("model", response.getJSONArray("data").getJSONObject(0).getString("object"));
         assertTrue(response.getJSONArray("data").getJSONObject(0).getJSONArray("_capabilities").toString().contains("image_input"));
@@ -262,7 +265,7 @@ public class TaiOpenAiCompatibilityTest {
     }
 
     @Test
-    public void endpointCapabilities_embeddingOnlyDoesNotBecomeChatModel() {
+    public void endpointCapabilities_embeddingOnlyDoesNotBecomeChatAndMnnDoesNotClaimEmbeddings() {
         LinkedHashSet<String> declared = new LinkedHashSet<>();
         declared.add(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS);
 
@@ -272,9 +275,71 @@ public class TaiOpenAiCompatibilityTest {
             "qwen3-embedding", TaiModelSpec.BACKEND_MNN_LLM, TaiModelSpec.FORMAT_MNN, declared, "/models/config.json");
 
         assertTrue(liteRt.contains(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS));
-        assertTrue(mnn.contains(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS));
+        assertFalse(mnn.contains(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS));
         assertFalse(liteRt.contains(TaiModelSpec.CAPABILITY_TEXT_CHAT));
         assertFalse(mnn.contains(TaiModelSpec.CAPABILITY_TEXT_CHAT));
+    }
+
+    @Test
+    public void openAiModels_codexDiscoveryRequiresToolsAndSixteenKContext() throws Exception {
+        JSONArray models = new JSONArray()
+            .put(new JSONObject().put("id", "short-tools")
+                .put("endpointContextWindow", 8192)
+                .put("capabilities", new JSONArray().put("text_chat").put("tool_use")))
+            .put(new JSONObject().put("id", "long-chat")
+                .put("endpointContextWindow", 32768)
+                .put("capabilities", new JSONArray().put("text_chat")))
+            .put(new JSONObject().put("id", "coder")
+                .put("endpointContextWindow", 16384)
+                .put("capabilities", new JSONArray().put("text_chat").put("tool_use").put("code")));
+
+        JSONArray codex = TaiManager.openAiModelsFromTaiModels(new JSONObject().put("models", models))
+            .getJSONArray("models");
+
+        assertEquals(1, codex.length());
+        assertEquals("coder", codex.getJSONObject(0).getString("slug"));
+    }
+
+    @Test
+    public void openAiModels_doesNotVerifyCapabilitiesFromCatalogIdAlone() throws Exception {
+        JSONObject unverified = new JSONObject().put("id", TaiModelRegistry.MODEL_MOBILE_ACTIONS_270M)
+            .put("capabilities", new JSONArray().put("text_chat"));
+        JSONObject verified = new JSONObject(unverified.toString()).put("id", "verified-copy")
+            .put("capabilitiesVerified", true).put("capabilitySource", "catalog");
+
+        JSONArray data = TaiManager.openAiModelsFromTaiModels(new JSONObject()
+            .put("models", new JSONArray().put(unverified).put(verified))).getJSONArray("data");
+
+        assertFalse(data.getJSONObject(0).getBoolean("_capabilities_verified"));
+        assertTrue(data.getJSONObject(1).getBoolean("_capabilities_verified"));
+    }
+
+    @Test
+    public void endpointCapabilities_rawTfliteCannotAdvertiseChat() {
+        LinkedHashSet<String> declared = new LinkedHashSet<>();
+        declared.add(TaiModelSpec.CAPABILITY_TEXT_CHAT);
+        declared.add(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS);
+
+        LinkedHashSet<String> endpoint = TaiModelSpec.endpointCapabilitiesFor(
+            "import", TaiModelSpec.BACKEND_LITERT_LM, TaiModelSpec.FORMAT_LITERTLM,
+            declared, "/models/model.tflite");
+
+        assertFalse(endpoint.contains(TaiModelSpec.CAPABILITY_TEXT_CHAT));
+        assertTrue(endpoint.contains(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS));
+    }
+
+    @Test
+    public void openAiModels_preservesExplicitlyEmptyEndpointCapabilities() throws Exception {
+        JSONObject model = new JSONObject().put("id", "unsupported-mnn-embedder")
+            .put("backend", TaiModelSpec.BACKEND_MNN_LLM)
+            .put("sourceCapabilities", new JSONArray().put(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS))
+            .put("endpointCapabilities", new JSONArray());
+
+        JSONObject exposed = TaiManager.openAiModelsFromTaiModels(
+            new JSONObject().put("models", new JSONArray().put(model)))
+            .getJSONArray("data").getJSONObject(0);
+
+        assertEquals(0, exposed.getJSONArray("_capabilities").length());
     }
 
     private static TaiModelSpec spec(String id, String backend, String... capabilities) {

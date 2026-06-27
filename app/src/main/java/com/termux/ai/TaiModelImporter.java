@@ -319,18 +319,20 @@ public final class TaiModelImporter {
     @NonNull
     static Set<String> sourceCapabilities(@NonNull String fileName, @Nullable Set<String> declared) {
         LinkedHashSet<String> caps = new LinkedHashSet<>();
+        String normalized = fileName.toLowerCase(Locale.ROOT);
+        // Raw .tflite files are supported only by LiteRtEmbeddingRuntime. Never persist chat or
+        // multimodal claims for them, even when stale UI/client metadata says otherwise.
+        if (normalized.endsWith(".tflite")) {
+            caps.add(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS);
+            return caps;
+        }
         if (declared != null) {
             for (String capability : declared) {
                 if (capability != null && !capability.trim().isEmpty()) caps.add(capability.trim());
             }
         }
         if (caps.isEmpty()) {
-            String normalized = fileName.toLowerCase(Locale.ROOT);
-            if (normalized.endsWith(".tflite") && (normalized.contains("embedding") || normalized.contains("embedder"))) {
-                caps.add(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS);
-            } else {
-                caps.add(TaiModelSpec.CAPABILITY_TEXT_CHAT);
-            }
+            caps.add(TaiModelSpec.CAPABILITY_TEXT_CHAT);
         }
         return caps;
     }

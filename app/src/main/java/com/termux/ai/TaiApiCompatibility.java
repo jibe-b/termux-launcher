@@ -105,6 +105,11 @@ public final class TaiApiCompatibility {
                 output.put(new JSONObject().put("type", "image_url")
                     .put("image_url", imageUrl instanceof JSONObject ? imageUrl
                         : new JSONObject().put("url", String.valueOf(imageUrl))));
+            } else if ("input_audio".equals(type)) {
+                Object inputAudio = part.opt("input_audio");
+                output.put(new JSONObject().put("type", "input_audio")
+                    .put("input_audio", inputAudio instanceof JSONObject
+                        ? new JSONObject(inputAudio.toString()) : inputAudio));
             }
         }
         return output;
@@ -179,8 +184,9 @@ public final class TaiApiCompatibility {
         String requested = request.optString("model", request.optString("name", ""));
         JSONObject model = findModel(openAiModels, requested);
         if (model == null) return ollamaError(404, "model_not_found", "model '" + requested + "' not found");
-        JSONArray capabilities = new JSONArray().put("completion");
+        JSONArray capabilities = new JSONArray();
         JSONArray endpoint = model.optJSONArray("_capabilities");
+        if (contains(endpoint, TaiModelSpec.CAPABILITY_TEXT_CHAT)) capabilities.put("completion");
         if (contains(endpoint, TaiModelSpec.CAPABILITY_IMAGE_INPUT)) capabilities.put("vision");
         if (contains(endpoint, TaiModelSpec.CAPABILITY_TOOL_USE)) capabilities.put("tools");
         if (contains(endpoint, TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS)) capabilities.put("embedding");

@@ -127,16 +127,17 @@ public final class TaiModelCatalog {
             TaiModelRegistry.MODEL_GEMMA_4_E2B_IT, "Gemma 4 E2B IT", "general_multimodal", "recommended_default", true,
             "Fast assistant", "litert-community/gemma-4-E2B-it-litert-lm", "6e5c4f1e395deb959c494953478fa5cec4b8008f",
             "gemma-4-E2B-it.litertlm", "Apache-2.0", 2_588_147_712L, "2.4 GB", "8GB+", false,
-            tags("Text", "Vision", "Audio"), setOf("text_chat", "image_input", "audio_input", "tool_use", "llm_thinking", "speculative_decoding")));
+            tags("Text", "Vision", "Audio", "Tools"), setOf("text_chat", "image_input", "audio_input", "tool_use", "llm_thinking", "speculative_decoding")));
         entries.put(TaiModelRegistry.MODEL_GEMMA_4_E4B_IT, liteRtAvailable(
             TaiModelRegistry.MODEL_GEMMA_4_E4B_IT, "Gemma 4 E4B IT", "general_multimodal", "premium_default", false,
             "Coding and reasoning", "litert-community/gemma-4-E4B-it-litert-lm", "28299f30ee4d43294517a4ac93abd6163412f07f",
             "gemma-4-E4B-it.litertlm", "Apache-2.0", 3_659_530_240L, "3.7 GB", "12GB+", false,
-            tags("Text", "Vision", "Audio", "Reasoning"), setOf("text_chat", "image_input", "audio_input", "llm_thinking")));
+            tags("Text", "Vision", "Audio", "Code", "Reasoning", "Tools"),
+            setOf("text_chat", "image_input", "audio_input", "tool_use", "code", "reasoning", "llm_thinking", "speculative_decoding")));
         entries.put("qwen2.5-1.5b-instruct-litert-lm", liteRtImportOnly(
             "qwen2.5-1.5b-instruct-litert-lm", "Qwen2.5 1.5B Instruct", "lightweight_text", "lightweight_alternative", false,
             "Lightweight text, code, and multilingual", "litert-community/Qwen2.5-1.5B-Instruct",
-            1_597_931_520L, "1.5 GB", "6GB+", "q8",
+            1_597_931_520L, "1.5 GB", "6GB+", "q8", "Apache-2.0",
             tags("Text", "Code", "Multilingual"), setOf("text_chat", "code", "multilingual")));
         entries.put("deepseek-r1-distill-qwen-1.5b-litert-lm", liteRtAvailable(
             "deepseek-r1-distill-qwen-1.5b-litert-lm", "DeepSeek-R1 Distill 1.5B", "reasoning", "reasoning_small", false,
@@ -149,17 +150,17 @@ public final class TaiModelCatalog {
         entries.put(TaiModelRegistry.MODEL_MOBILE_ACTIONS_270M, liteRtAvailable(
             TaiModelRegistry.MODEL_MOBILE_ACTIONS_270M, "FunctionGemma 270M", "tool_calling", "experimental_launcher_agent", false,
             "Mobile actions tool-call model", "litert-community/functiongemma-270m-ft-mobile-actions", "38942192c9b723af836d489074823ff33d4a3e7a",
-            "mobile_actions_q8_ekv1024.litertlm", "Gemma Terms of Use", 288_964_608L, "0.3 GB", "4GB+", true,
+            "mobile_actions_q8_ekv1024.litertlm", "Gemma Terms of Use", 288_964_608L, "0.3 GB", "6GB+", true,
             tags("Tools"), setOf("text_chat", "tool_use", "mobile_actions")));
 
         entries.put("qwen2.5-coder-1.5b-instruct-mnn", mnnAvailable(
             "qwen2.5-coder-1.5b-instruct-mnn", "Qwen2.5-Coder 1.5B", "coding", "recommended_coder", true,
-            "Code and terminal assistant", "taobao-mnn/Qwen2.5-Coder-1.5B-Instruct-MNN", 1_343_595_873L,
-            "1.3 GB", "4GB-6GB+", "qwen2.5-coder", "int4", tags("Code", "Text", "Tools"), setOf("text_chat", "code", "tool_use")));
+            "Code and terminal assistant", "taobao-mnn/Qwen2.5-Coder-1.5B-Instruct-MNN", 971_254_765L,
+            "971 MB", "4GB-6GB+", "qwen2.5-coder", "int4", tags("Code", "Text", "Tools"), setOf("text_chat", "code", "tool_use")));
         entries.put("qwen2.5-coder-7b-instruct-mnn", mnnAvailable(
             "qwen2.5-coder-7b-instruct-mnn", "Qwen2.5-Coder 7B", "coding", "advanced_coder", false,
-            "Higher quality code model", "taobao-mnn/Qwen2.5-Coder-7B-Instruct-MNN", 5_079_861_358L,
-            "5.1 GB", "10GB-12GB+", "qwen2.5-coder", "int4", tags("Code", "Text"), setOf("text_chat", "code")));
+            "Higher quality code model", "taobao-mnn/Qwen2.5-Coder-7B-Instruct-MNN", 4_426_674_424L,
+            "4.4 GB", "10GB-12GB+", "qwen2.5-coder", "int4", tags("Code", "Text"), setOf("text_chat", "code")));
         entries.put("qwen2.5-0.5b-instruct-mnn", mnnAvailable(
             "qwen2.5-0.5b-instruct-mnn", "Qwen2.5 0.5B", "lightweight_text", "tiny_general", false,
             "Tiny general chat", "taobao-mnn/Qwen2.5-0.5B-Instruct-MNN", 556_808_791L,
@@ -170,12 +171,12 @@ public final class TaiModelCatalog {
             "879 MB", "4GB-6GB+", "qwen2.5", "int4", tags("Text", "Multilingual"), setOf("text_chat", "multilingual")));
         entries.put("qwen2.5-3b-instruct-mnn", mnnAvailable(
             "qwen2.5-3b-instruct-mnn", "Qwen2.5 3B", "general_text", "balanced_general", false,
-            "Balanced local assistant", "taobao-mnn/Qwen2.5-3B-Instruct-MNN", 2_369_484_250L,
-            "2.4 GB", "6GB-8GB+", "qwen2.5", "int4", tags("Text"), setOf("text_chat")));
+            "Balanced local multilingual assistant", "taobao-mnn/Qwen2.5-3B-Instruct-MNN", 2_369_484_250L,
+            "2.4 GB", "6GB-8GB+", "qwen2.5", "int4", tags("Text", "Multilingual"), setOf("text_chat", "multilingual")));
         entries.put("deepseek-r1-1.5b-qwen-mnn", mnnAvailable(
             "deepseek-r1-1.5b-qwen-mnn", "DeepSeek-R1 1.5B Qwen", "reasoning", "lightweight_reasoning", false,
-            "Small reasoning model", "taobao-mnn/DeepSeek-R1-1.5B-Qwen-MNN", 1_557_822_247L,
-            "1.6 GB", "4GB-6GB+", "deepseek-r1-qwen", "int4", tags("Reasoning", "Text"), setOf("text_chat", "reasoning")));
+            "Small reasoning model", "taobao-mnn/DeepSeek-R1-1.5B-Qwen-MNN", 1_020_644_237L,
+            "1.0 GB", "4GB-6GB+", "deepseek-r1-qwen", "int4", tags("Reasoning", "Text"), setOf("text_chat", "reasoning")));
 
         return Collections.unmodifiableMap(entries);
     }
@@ -202,9 +203,9 @@ public final class TaiModelCatalog {
 
     private static CatalogEntry liteRtImportOnly(String id, String name, String jobGroup, String priority, boolean recommended,
                                                   String role, String repo, long size, String sizeEstimate, String ramTier,
-                                                  @Nullable String quantization, LinkedHashSet<String> displayTags,
+                                                  @Nullable String quantization, String license, LinkedHashSet<String> displayTags,
                                                   LinkedHashSet<String> capabilities) {
-        return entry(id, name, role, repo, "main", null, "Review upstream license before import", size, false,
+        return entry(id, name, role, repo, "main", null, license, size, false,
             TaiModelSpec.BACKEND_LITERT_LM, TaiModelSpec.FORMAT_LITERTLM, "", quantization, 4096, ramGb(ramTier), null,
             capabilities, jobGroup, priority, displayTags, sizeEstimate, ramTier, recommended, false, UNVERIFIED_ARTIFACT_POLICY);
     }
@@ -236,6 +237,7 @@ public final class TaiModelCatalog {
     private static int sourceContextWindowFor(String id, String backend, int endpointContextWindow) {
         if (TaiModelRegistry.MODEL_GEMMA_4_E2B_IT.equals(id) || TaiModelRegistry.MODEL_GEMMA_4_E4B_IT.equals(id)) return 32_768;
         if (TaiModelRegistry.MODEL_MOBILE_ACTIONS_270M.equals(id)) return 1024;
+        if ("qwen2.5-coder-7b-instruct-mnn".equals(id)) return 131_072;
         if (TaiModelSpec.BACKEND_MNN_LLM.equals(backend) && id.startsWith("qwen2.5-")) return 32_768;
         return endpointContextWindow;
     }

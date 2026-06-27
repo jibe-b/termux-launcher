@@ -339,7 +339,12 @@
         <string name="termux_ai_import_source_label">Hugging Face or local file</string>
         <string name="termux_ai_import_cap_chat">Chat/completions</string>
         <string name="termux_ai_import_cap_embeddings">Text embeddings</string>
-        <string name="termux_ai_import_cap_media">Vision/audio input</string>
+        <string name="termux_ai_import_cap_image">Vision/image input</string>
+        <string name="termux_ai_import_cap_audio">Audio input</string>
+        <string name="termux_ai_import_cap_tools">Function tools</string>
+        <string name="termux_ai_import_cap_code">Code-specialized</string>
+        <string name="termux_ai_import_cap_reasoning">Reasoning-specialized</string>
+        <string name="termux_ai_import_cap_multilingual">Multilingual</string>
         <string name="termux_ai_import_no_capability">Select at least one capability.</string>
         <string name="termux_ai_model_imported">Model imported</string>
         <string name="termux_ai_model_loaded">Model load requested</string>
