@@ -134,7 +134,7 @@ public final class TaiApiCompatibility {
                         .put("status", "completed"));
                 }
             }
-            String text = message.optString("content", "");
+            String text = message.isNull("content") ? "" : message.optString("content", "");
             if (!text.isEmpty()) output.put(messageOutputItem("msg_" + System.currentTimeMillis(), text, "completed"));
         }
         response.put("output", output);
@@ -168,7 +168,7 @@ public final class TaiApiCompatibility {
             JSONObject details = ollamaDetails(source);
             models.put(new JSONObject().put("name", id).put("model", id)
                 .put("modified_at", Instant.EPOCH.toString()).put("size", source.optLong("_size", 0L))
-                .put("digest", source.optString("_sha256", "")).put("details", details));
+                .put("digest", nullableString(source, "_sha256")).put("details", details));
         }
         return new JSONObject().put("models", models);
     }
@@ -296,7 +296,7 @@ public final class TaiApiCompatibility {
             JSONObject source = findModel(openAiModels, state.loadedModelId);
             models.put(new JSONObject().put("name", state.loadedModelId).put("model", state.loadedModelId)
                 .put("size", source == null ? 0L : source.optLong("_size", 0L)).put("size_vram", 0L)
-                .put("digest", source == null ? "" : source.optString("_sha256", ""))
+                .put("digest", source == null ? "" : nullableString(source, "_sha256"))
                 .put("details", source == null ? new JSONObject() : ollamaDetails(source))
                 .put("expires_at", state.keepWarmUntilMs > 0 ? Instant.ofEpochMilli(state.keepWarmUntilMs).toString() : Instant.now().toString())
                 .put("context_length", source == null ? 0 : source.optInt("_endpoint_context_window", 0)));
@@ -340,11 +340,11 @@ public final class TaiApiCompatibility {
     }
 
     private static JSONObject ollamaDetails(JSONObject model) throws JSONException {
-        return new JSONObject().put("parent_model", "").put("format", model.optString("_format", ""))
-            .put("family", model.optString("_architecture", ""))
-            .put("families", new JSONArray().put(model.optString("_architecture", "")))
-            .put("parameter_size", model.optString("_parameter_size", ""))
-            .put("quantization_level", model.optString("_quantization", ""));
+        String family = nullableString(model, "_architecture");
+        return new JSONObject().put("parent_model", "").put("format", nullableString(model, "_format"))
+            .put("family", family).put("families", family.isEmpty() ? new JSONArray() : new JSONArray().put(family))
+            .put("parameter_size", nullableString(model, "_parameter_size"))
+            .put("quantization_level", nullableString(model, "_quantization"));
     }
 
     private static boolean contains(JSONArray values, String expected) {
@@ -355,6 +355,12 @@ public final class TaiApiCompatibility {
 
     private static JSONObject zeroUsage() throws JSONException {
         return new JSONObject().put("input_tokens", 0).put("output_tokens", 0).put("total_tokens", 0);
+    }
+
+    private static String nullableString(JSONObject object, String key) {
+        if (object == null || !object.has(key) || object.isNull(key)) return "";
+        String value = object.optString(key, "");
+        return "null".equalsIgnoreCase(value) ? "" : value;
     }
 
     private static void copy(JSONObject source, JSONObject target, String... keys) throws JSONException {

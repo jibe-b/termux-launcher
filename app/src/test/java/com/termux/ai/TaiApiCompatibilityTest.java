@@ -60,5 +60,17 @@ public class TaiApiCompatibilityTest {
 
         assertEquals("function_call", response.getJSONArray("output").getJSONObject(0).getString("type"));
         assertEquals("read_file", response.getJSONArray("output").getJSONObject(0).getString("name"));
+        assertEquals(1, response.getJSONArray("output").length());
+    }
+
+    @Test
+    public void ollamaDiscovery_doesNotSerializeJsonNullAsText() throws Exception {
+        JSONObject model = new JSONObject().put("id", "local").put("_format", "litertlm")
+            .put("_architecture", JSONObject.NULL).put("_quantization", JSONObject.NULL)
+            .put("_sha256", JSONObject.NULL).put("_capabilities", new JSONArray().put("text_chat"));
+        JSONObject tags = TaiApiCompatibility.ollamaTags(new JSONObject().put("data", new JSONArray().put(model)));
+        JSONObject item = tags.getJSONArray("models").getJSONObject(0);
+        assertEquals("", item.getString("digest"));
+        assertEquals("", item.getJSONObject("details").getString("quantization_level"));
     }
 }

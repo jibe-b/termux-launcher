@@ -472,6 +472,19 @@ public final class TaiModelStore {
     private TaiModelSpec normalizeLegacyModelSpec(@NonNull TaiModelSpec spec) {
         String migratedId = TaiSettings.migrateBuiltInModelId(spec.id);
         TaiModelCatalog.CatalogEntry entry = TaiModelCatalog.get(migratedId);
+        String identity = (migratedId + " " + (spec.localPath == null ? "" : spec.localPath)).toLowerCase(java.util.Locale.ROOT);
+        if (entry == null && identity.contains("embedding") && identity.contains(".tflite")) {
+            LinkedHashSet<String> embedding = new LinkedHashSet<>();
+            embedding.add(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS);
+            LinkedHashSet<String> endpoint = TaiModelSpec.endpointCapabilitiesFor(migratedId,
+                spec.backend, spec.format, embedding, spec.localPath);
+            return new TaiModelSpec(migratedId, spec.displayName, spec.roleHint, spec.source,
+                spec.localPath, spec.license, spec.sizeBytes, embedding, spec.builtInCatalogEntry,
+                spec.runtimeProfile, spec.backend, spec.format, spec.architecture, spec.quantization,
+                spec.endpointContextWindow, spec.sourceContextWindow, spec.defaultMaxOutputTokens,
+                spec.recommendedRamGb, spec.sha256, endpoint,
+                TaiModelSpec.toolModeFor(spec.backend, endpoint));
+        }
         if (entry == null && migratedId.equals(spec.id)) return spec;
         if (entry == null) {
             return new TaiModelSpec(

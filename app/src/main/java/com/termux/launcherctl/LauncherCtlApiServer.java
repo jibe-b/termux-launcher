@@ -2072,13 +2072,17 @@ public class LauncherCtlApiServer {
             throw new IOException(e);
         }
         StringBuilder fullText = new StringBuilder();
+        boolean[] failed = new boolean[]{false};
         try {
             TaiManager.getInstance(context).openAiChatCompletionsStream(chatBody, new TaiManager.OpenAiStreamSink() {
                 @Override
                 public void onEvent(@NonNull JSONObject event) throws IOException {
                     try {
                         if (event.has("error")) {
-                            writeSseEvent(output, new JSONObject().put("type", "error").put("error", event.opt("error")).toString());
+                            failed[0] = true;
+                            JSONObject failure = TaiApiCompatibility.responseEnvelope(responseId, model, "failed");
+                            failure.put("error", event.opt("error"));
+                            writeSseEvent(output, new JSONObject().put("type", "response.failed").put("response", failure).toString());
                             return;
                         }
                         JSONArray choices = event.optJSONArray("choices");
@@ -2121,6 +2125,10 @@ public class LauncherCtlApiServer {
                 @Override
                 public void onDone() throws IOException {
                     try {
+                        if (failed[0]) {
+                            writeSseEvent(output, "[DONE]");
+                            return;
+                        }
                         writeSseEvent(output, new JSONObject().put("type", "response.output_text.done")
                             .put("item_id", messageId).put("output_index", 0).put("content_index", 0)
                             .put("text", fullText.toString()).toString());

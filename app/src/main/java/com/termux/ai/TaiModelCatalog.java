@@ -213,8 +213,9 @@ public final class TaiModelCatalog {
                                              String role, String repo, long size, String sizeEstimate, String ramTier,
                                              String architecture, String quantization, LinkedHashSet<String> displayTags,
                                              LinkedHashSet<String> capabilities) {
+        int endpointContextWindow = id.startsWith("qwen2.5-coder-") ? 16_384 : 8192;
         return entry(id, name, role, repo, "main", "config.json", "Apache-2.0", size, false,
-            TaiModelSpec.BACKEND_MNN_LLM, TaiModelSpec.FORMAT_MNN, architecture, quantization, 8192,
+            TaiModelSpec.BACKEND_MNN_LLM, TaiModelSpec.FORMAT_MNN, architecture, quantization, endpointContextWindow,
             ramGb(ramTier), null, capabilities, jobGroup, priority, displayTags, sizeEstimate, ramTier,
             recommended, true, "");
     }

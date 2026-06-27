@@ -816,12 +816,14 @@ public final class TaiManager {
             item.put("_backend", backend);
             item.put("_format", model.optString("format", ""));
             item.put("_display_name", model.optString("displayName", model.optString("id", "")));
-            item.put("_architecture", model.optString("architecture", ""));
-            item.put("_quantization", model.optString("quantization", ""));
+            item.put("_architecture", model.isNull("architecture") ? "" : model.optString("architecture", ""));
+            item.put("_quantization", model.isNull("quantization") ? "" : model.optString("quantization", ""));
             item.put("_size", model.optLong("sizeBytes", 0L));
-            item.put("_sha256", model.optString("sha256", ""));
+            item.put("_sha256", model.isNull("sha256") ? "" : model.optString("sha256", ""));
             item.put("_license", model.optString("license", ""));
-            boolean catalogCapabilities = TaiModelCatalog.get(model.optString("id", "")) != null;
+            String capabilityId = model.optString("id", "")
+                .replaceFirst("-(vision|audio|text)$", "");
+            boolean catalogCapabilities = TaiModelCatalog.get(capabilityId) != null;
             item.put("_capabilities_verified", catalogCapabilities || model.optBoolean("capabilitiesVerified", false));
             item.put("_capability_source", catalogCapabilities ? "catalog"
                 : model.optString("capabilitySource", "import_or_user_metadata"));
@@ -853,7 +855,45 @@ public final class TaiManager {
         JSONObject response = new JSONObject();
         response.put("object", "list");
         response.put("data", data);
+        response.put("models", codexModels(data));
         return response;
+    }
+
+    @NonNull
+    private static JSONArray codexModels(@NonNull JSONArray data) throws JSONException {
+        JSONArray models = new JSONArray();
+        for (int i = 0; i < data.length(); i++) {
+            JSONObject source = data.optJSONObject(i);
+            if (source == null || !contains(source.optJSONArray("_capabilities"), TaiModelSpec.CAPABILITY_TEXT_CHAT)) continue;
+            int context = source.optInt("_endpoint_context_window", 4096);
+            boolean image = contains(source.optJSONArray("_capabilities"), TaiModelSpec.CAPABILITY_IMAGE_INPUT);
+            JSONObject model = new JSONObject();
+            model.put("slug", source.optString("id", ""));
+            model.put("display_name", source.optString("_display_name", source.optString("id", "")));
+            model.put("description", "On-device " + source.optString("_backend", "") + " model served by Termux Launcher");
+            model.put("default_reasoning_level", "none");
+            model.put("supported_reasoning_levels", new JSONArray());
+            model.put("shell_type", "local");
+            model.put("visibility", "list");
+            model.put("supported_in_api", true);
+            model.put("priority", i);
+            model.put("availability_nux", JSONObject.NULL);
+            model.put("upgrade", JSONObject.NULL);
+            model.put("base_instructions", "You are an on-device coding assistant. Use the provided tools when needed.");
+            model.put("supports_reasoning_summaries", false);
+            model.put("support_verbosity", false);
+            model.put("default_verbosity", JSONObject.NULL);
+            model.put("apply_patch_tool_type", JSONObject.NULL);
+            model.put("truncation_policy", new JSONObject().put("mode", "tokens").put("limit", Math.max(1024, context / 4)));
+            model.put("supports_parallel_tool_calls", false);
+            model.put("context_window", context);
+            model.put("max_context_window", context);
+            model.put("effective_context_window_percent", 90);
+            model.put("experimental_supported_tools", new JSONArray());
+            model.put("input_modalities", image ? new JSONArray().put("text").put("image") : new JSONArray().put("text"));
+            models.put(model);
+        }
+        return models;
     }
 
     @NonNull
@@ -882,6 +922,14 @@ public final class TaiManager {
             String value = values.optString(i, "");
             if (!value.isEmpty()) output.add(value);
         }
+    }
+
+    private static boolean contains(@Nullable JSONArray values, @NonNull String expected) {
+        if (values == null) return false;
+        for (int i = 0; i < values.length(); i++) {
+            if (expected.equals(values.optString(i, ""))) return true;
+        }
+        return false;
     }
 
     @NonNull

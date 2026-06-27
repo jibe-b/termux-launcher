@@ -65,7 +65,7 @@ public class TaiModelCatalogTest {
         assertFalse(coder.endpointCapabilities.contains(TaiModelSpec.CAPABILITY_AUDIO_INPUT));
         assertFalse(coder.endpointCapabilities.contains(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS));
         assertEquals(TaiModelSpec.TOOL_MODE_PROMPT_FALLBACK, coder.toolMode);
-        assertEquals(8192, coder.endpointContextWindow);
+        assertEquals(16384, coder.endpointContextWindow);
         assertEquals(32768, coder.sourceContextWindow);
         assertEquals(1024, coder.defaultMaxOutputTokens);
     }

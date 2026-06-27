@@ -88,6 +88,10 @@ public class TaiOpenAiCompatibilityTest {
 
         assertEquals("list", response.getString("object"));
         assertEquals(2, response.getJSONArray("data").length());
+        assertEquals(2, response.getJSONArray("models").length());
+        assertEquals("gemma", response.getJSONArray("models").getJSONObject(0).getString("slug"));
+        assertEquals("local", response.getJSONArray("models").getJSONObject(0).getString("shell_type"));
+        assertEquals(4096, response.getJSONArray("models").getJSONObject(0).getInt("context_window"));
         assertEquals("gemma", response.getJSONArray("data").getJSONObject(0).getString("id"));
         assertEquals("model", response.getJSONArray("data").getJSONObject(0).getString("object"));
         assertTrue(response.getJSONArray("data").getJSONObject(0).getJSONArray("_capabilities").toString().contains("image_input"));
