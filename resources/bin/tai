@@ -25,7 +25,8 @@ Usage:
 TAI is authenticated through ~/.launcherctl and hosts local LiteRT-LM/MNN models in the APK runtime.
 GGUF/raw weight files are not supported by this APK.
 Auto honors model compatibility profiles and uses backend-specific CPU/GPU policy where available.
-Use OpenAI-compatible clients against /v1/models, /v1/chat/completions, and /v1/completions.
+Use OpenAI-compatible clients against /v1/models, /v1/chat/completions, and /v1/responses.
+Ollama-compatible clients can use /api/tags, /api/chat, /api/generate, and /api/embed.
 Use tai --json <command> for raw API JSON.
 EOF
 }

@@ -34,6 +34,8 @@ Commands:
   update-scripts            Refresh Termux Launcher shell helper scripts.
   tty-doctor                Validate local rish setup and print fixes.
   token rotate              Rotate LauncherCtl API auth token.
+  client-config <client>    Generate config for aichat, opencode, crush,
+                            codex, or ollama.
 
 Examples:
   launcherctl status
@@ -46,6 +48,7 @@ Examples:
   launcherctl update-scripts
   launcherctl restart
   launcherctl tty-doctor
+  launcherctl client-config aichat
   tai status
 
 Config files:
@@ -302,6 +305,71 @@ EOF
   return 1
 }
 
+client_config() {
+  client="${1:-}"
+  case "$client" in
+    aichat|opencode|crush|codex|ollama) ;;
+    *) echo "usage: launcherctl client-config {aichat|opencode|crush|codex|ollama}" >&2; return 2 ;;
+  esac
+  command -v jq >/dev/null 2>&1 || {
+    echo "launcherctl client-config: install jq with: pkg install jq" >&2
+    return 1
+  }
+  models=$(curl $CURL_COMMON -H "Authorization: Bearer $TOKEN" "$BASE/v1/models")
+  tool_model=$(printf '%s' "$models" | jq -r '[.data[] | select(._capabilities | index("tool_use"))][0].id // .data[0].id // empty')
+  [ -n "$tool_model" ] || { echo "launcherctl client-config: no installed chat models" >&2; return 1; }
+  case "$client" in
+    codex)
+      cat <<EOF
+# Add to ~/.codex/config.toml
+model = "$tool_model"
+model_provider = "termux_launcher"
+
+[model_providers.termux_launcher]
+name = "Termux Launcher"
+base_url = "$BASE/v1"
+env_key = "LAUNCHERCTL_TOKEN"
+wire_api = "responses"
+
+# export LAUNCHERCTL_TOKEN="\$(cat ~/.launcherctl/token)"
+EOF
+      ;;
+    opencode)
+      printf '%s' "$models" | jq --arg base "$BASE/v1" '
+        {"$schema":"https://opencode.ai/config.json",provider:{"termux-launcher":{
+          npm:"@ai-sdk/openai-compatible",name:"Termux Launcher",
+          options:{baseURL:$base,apiKey:"{env:LAUNCHERCTL_TOKEN}"},
+          models:(.data | map(select(._capabilities | index("text_chat"))) |
+            map({key:.id,value:{name:(._display_name // .id),limit:{context:._endpoint_context_window,output:._default_max_output_tokens}}}) | from_entries)}}}'
+      ;;
+    crush)
+      printf '%s' "$models" | jq --arg base "$BASE/v1" '
+        {"$schema":"https://charm.land/crush.json",providers:{"termux-launcher":{
+          type:"openai-compat",name:"Termux Launcher",base_url:$base,api_key:"$LAUNCHERCTL_TOKEN",
+          models:(.data | map(select(._capabilities | index("text_chat"))) | map({id:.id,name:(._display_name // .id),
+            context_window:._endpoint_context_window,default_max_tokens:._default_max_output_tokens,
+            supports_attachments:((._capabilities | index("image_input")) != null)}))}}}'
+      ;;
+    aichat)
+      echo 'clients:'
+      echo '  - type: openai-compatible'
+      echo '    name: termux-launcher'
+      echo "    api_base: $BASE/v1"
+      echo '    api_key: ${LAUNCHERCTL_TOKEN}'
+      echo '    models:'
+      printf '%s' "$models" | jq -r '.data[] | select(._capabilities | index("text_chat")) |
+        "      - name: \(.id)\n        max_input_tokens: \(._endpoint_context_window)\n        supports_vision: \((._capabilities | index("image_input")) != null)\n        supports_function_calling: \((._capabilities | index("tool_use")) != null)"'
+      ;;
+    ollama)
+      cat <<EOF
+export OLLAMA_HOST="$BASE"
+export OLLAMA_API_KEY="\$(cat ~/.launcherctl/token)"
+# Clients must send Authorization: Bearer \$OLLAMA_API_KEY.
+EOF
+      ;;
+  esac
+}
+
 case "$cmd" in
   status)
     curl $CURL_COMMON -H "Authorization: Bearer $TOKEN" "$BASE/v1/status"
@@ -427,6 +495,9 @@ case "$cmd" in
     sub="${1:-}"; shift || true
     [ "$sub" = "rotate" ] || { echo "usage: launcherctl token rotate" >&2; exit 2; }
     curl $CURL_COMMON -X POST -H "Authorization: Bearer $TOKEN" "$BASE/v1/auth/rotate"
+    ;;
+  client-config)
+    client_config "$@"
     ;;
   *)
     echo "launcherctl: unknown command: $cmd" >&2

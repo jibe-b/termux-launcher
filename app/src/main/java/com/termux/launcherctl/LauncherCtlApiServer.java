@@ -22,6 +22,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.jakewharton.processphoenix.ProcessPhoenix;
+import com.termux.ai.TaiApiCompatibility;
 import com.termux.ai.TaiCliFormatter;
 import com.termux.ai.TaiDeviceCapabilities;
 import com.termux.ai.TaiManager;
@@ -295,7 +296,42 @@ public class LauncherCtlApiServer {
 
     private HttpResponse routeRequest(Context context, HttpRequest request) {
         try {
-            if ("GET".equals(request.method) && "/v1/status".equals(request.path)) {
+            if ("GET".equals(request.method) && "/api/version".equals(request.path)) {
+                return jsonResponse(new JSONObject().put("version", TaiApiCompatibility.OLLAMA_VERSION));
+            } else if ("GET".equals(request.method) && "/api/tags".equals(request.path)) {
+                TaiManager manager = TaiManager.getInstance(context);
+                return jsonResponse(TaiApiCompatibility.ollamaTags(manager.openAiModels()));
+            } else if ("POST".equals(request.method) && "/api/show".equals(request.path)) {
+                TaiManager manager = TaiManager.getInstance(context);
+                return jsonResponse(TaiApiCompatibility.ollamaShow(manager.openAiModels(), request.body));
+            } else if ("GET".equals(request.method) && "/api/ps".equals(request.path)) {
+                TaiManager manager = TaiManager.getInstance(context);
+                return jsonResponse(TaiApiCompatibility.ollamaPs(manager.openAiModels(), manager.getRuntimeState()));
+            } else if ("POST".equals(request.method) && "/api/chat".equals(request.path)) {
+                TaiManager manager = TaiManager.getInstance(context);
+                JSONObject chatRequest = TaiApiCompatibility.ollamaChatRequest(request.body);
+                if (chatRequest.optBoolean("stream", true)) {
+                    return ndjsonResponse(output -> writeOllamaChatStream(context, chatRequest.toString(), output, false));
+                }
+                return jsonResponse(TaiApiCompatibility.ollamaChatFromOpenAi(manager.openAiChatCompletions(chatRequest.toString())));
+            } else if ("POST".equals(request.method) && "/api/generate".equals(request.path)) {
+                TaiManager manager = TaiManager.getInstance(context);
+                JSONObject chatRequest = TaiApiCompatibility.ollamaGenerateRequest(request.body);
+                if (chatRequest.optBoolean("stream", true)) {
+                    return ndjsonResponse(output -> writeOllamaChatStream(context, chatRequest.toString(), output, true));
+                }
+                return jsonResponse(TaiApiCompatibility.ollamaGenerateFromOpenAi(manager.openAiChatCompletions(chatRequest.toString())));
+            } else if ("POST".equals(request.method) && "/api/embed".equals(request.path)) {
+                TaiManager manager = TaiManager.getInstance(context);
+                JSONObject embedRequest = TaiApiCompatibility.ollamaEmbedRequest(request.body);
+                return jsonResponse(TaiApiCompatibility.ollamaEmbedFromOpenAi(
+                    manager.embeddings(embedRequest.toString()), embedRequest.optString("model", "")));
+            } else if ("POST".equals(request.method) && ("/api/pull".equals(request.path)
+                    || "/api/create".equals(request.path) || "/api/push".equals(request.path)
+                    || "/api/copy".equals(request.path) || "/api/delete".equals(request.path))) {
+                return jsonResponse(TaiApiCompatibility.ollamaError(501, "unsupported_registry_operation",
+                    "Ollama registry operations do not map to LiteRT-LM/MNN packages; use the Termux:GUI model market or import flow."));
+            } else if ("GET".equals(request.method) && "/v1/status".equals(request.path)) {
                 return maybeTextResponse(request, "launcher-status", buildStatus());
             } else if ("GET".equals(request.method) && "/v1/apps".equals(request.path)) {
                 return jsonResponse(buildApps(context));
@@ -378,6 +414,13 @@ public class LauncherCtlApiServer {
                     return sseResponse(output -> writeChatCompletionStream(context, request.body, output));
                 }
                 return jsonResponse(TaiManager.getInstance(context).openAiChatCompletions(request.body));
+            } else if ("POST".equals(request.method) && "/v1/responses".equals(request.path)) {
+                TaiManager manager = TaiManager.getInstance(context);
+                JSONObject chatRequest = TaiApiCompatibility.responsesRequestToChat(request.body);
+                if (chatRequest.optBoolean("stream", false)) {
+                    return sseResponse(output -> writeResponsesStream(context, chatRequest.toString(), output));
+                }
+                return jsonResponse(TaiApiCompatibility.responsesFromChat(manager.openAiChatCompletions(chatRequest.toString())));
             } else if ("POST".equals(request.method) && "/v1/completions".equals(request.path)) {
                 TaiManager manager = TaiManager.getInstance(context);
                 if (manager.isStreamRequest(request.body)) {
@@ -1032,7 +1075,10 @@ public class LauncherCtlApiServer {
 
         HttpRequest request = new HttpRequest();
         request.method = lineParts[0].trim();
-        request.path = lineParts[1].trim();
+        request.target = lineParts[1].trim();
+        int queryStart = request.target.indexOf('?');
+        request.path = requestPathFromTarget(request.target);
+        request.query = queryStart < 0 ? "" : request.target.substring(queryStart + 1);
         request.headers = new HashMap<>();
 
         int headerCount = 0;
@@ -1075,6 +1121,11 @@ public class LauncherCtlApiServer {
         }
 
         return request;
+    }
+
+    static String requestPathFromTarget(@NonNull String target) {
+        int queryStart = target.indexOf('?');
+        return queryStart < 0 ? target : target.substring(0, queryStart);
     }
 
     private String readLine(InputStream input, int maxBytes) throws IOException, HttpParseException {
@@ -1222,9 +1273,17 @@ public class LauncherCtlApiServer {
         rateLimiters.put("POST:/v1/ai/runtime/cancel", new SimpleRateLimiter(60, 60_000));
         rateLimiters.put("GET:/v1/models", new SimpleRateLimiter(120, 60_000));
         rateLimiters.put("POST:/v1/chat/completions", new SimpleRateLimiter(60, 60_000));
+        rateLimiters.put("POST:/v1/responses", new SimpleRateLimiter(60, 60_000));
         rateLimiters.put("POST:/v1/completions", new SimpleRateLimiter(60, 60_000));
         rateLimiters.put("POST:/v1/embeddings", new SimpleRateLimiter(60, 60_000));
         rateLimiters.put("POST:/v1/audio/speech", new SimpleRateLimiter(60, 60_000));
+        rateLimiters.put("GET:/api/version", new SimpleRateLimiter(120, 60_000));
+        rateLimiters.put("GET:/api/tags", new SimpleRateLimiter(120, 60_000));
+        rateLimiters.put("POST:/api/show", new SimpleRateLimiter(120, 60_000));
+        rateLimiters.put("GET:/api/ps", new SimpleRateLimiter(120, 60_000));
+        rateLimiters.put("POST:/api/chat", new SimpleRateLimiter(60, 60_000));
+        rateLimiters.put("POST:/api/generate", new SimpleRateLimiter(60, 60_000));
+        rateLimiters.put("POST:/api/embed", new SimpleRateLimiter(60, 60_000));
     }
 
     private void writeClientConfig() throws IOException {
@@ -1302,9 +1361,17 @@ public class LauncherCtlApiServer {
         JSONArray supportedEndpoints = new JSONArray();
         supportedEndpoints.put("/v1/models");
         supportedEndpoints.put("/v1/chat/completions");
+        supportedEndpoints.put("/v1/responses");
         supportedEndpoints.put("/v1/completions");
         supportedEndpoints.put("/v1/embeddings");
         supportedEndpoints.put("/v1/audio/speech");
+        supportedEndpoints.put("/api/version");
+        supportedEndpoints.put("/api/tags");
+        supportedEndpoints.put("/api/show");
+        supportedEndpoints.put("/api/chat");
+        supportedEndpoints.put("/api/generate");
+        supportedEndpoints.put("/api/ps");
+        supportedEndpoints.put("/api/embed");
         supportedEndpoints.put("/v1/launcher/capabilities");
         supportedEndpoints.put("/v1/agent/tools");
         supportedEndpoints.put("/v1/agent/route");
@@ -1978,6 +2045,163 @@ public class LauncherCtlApiServer {
         headers.put("Cache-Control", "no-cache");
         headers.put("X-Accel-Buffering", "no");
         return new HttpResponse(200, "text/event-stream; charset=utf-8", bodyWriter, headers);
+    }
+
+    private HttpResponse ndjsonResponse(BodyWriter bodyWriter) {
+        Map<String, String> headers = new HashMap<>();
+        headers.put("Cache-Control", "no-cache");
+        headers.put("X-Accel-Buffering", "no");
+        return new HttpResponse(200, "application/x-ndjson; charset=utf-8", bodyWriter, headers);
+    }
+
+    private void writeResponsesStream(Context context, String chatBody, OutputStream output) throws IOException {
+        String responseId = "resp_" + System.currentTimeMillis();
+        String messageId = "msg_" + System.currentTimeMillis();
+        final String model;
+        try {
+            model = new JSONObject(chatBody).optString("model", "");
+            JSONObject created = TaiApiCompatibility.responseEnvelope(responseId, model, "in_progress");
+            writeSseEvent(output, new JSONObject().put("type", "response.created").put("response", created).toString());
+            JSONObject item = TaiApiCompatibility.messageOutputItem(messageId, "", "in_progress");
+            writeSseEvent(output, new JSONObject().put("type", "response.output_item.added")
+                .put("output_index", 0).put("item", item).toString());
+            writeSseEvent(output, new JSONObject().put("type", "response.content_part.added")
+                .put("item_id", messageId).put("output_index", 0).put("content_index", 0)
+                .put("part", new JSONObject().put("type", "output_text").put("text", "").put("annotations", new JSONArray())).toString());
+        } catch (JSONException e) {
+            throw new IOException(e);
+        }
+        StringBuilder fullText = new StringBuilder();
+        try {
+            TaiManager.getInstance(context).openAiChatCompletionsStream(chatBody, new TaiManager.OpenAiStreamSink() {
+                @Override
+                public void onEvent(@NonNull JSONObject event) throws IOException {
+                    try {
+                        if (event.has("error")) {
+                            writeSseEvent(output, new JSONObject().put("type", "error").put("error", event.opt("error")).toString());
+                            return;
+                        }
+                        JSONArray choices = event.optJSONArray("choices");
+                        JSONObject choice = choices == null ? null : choices.optJSONObject(0);
+                        JSONObject delta = choice == null ? null : choice.optJSONObject("delta");
+                        if (delta == null) return;
+                        String text = delta.optString("content", "");
+                        if (!text.isEmpty()) {
+                            fullText.append(text);
+                            writeSseEvent(output, new JSONObject().put("type", "response.output_text.delta")
+                                .put("item_id", messageId).put("output_index", 0).put("content_index", 0)
+                                .put("delta", text).toString());
+                        }
+                        JSONArray calls = delta.optJSONArray("tool_calls");
+                        if (calls != null) for (int i = 0; i < calls.length(); i++) {
+                            JSONObject call = calls.optJSONObject(i);
+                            if (call == null) continue;
+                            JSONObject function = call.optJSONObject("function");
+                            String callId = call.optString("id", "call_" + i);
+                            String itemId = "fc_" + callId;
+                            String name = function == null ? "" : function.optString("name", "");
+                            String arguments = function == null ? "{}" : function.optString("arguments", "{}");
+                            JSONObject functionItem = new JSONObject().put("type", "function_call").put("id", itemId)
+                                .put("call_id", callId).put("name", name).put("arguments", "").put("status", "in_progress");
+                            writeSseEvent(output, new JSONObject().put("type", "response.output_item.added")
+                                .put("output_index", i + 1).put("item", functionItem).toString());
+                            writeSseEvent(output, new JSONObject().put("type", "response.function_call_arguments.delta")
+                                .put("item_id", itemId).put("output_index", i + 1).put("delta", arguments).toString());
+                            writeSseEvent(output, new JSONObject().put("type", "response.function_call_arguments.done")
+                                .put("item_id", itemId).put("output_index", i + 1).put("arguments", arguments).toString());
+                            functionItem.put("arguments", arguments).put("status", "completed");
+                            writeSseEvent(output, new JSONObject().put("type", "response.output_item.done")
+                                .put("output_index", i + 1).put("item", functionItem).toString());
+                        }
+                    } catch (JSONException e) {
+                        throw new IOException(e);
+                    }
+                }
+
+                @Override
+                public void onDone() throws IOException {
+                    try {
+                        writeSseEvent(output, new JSONObject().put("type", "response.output_text.done")
+                            .put("item_id", messageId).put("output_index", 0).put("content_index", 0)
+                            .put("text", fullText.toString()).toString());
+                        JSONObject doneItem = TaiApiCompatibility.messageOutputItem(messageId, fullText.toString(), "completed");
+                        writeSseEvent(output, new JSONObject().put("type", "response.output_item.done")
+                            .put("output_index", 0).put("item", doneItem).toString());
+                        JSONObject completed = TaiApiCompatibility.responseEnvelope(responseId, model, "completed");
+                        completed.put("output", new JSONArray().put(doneItem));
+                        completed.put("usage", new JSONObject().put("input_tokens", 0).put("output_tokens", 0).put("total_tokens", 0));
+                        writeSseEvent(output, new JSONObject().put("type", "response.completed").put("response", completed).toString());
+                        writeSseEvent(output, "[DONE]");
+                    } catch (JSONException e) {
+                        throw new IOException(e);
+                    }
+                }
+            });
+        } catch (JSONException e) {
+            throw new IOException(e);
+        }
+    }
+
+    private void writeOllamaChatStream(Context context, String chatBody, OutputStream output, boolean generate) throws IOException {
+        final String model;
+        try {
+            model = new JSONObject(chatBody).optString("model", "");
+        } catch (JSONException e) {
+            throw new IOException(e);
+        }
+        try {
+            TaiManager.getInstance(context).openAiChatCompletionsStream(chatBody, new TaiManager.OpenAiStreamSink() {
+                @Override
+                public void onEvent(@NonNull JSONObject event) throws IOException {
+                    try {
+                        if (event.has("error")) {
+                            writeNdjsonEvent(output, new JSONObject().put("error", event.opt("error")));
+                            return;
+                        }
+                        JSONArray choices = event.optJSONArray("choices");
+                        JSONObject choice = choices == null ? null : choices.optJSONObject(0);
+                        JSONObject delta = choice == null ? null : choice.optJSONObject("delta");
+                        if (delta == null || delta.length() == 0) return;
+                        JSONObject chunk = new JSONObject().put("model", model)
+                            .put("created_at", java.time.Instant.now().toString()).put("done", false);
+                        if (generate) {
+                            chunk.put("response", delta.optString("content", ""));
+                        } else {
+                            JSONObject message = new JSONObject().put("role", "assistant")
+                                .put("content", delta.optString("content", ""));
+                            if (delta.has("tool_calls")) message.put("tool_calls", delta.opt("tool_calls"));
+                            chunk.put("message", message);
+                        }
+                        writeNdjsonEvent(output, chunk);
+                    } catch (JSONException e) {
+                        throw new IOException(e);
+                    }
+                }
+
+                @Override
+                public void onDone() throws IOException {
+                    try {
+                        JSONObject done = new JSONObject().put("model", model)
+                            .put("created_at", java.time.Instant.now().toString()).put("done", true)
+                            .put("done_reason", "stop").put("total_duration", 0L).put("load_duration", 0L)
+                            .put("prompt_eval_count", 0).put("prompt_eval_duration", 0L)
+                            .put("eval_count", 0).put("eval_duration", 0L);
+                        if (generate) done.put("response", "");
+                        else done.put("message", new JSONObject().put("role", "assistant").put("content", ""));
+                        writeNdjsonEvent(output, done);
+                    } catch (JSONException e) {
+                        throw new IOException(e);
+                    }
+                }
+            });
+        } catch (JSONException e) {
+            throw new IOException(e);
+        }
+    }
+
+    private void writeNdjsonEvent(OutputStream output, JSONObject event) throws IOException {
+        output.write((event.toString() + "\n").getBytes(StandardCharsets.UTF_8));
+        output.flush();
     }
 
     private void writeChatCompletionStream(Context context, String body, OutputStream output) throws IOException {
@@ -2845,7 +3069,9 @@ public class LauncherCtlApiServer {
 
     private static class HttpRequest {
         String method;
+        String target;
         String path;
+        String query;
         Map<String, String> headers;
         String body;
     }

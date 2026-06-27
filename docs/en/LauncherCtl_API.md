@@ -58,11 +58,29 @@ Common routes:
 - `POST /v1/ai/models/unload`
 - `GET /v1/models`
 - `POST /v1/chat/completions`
+- `POST /v1/responses`
 - `POST /v1/completions`
 - `POST /v1/embeddings`
 - `POST /v1/audio/speech`
+- `GET /api/version`
+- `GET /api/tags`
+- `POST /api/show`
+- `POST /api/chat`
+- `POST /api/generate`
+- `GET /api/ps`
+- `POST /api/embed`
 
 `/v1/chat/completions` and `/v1/completions` support `stream: true` and return `text/event-stream` chunks ending with `data: [DONE]`.
+
+`/v1/responses` is the stateless OpenAI Responses adapter used by current Codex clients. It
+supports text/image inputs, function calls and function results over the same LiteRT-LM/MNN
+runtime contract. The native Ollama `/api/chat` and `/api/generate` adapters stream newline-delimited
+JSON by default. Ollama registry operations (`pull`, `create`, `push`, `copy`, and `delete`) are not
+emulated because Ollama/GGUF packages are not LiteRT-LM or MNN packages.
+
+Use `launcherctl client-config aichat|opencode|crush|codex|ollama` to generate a configuration from
+the models and endpoint capabilities currently installed on the device. The command references the
+`LAUNCHERCTL_TOKEN` environment variable rather than writing the bearer token into generated files.
 
 `POST /v1/ai/runtime/preflight` checks ABI, API level, bundled native libraries, model package readability/format, memory, accelerator policy, and known backend history without touching native LiteRT-LM/MNN runtime code.
 

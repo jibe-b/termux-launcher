@@ -214,6 +214,8 @@ public final class TaiModelSpec {
         json.put("endpointCapabilities", capabilityArray(endpointCapabilities));
         json.put("sourceCapabilities", capabilityArray(sourceCapabilities));
         json.put("toolMode", toolMode == null ? JSONObject.NULL : toolMode);
+        json.put("capabilitiesVerified", builtInCatalogEntry);
+        json.put("capabilitySource", builtInCatalogEntry ? "catalog" : "import_or_user_metadata");
         return json;
     }
 

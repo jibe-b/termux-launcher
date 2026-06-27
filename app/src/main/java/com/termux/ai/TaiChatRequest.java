@@ -20,9 +20,19 @@ public final class TaiChatRequest {
     public final Message message;
     public final List<ToolProvider> tools;
     public final boolean reusableConversation;
-    public final JSONArray openAiMessages;
-    public final JSONArray openAiTools;
-    public final Object openAiToolChoice;
+    /** Protocol-neutral transcript retained for backends that render their own chat template. */
+    public final JSONArray messagesJson;
+    /** Protocol-neutral function definitions retained for native or prompt-fallback tool calling. */
+    public final JSONArray toolDefinitions;
+    /** Protocol-neutral tool selection policy (none, auto, required, or a named function). */
+    public final Object toolChoice;
+
+    /** @deprecated Use {@link #messagesJson}. Kept for source compatibility with older plugins. */
+    @Deprecated public final JSONArray openAiMessages;
+    /** @deprecated Use {@link #toolDefinitions}. */
+    @Deprecated public final JSONArray openAiTools;
+    /** @deprecated Use {@link #toolChoice}. */
+    @Deprecated public final Object openAiToolChoice;
 
     public TaiChatRequest(
         @NonNull String systemPrompt,
@@ -40,18 +50,21 @@ public final class TaiChatRequest {
         @NonNull Message message,
         @NonNull List<ToolProvider> tools,
         boolean reusableConversation,
-        @NonNull JSONArray openAiMessages,
-        @Nullable JSONArray openAiTools,
-        @Nullable Object openAiToolChoice
+        @NonNull JSONArray messagesJson,
+        @Nullable JSONArray toolDefinitions,
+        @Nullable Object toolChoice
     ) {
         this.systemPrompt = systemPrompt;
         this.initialMessages = Collections.unmodifiableList(new ArrayList<>(initialMessages));
         this.message = message;
         this.tools = Collections.unmodifiableList(new ArrayList<>(tools));
         this.reusableConversation = reusableConversation;
-        this.openAiMessages = copyArray(openAiMessages);
-        this.openAiTools = openAiTools == null ? new JSONArray() : copyArray(openAiTools);
-        this.openAiToolChoice = copyJsonValue(openAiToolChoice);
+        this.messagesJson = copyArray(messagesJson);
+        this.toolDefinitions = toolDefinitions == null ? new JSONArray() : copyArray(toolDefinitions);
+        this.toolChoice = copyJsonValue(toolChoice);
+        this.openAiMessages = this.messagesJson;
+        this.openAiTools = this.toolDefinitions;
+        this.openAiToolChoice = this.toolChoice;
     }
 
     @NonNull

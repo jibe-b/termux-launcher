@@ -134,9 +134,15 @@ Implemented endpoints:
 - `POST /v1/ai/models/unload`
 - `GET /v1/models`
 - `POST /v1/chat/completions`
+- `POST /v1/responses`
 - `POST /v1/completions`
 - `POST /v1/embeddings`
 - `POST /v1/audio/speech`
+
+The same installed model registry is also available through Ollama-compatible discovery and
+generation endpoints: `/api/tags`, `/api/show`, `/api/chat`, `/api/generate`, `/api/ps`, and
+`/api/embed`. These are protocol adapters over the existing LiteRT-LM/MNN runtimes; they do not add
+GGUF support or access to the Ollama registry.
 
 Model import and download registry persistence is implemented. Downloaded or imported `.litertlm`/`.task` models can be loaded through the isolated Android LiteRT-LM adapter when preflight passes. Downloaded MNN catalog models load from their repository `config.json` package. GGUF, safetensors, PyTorch, ONNX, and other raw weight formats are rejected because this APK does not include a GGUF/llama.cpp backend.
 
@@ -156,6 +162,16 @@ For `aichat`, `tmuxai`, or other OpenAI-compatible clients, point the base URL a
 ```text
 /v1/chat/completions
 /v1/completions
+```
+
+Generate a capability-aware configuration for a supported TUI with:
+
+```sh
+launcherctl client-config aichat
+launcherctl client-config opencode
+launcherctl client-config crush
+launcherctl client-config codex
+launcherctl client-config ollama
 ```
 
 The endpoint URL and bearer token are stored at:

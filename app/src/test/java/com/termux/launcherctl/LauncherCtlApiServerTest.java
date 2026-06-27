@@ -15,6 +15,12 @@ import static org.junit.Assert.assertNull;
 public class LauncherCtlApiServerTest {
 
     @Test
+    public void requestPathFromTarget_stripsClientQueryParameters() {
+        assertEquals("/v1/models", LauncherCtlApiServer.requestPathFromTarget("/v1/models?client_version=0.142.0"));
+        assertEquals("/api/tags", LauncherCtlApiServer.requestPathFromTarget("/api/tags"));
+    }
+
+    @Test
     public void buildLaunchableAppsPayload_reportsLaunchableActivitiesAndUniquePackages() throws Exception {
         List<LauncherAppEntry> apps = Arrays.asList(
             entry("com.example.alpha", "com.example.alpha.MainActivity", "Alpha"),

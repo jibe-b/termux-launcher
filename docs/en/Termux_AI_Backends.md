@@ -19,10 +19,17 @@ Implemented OpenAI-style endpoints:
 ```text
 GET  /v1/models
 POST /v1/chat/completions
+POST /v1/responses
 POST /v1/completions
 POST /v1/embeddings
 POST /v1/audio/speech
 ```
+
+Native Ollama compatibility is exposed from the same authenticated base URL through
+`/api/version`, `/api/tags`, `/api/show`, `/api/chat`, `/api/generate`, `/api/ps`, and `/api/embed`.
+Ollama responses use NDJSON streaming while OpenAI responses use SSE. Both adapters route through
+the same `TaiChatRequest`, runtime options, capability checks, model load lifecycle, and cancellation
+path.
 
 `/v1/audio/speech` exists so clients get a clear OpenAI-shaped error. Local LiteRT-LM and MNN runners do not currently generate audio output, so audio-output requests return `unsupported_audio_output` with HTTP 501.
 

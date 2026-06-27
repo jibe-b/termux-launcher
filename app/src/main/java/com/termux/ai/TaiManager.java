@@ -137,9 +137,13 @@ public final class TaiManager {
         JSONArray endpoints = new JSONArray();
         endpoints.put("/v1/models");
         endpoints.put("/v1/chat/completions");
+        endpoints.put("/v1/responses");
         endpoints.put("/v1/completions");
         endpoints.put("/v1/embeddings");
         data.put("openAiCompatibleEndpoints", endpoints);
+        data.put("ollamaCompatibleEndpoints", new JSONArray()
+            .put("/api/version").put("/api/tags").put("/api/show").put("/api/chat")
+            .put("/api/generate").put("/api/ps").put("/api/embed"));
         return data;
     }
 
@@ -195,7 +199,7 @@ public final class TaiManager {
                 modelFile.getAbsolutePath(),
                 request.optString("license", "User-provided model; license accepted externally"),
                 modelFile.length(),
-                capabilitiesFromRequest(request),
+                capabilitiesFromRequest(request, modelFile.getName()),
                 false
             );
         } catch (IllegalArgumentException e) {
@@ -285,7 +289,7 @@ public final class TaiManager {
             url,
             request.optString("displayName", modelId),
             request.optString("license", "User accepted provider terms externally"),
-            capabilitiesFromRequest(request),
+            capabilitiesFromRequest(request, url),
             token
         );
         data.put("downloadsRequireExplicitUserAction", true);
@@ -811,6 +815,16 @@ public final class TaiManager {
             String backend = model.optString("backend", TaiModelSpec.BACKEND_LITERT_LM);
             item.put("_backend", backend);
             item.put("_format", model.optString("format", ""));
+            item.put("_display_name", model.optString("displayName", model.optString("id", "")));
+            item.put("_architecture", model.optString("architecture", ""));
+            item.put("_quantization", model.optString("quantization", ""));
+            item.put("_size", model.optLong("sizeBytes", 0L));
+            item.put("_sha256", model.optString("sha256", ""));
+            item.put("_license", model.optString("license", ""));
+            boolean catalogCapabilities = TaiModelCatalog.get(model.optString("id", "")) != null;
+            item.put("_capabilities_verified", catalogCapabilities || model.optBoolean("capabilitiesVerified", false));
+            item.put("_capability_source", catalogCapabilities ? "catalog"
+                : model.optString("capabilitySource", "import_or_user_metadata"));
             JSONArray sourceCapabilities = model.optJSONArray("sourceCapabilities");
             JSONArray declaredEndpointCapabilities = model.optJSONArray("endpointCapabilities");
             JSONArray capabilities = declaredEndpointCapabilities == null ? model.optJSONArray("capabilities") : declaredEndpointCapabilities;
@@ -1712,7 +1726,7 @@ public final class TaiManager {
     }
 
     @NonNull
-    private LinkedHashSet<String> capabilitiesFromRequest(@NonNull JSONObject request) {
+    private LinkedHashSet<String> capabilitiesFromRequest(@NonNull JSONObject request, @Nullable String artifactHint) {
         LinkedHashSet<String> capabilities = new LinkedHashSet<>();
         JSONArray array = request.optJSONArray("capabilities");
         if (array != null) {
@@ -1721,7 +1735,14 @@ public final class TaiManager {
                 if (!capability.isEmpty()) capabilities.add(capability);
             }
         }
-        if (capabilities.isEmpty()) capabilities.add("text_chat");
+        if (capabilities.isEmpty()) {
+            String normalized = artifactHint == null ? "" : artifactHint.toLowerCase(Locale.ROOT);
+            if (normalized.endsWith(".tflite") && (normalized.contains("embedding") || normalized.contains("embedder"))) {
+                capabilities.add(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS);
+            } else {
+                capabilities.add(TaiModelSpec.CAPABILITY_TEXT_CHAT);
+            }
+        }
         return capabilities;
     }
 

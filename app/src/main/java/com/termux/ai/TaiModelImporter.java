@@ -103,7 +103,7 @@ public final class TaiModelImporter {
                 output.getAbsolutePath(),
                 "User-provided model; license accepted externally",
                 output.length(),
-                sourceCapabilities(declaredCapabilities),
+                sourceCapabilities(fileName, declaredCapabilities),
                 false
             );
             String format = TaiModelSpec.inferFormat(output.getAbsolutePath());
@@ -315,16 +315,23 @@ public final class TaiModelImporter {
         return value;
     }
 
-    /** Default to text chat only when the import flow did not declare explicit capabilities. */
+    /** Infer only package roles that can be identified conservatively without loading the model. */
     @NonNull
-    private static Set<String> sourceCapabilities(@Nullable Set<String> declared) {
+    static Set<String> sourceCapabilities(@NonNull String fileName, @Nullable Set<String> declared) {
         LinkedHashSet<String> caps = new LinkedHashSet<>();
         if (declared != null) {
             for (String capability : declared) {
                 if (capability != null && !capability.trim().isEmpty()) caps.add(capability.trim());
             }
         }
-        if (caps.isEmpty()) caps.add(TaiModelSpec.CAPABILITY_TEXT_CHAT);
+        if (caps.isEmpty()) {
+            String normalized = fileName.toLowerCase(Locale.ROOT);
+            if (normalized.endsWith(".tflite") && (normalized.contains("embedding") || normalized.contains("embedder"))) {
+                caps.add(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS);
+            } else {
+                caps.add(TaiModelSpec.CAPABILITY_TEXT_CHAT);
+            }
+        }
         return caps;
     }
 

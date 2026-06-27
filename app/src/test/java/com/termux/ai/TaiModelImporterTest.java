@@ -6,7 +6,22 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import java.util.Collections;
+
 public class TaiModelImporterTest {
+
+    @Test
+    public void inferredCapabilities_distinguishEmbeddingTfliteFromChatPackages() {
+        assertTrue(TaiModelImporter.sourceCapabilities("embeddinggemma-300m.tflite", null)
+            .contains(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS));
+        assertFalse(TaiModelImporter.sourceCapabilities("embeddinggemma-300m.tflite", null)
+            .contains(TaiModelSpec.CAPABILITY_TEXT_CHAT));
+        assertTrue(TaiModelImporter.sourceCapabilities("assistant.litertlm", null)
+            .contains(TaiModelSpec.CAPABILITY_TEXT_CHAT));
+        assertTrue(TaiModelImporter.sourceCapabilities("custom.tflite",
+            Collections.singleton(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS))
+            .contains(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS));
+    }
 
     @Test
     public void supportedFileNames_acceptLiteRtLmPackages() {
