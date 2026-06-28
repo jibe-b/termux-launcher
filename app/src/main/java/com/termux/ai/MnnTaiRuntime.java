@@ -45,6 +45,7 @@ public final class MnnTaiRuntime implements TaiRuntime {
     private String activeGenerationId;
     private long activeGenerationStartedAtMs;
     private volatile boolean cancelRequested;
+    private boolean unloadAfterGeneration;
 
     public MnnTaiRuntime(@NonNull Context context) {
         appContext = context.getApplicationContext();
@@ -96,8 +97,19 @@ public final class MnnTaiRuntime implements TaiRuntime {
     @NonNull
     @Override
     public synchronized JSONObject unload() throws JSONException {
-        if (generating) return errorLocked(409, "generation_active", "Cancel active MNN generation before unloading.");
+        if (generating) {
+            unloadAfterGeneration = true;
+            cancelRequested = true;
+            runtimeState = "stopping";
+            statusMessage = "Cancelling generation; MNN will unload when native generation stops.";
+            JSONObject data = stateEnvelopeLocked(true);
+            data.put("cancelled", true);
+            data.put("unloadPending", true);
+            data.put("message", statusMessage);
+            return data;
+        }
         String previous = loadedModelId;
+        unloadAfterGeneration = false;
         releaseSessionLocked();
         runtimeState = "unloaded";
         statusMessage = "MNN runtime is unloaded.";
@@ -272,6 +284,7 @@ public final class MnnTaiRuntime implements TaiRuntime {
         StringBuilder responseBuilder = new StringBuilder();
         AtomicReference<Throwable> errorRef = new AtomicReference<>();
         HashMap<String, Object> metrics = new HashMap<>();
+        boolean wasCancelled;
         try {
             boolean hasTools = request.toolDefinitions.length() > 0
                 && !"none".equals(String.valueOf(request.toolChoice));
@@ -324,6 +337,7 @@ public final class MnnTaiRuntime implements TaiRuntime {
             errorRef.set(t);
         } finally {
             synchronized (this) {
+                wasCancelled = cancelRequested;
                 finishGenerationLocked(errorRef.get());
             }
         }
@@ -335,13 +349,14 @@ public final class MnnTaiRuntime implements TaiRuntime {
         }
         if (throwable != null) {
             if (callback != null) callback.onError(throwable);
-            if (cancelRequested) return error(499, "generation_cancelled", "MNN generation was cancelled.");
+            if (wasCancelled) return error(499, "generation_cancelled", "MNN generation was cancelled.");
             if (throwable instanceof UnsatisfiedLinkError && request.toolDefinitions.length() > 0) {
                 return error(501, "mnn_structured_chat_unavailable",
                     "This MNN native library does not expose the structured chat bridge required for OpenAI tools.");
             }
             return error(500, "mnn_generation_failed", "MNN generation failed: " + message(throwable));
         }
+        if (wasCancelled) return error(499, "generation_cancelled", "MNN generation was cancelled.");
         JSONArray toolCalls = parseToolCalls(response, generationId);
         if (toolCalls.length() == 0) appendRequiredFallbackToolCall(request, response, generationId, toolCalls);
         JSONObject toolChoiceError = validateRequiredToolChoice(request.toolChoice, request.toolDefinitions, toolCalls);
@@ -394,6 +409,7 @@ public final class MnnTaiRuntime implements TaiRuntime {
         long now = System.currentTimeMillis();
         generating = true;
         cancelRequested = false;
+        unloadAfterGeneration = false;
         activeGenerationStartedAtMs = now;
         activeGenerationId = "tai-mnn-gen-" + now;
         lastUsedAtMs = now;
@@ -407,7 +423,14 @@ public final class MnnTaiRuntime implements TaiRuntime {
         activeGenerationId = null;
         activeGenerationStartedAtMs = 0L;
         lastUsedAtMs = System.currentTimeMillis();
-        if (cancelRequested) {
+        if (unloadAfterGeneration) {
+            releaseSessionLocked();
+            runtimeState = "unloaded";
+            statusMessage = "MNN runtime is unloaded.";
+            cancelRequested = false;
+            unloadAfterGeneration = false;
+            return;
+        } else if (cancelRequested) {
             statusMessage = "Generation cancelled.";
         } else if (throwable != null) {
             statusMessage = "Generation failed: " + message(throwable);

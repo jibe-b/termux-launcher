@@ -14,6 +14,9 @@ import org.robolectric.RobolectricTestRunner;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -107,6 +110,31 @@ public class MultiBackendTaiRuntimeTest {
         assertSame(activeGeneration, field(runtime, "activeAssistant"));
     }
 
+    @Test
+    public void unload_canReachBackendWhileGenerationIsRunning() throws Exception {
+        MultiBackendTaiRuntime runtime = new MultiBackendTaiRuntime(context);
+        BlockingRuntime blocking = new BlockingRuntime();
+        setField(runtime, "activeAssistant", blocking);
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        Thread generation = new Thread(() -> {
+            try {
+                runtime.chat("blocking", "", "hi", options());
+            } catch (Throwable throwable) {
+                failure.set(throwable);
+            }
+        });
+        generation.start();
+        assertTrue(blocking.entered.await(2, TimeUnit.SECONDS));
+
+        JSONObject unloaded = runtime.unload();
+
+        assertTrue(unloaded.getBoolean("ok"));
+        assertTrue(blocking.unloadCalled);
+        generation.join(2000L);
+        assertFalse(generation.isAlive());
+        assertTrue(failure.get() == null);
+    }
+
     private static TaiModelSpec model(String id, String backend, String format) {
         return new TaiModelSpec(
             id,
@@ -181,5 +209,30 @@ public class MultiBackendTaiRuntimeTest {
         private JSONObject ok() throws JSONException {
             return new JSONObject().put("ok", true);
         }
+    }
+
+    private static final class BlockingRuntime implements TaiRuntime {
+        private final CountDownLatch entered = new CountDownLatch(1);
+        private final CountDownLatch released = new CountDownLatch(1);
+        private volatile boolean unloadCalled;
+
+        @Override public TaiRuntimeState getState() { return TaiRuntimeState.fromJson(null); }
+        @Override public boolean isModelLoaded(String modelId) { return true; }
+        @Override public JSONObject load(TaiModelSpec modelSpec, TaiRuntimeOptions options) throws JSONException { return ok(); }
+        @Override public JSONObject unload() throws JSONException { unloadCalled = true; released.countDown(); return ok(); }
+        @Override public JSONObject keepWarm(TaiModelSpec modelSpec, TaiRuntimeOptions options, int minutes) throws JSONException { return ok(); }
+        @Override public JSONObject cancel() throws JSONException { released.countDown(); return ok(); }
+        @Override public JSONObject chat(String modelId, String systemPrompt, String userPrompt, TaiRuntimeOptions options) throws JSONException {
+            entered.countDown();
+            try { released.await(2, TimeUnit.SECONDS); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+            return ok();
+        }
+        @Override public JSONObject chat(String modelId, String systemPrompt, String userPrompt, TaiRuntimeOptions options, TaiGenerationCallback callback) throws JSONException { return chat(modelId, systemPrompt, userPrompt, options); }
+        @Override public JSONObject chat(String modelId, TaiChatRequest request, TaiRuntimeOptions options) throws JSONException { return chat(modelId, "", "", options); }
+        @Override public JSONObject chat(String modelId, TaiChatRequest request, TaiRuntimeOptions options, TaiGenerationCallback callback) throws JSONException { return chat(modelId, "", "", options); }
+        @Override public JSONObject complete(String modelId, String prompt, TaiRuntimeOptions options) throws JSONException { return chat(modelId, "", prompt, options); }
+        @Override public JSONObject complete(String modelId, String prompt, TaiRuntimeOptions options, TaiGenerationCallback callback) throws JSONException { return complete(modelId, prompt, options); }
+
+        private JSONObject ok() throws JSONException { return new JSONObject().put("ok", true); }
     }
 }

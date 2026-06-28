@@ -111,6 +111,11 @@ launcherctl client-config aichat
 launcherctl client-config ollama
 ```
 
+Regenerate the configuration after installing or removing models. The OpenCode output includes
+each model's real input/output limits, media support, and whether automatic tool calls are safe.
+Models with short contexts or prompt-only tool emulation remain available for ordinary text chat,
+but OpenCode will not attach its large tool catalogue to those models.
+
 The generated examples refer to the `LAUNCHERCTL_TOKEN` environment variable instead of copying the secret into configuration files. Load it for the current shell with:
 
 ```sh

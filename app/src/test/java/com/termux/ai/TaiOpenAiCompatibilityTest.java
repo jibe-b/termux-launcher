@@ -342,6 +342,52 @@ public class TaiOpenAiCompatibilityTest {
         assertEquals(0, exposed.getJSONArray("_capabilities").length());
     }
 
+    @Test
+    public void automaticTools_degradeToTextForUnsupportedShortContextAndPromptFallbackModels() throws Exception {
+        JSONObject tools = new JSONObject().put("tools", new JSONArray().put(new JSONObject()
+            .put("type", "function").put("function", new JSONObject().put("name", "create"))))
+            .put("tool_choice", "auto");
+
+        JSONObject unsupported = new JSONObject(tools.toString());
+        assertTrue(TaiManager.omitAutomaticToolsForCompatibility(unsupported,
+            toolSpec("phi", 4096, false, null)));
+        assertFalse(unsupported.has("tools"));
+        assertEquals("none", unsupported.getString("tool_choice"));
+
+        JSONObject shortNative = new JSONObject(tools.toString());
+        assertTrue(TaiManager.omitAutomaticToolsForCompatibility(shortNative,
+            toolSpec("gemma", 4096, true, TaiModelSpec.TOOL_MODE_NATIVE)));
+
+        JSONObject promptFallback = new JSONObject(tools.toString());
+        assertTrue(TaiManager.omitAutomaticToolsForCompatibility(promptFallback,
+            toolSpec("qwen", 16384, true, TaiModelSpec.TOOL_MODE_PROMPT_FALLBACK)));
+
+        JSONObject reliableNative = new JSONObject(tools.toString());
+        assertFalse(TaiManager.omitAutomaticToolsForCompatibility(reliableNative,
+            toolSpec("native-agent", 16384, true, TaiModelSpec.TOOL_MODE_NATIVE)));
+        assertTrue(reliableNative.has("tools"));
+    }
+
+    @Test
+    public void explicitRequiredTools_doNotSilentlyDegrade() throws Exception {
+        JSONObject request = new JSONObject().put("tools", new JSONArray().put(new JSONObject()
+            .put("type", "function").put("function", new JSONObject().put("name", "create"))))
+            .put("tool_choice", "required");
+
+        assertFalse(TaiManager.omitAutomaticToolsForCompatibility(request,
+            toolSpec("phi", 4096, false, null)));
+        assertTrue(request.has("tools"));
+    }
+
+    private static TaiModelSpec toolSpec(String id, int context, boolean tools, String toolMode) {
+        LinkedHashSet<String> source = new LinkedHashSet<>();
+        source.add(TaiModelSpec.CAPABILITY_TEXT_CHAT);
+        if (tools) source.add(TaiModelSpec.CAPABILITY_TOOL_USE);
+        return new TaiModelSpec(id, id, "test", "test", "/models/model.litertlm", "test", 0L,
+            source, false, null, TaiModelSpec.BACKEND_LITERT_LM, TaiModelSpec.FORMAT_LITERTLM,
+            null, null, context, context, 1024, 0, null, source, toolMode);
+    }
+
     private static TaiModelSpec spec(String id, String backend, String... capabilities) {
         LinkedHashSet<String> caps = new LinkedHashSet<>();
         caps.add("text_chat");

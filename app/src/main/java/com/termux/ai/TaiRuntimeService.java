@@ -43,6 +43,11 @@ public final class TaiRuntimeService extends Service {
         thread.setDaemon(true);
         return thread;
     });
+    private final ExecutorService controlExecutor = Executors.newSingleThreadExecutor(runnable -> {
+        Thread thread = new Thread(runnable, "tai-runtime-control");
+        thread.setDaemon(true);
+        return thread;
+    });
     private final Messenger messenger = new Messenger(new IncomingHandler());
     private volatile boolean foreground;
 
@@ -56,6 +61,7 @@ public final class TaiRuntimeService extends Service {
     @Override
     public void onDestroy() {
         executor.shutdownNow();
+        controlExecutor.shutdownNow();
         super.onDestroy();
     }
 
@@ -80,8 +86,18 @@ public final class TaiRuntimeService extends Service {
                 runRequest(replyTo, requestId, operation, body, bodyFile);
                 return;
             }
+            if (isConcurrentControlOperation(operation)) {
+                // Generation occupies the serial native-work executor. Control operations need an
+                // independent lane so they can signal it instead of queuing behind it.
+                controlExecutor.execute(() -> runRequest(replyTo, requestId, operation, body, bodyFile));
+                return;
+            }
             executor.execute(() -> runRequest(replyTo, requestId, operation, body, bodyFile));
         }
+    }
+
+    static boolean isConcurrentControlOperation(@NonNull String operation) {
+        return TaiRuntimeIpc.OP_CANCEL.equals(operation) || TaiRuntimeIpc.OP_UNLOAD_MODEL.equals(operation);
     }
 
     private void runRequest(

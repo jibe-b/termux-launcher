@@ -65,6 +65,7 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
     private TaiDeviceCapabilities loadedDeviceCapabilities;
     private ScheduledFuture<?> idleUnloadFuture;
     private boolean generating;
+    private boolean unloadAfterGeneration;
     private String activeGenerationId;
     private long activeGenerationStartedAtMs;
     private long loadedAtMs;
@@ -139,7 +140,19 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
     @Override
     public synchronized JSONObject unload() throws JSONException {
         if (generating) {
-            return error(409, "generation_active", "Cancel the active generation before unloading the LiteRT-LM runtime.");
+            unloadAfterGeneration = true;
+            runtimeState = "stopping";
+            statusMessage = "Cancelling generation; LiteRT-LM will unload when generation stops.";
+            try {
+                if (conversation != null) conversation.cancelProcess();
+            } catch (Exception e) {
+                return error(500, "cancel_failed", "Failed to cancel active LiteRT-LM generation: " + e.getMessage());
+            }
+            JSONObject data = stateEnvelopeLocked(true);
+            data.put("cancelled", true);
+            data.put("unloadPending", true);
+            data.put("message", statusMessage);
+            return data;
         }
         if (loading) {
             loadCancellationRequested = true;
@@ -281,6 +294,7 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         StringBuilder responseBuilder = new StringBuilder();
         JSONArray toolCalls = new JSONArray();
         AtomicReference<Throwable> errorRef = new AtomicReference<>();
+        boolean unloadRequested;
         try {
             if (callback == null) {
                 Message response = activeConversation.sendMessage(request.message, Collections.emptyMap());
@@ -335,6 +349,7 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
             errorRef.set(t);
         } finally {
             synchronized (this) {
+                unloadRequested = unloadAfterGeneration;
                 finishGenerationLocked(errorRef.get());
                 if (!request.reusableConversation) closeConversationLocked();
             }
@@ -346,6 +361,9 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
                 return error(499, "generation_cancelled", "LiteRT-LM generation was cancelled.");
             }
             return error(500, "litert_lm_generation_failed", "LiteRT-LM generation failed: " + throwable.getMessage());
+        }
+        if (unloadRequested) {
+            return error(499, "generation_cancelled", "LiteRT-LM generation was cancelled and the model was unloaded.");
         }
 
         JSONObject data = new JSONObject();
@@ -571,6 +589,7 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
     private String beginGenerationLocked() {
         long now = System.currentTimeMillis();
         generating = true;
+        unloadAfterGeneration = false;
         activeGenerationStartedAtMs = now;
         activeGenerationId = "tai-gen-" + now;
         lastUsedAtMs = now;
@@ -585,7 +604,11 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         activeGenerationId = null;
         activeGenerationStartedAtMs = 0L;
         lastUsedAtMs = System.currentTimeMillis();
-        if (isCancellation(throwable)) {
+        if (unloadAfterGeneration) {
+            unloadAfterGeneration = false;
+            closeEngineLocked("LiteRT-LM runtime is unloaded.", "unloaded");
+            return;
+        } else if (isCancellation(throwable)) {
             statusMessage = "Generation cancelled.";
             runtimeState = "loaded";
         } else if (throwable != null) {

@@ -340,7 +340,14 @@ EOF
           npm:"@ai-sdk/openai-compatible",name:"Termux Launcher",
           options:{baseURL:$base,apiKey:"{env:LAUNCHERCTL_TOKEN}"},
           models:(.data | map(select(._capabilities | index("text_chat"))) |
-            map({key:.id,value:{name:(._display_name // .id),limit:{context:._endpoint_context_window,output:._default_max_output_tokens}}}) | from_entries)}}}'
+            map((([._default_max_output_tokens, ((._endpoint_context_window / 4) | floor)] | min)) as $output |
+              {key:.id,value:{
+                name:(._display_name // .id),
+                tool_call:(((._capabilities | index("tool_use")) != null) and (._tool_mode == "native") and (._endpoint_context_window >= 16384)),
+                attachment:(((._capabilities | index("image_input")) != null) or ((._capabilities | index("audio_input")) != null)),
+                limit:{context:._endpoint_context_window,input:(._endpoint_context_window - $output),output:$output},
+                modalities:{input:(["text"] + (if (._capabilities | index("image_input")) != null then ["image"] else [] end) + (if (._capabilities | index("audio_input")) != null then ["audio"] else [] end)),output:["text"]}
+              }}) | from_entries)}}}'
       ;;
     crush)
       printf '%s' "$models" | jq --arg base "$BASE/v1" '

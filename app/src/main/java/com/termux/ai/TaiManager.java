@@ -454,6 +454,7 @@ public final class TaiManager {
         if (!spec.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_CHAT)) {
             return openAiError(generationCapabilityError(spec));
         }
+        omitAutomaticToolsForCompatibility(request, spec);
         if (!modelSupportsRequestedTools(request, spec)) {
             return openAiError(error(400, "capability_not_supported",
                 "Model " + spec.id + " does not support tool use through this endpoint."));
@@ -578,6 +579,7 @@ public final class TaiManager {
             emitOpenAiError(sink, generationCapabilityError(spec));
             return;
         }
+        omitAutomaticToolsForCompatibility(request, spec);
         if (!modelSupportsRequestedTools(request, spec)) {
             emitOpenAiError(sink, error(400, "capability_not_supported",
                 "Model " + spec.id + " does not support tool use through this endpoint."));
@@ -1286,6 +1288,31 @@ public final class TaiManager {
         JSONArray tools = request.optJSONArray("tools");
         if (tools == null || tools.length() == 0 || "none".equals(String.valueOf(request.opt("tool_choice")))) return true;
         return spec.capabilities.contains(TaiModelSpec.CAPABILITY_TOOL_USE);
+    }
+
+    /**
+     * Agent TUIs attach their complete tool catalogue to even a casual text prompt. For local
+     * models that cannot use tools, short-context models where that catalogue cannot fit, and MNN
+     * prompt-fallback models that are not reliable under automatic tool choice, degrade only the
+     * automatic request to ordinary text chat. Explicit required/named tool choices still fail
+     * closed through {@link #modelSupportsRequestedTools(JSONObject, TaiModelSpec)}.
+     */
+    static boolean omitAutomaticToolsForCompatibility(
+        @NonNull JSONObject request,
+        @NonNull TaiModelSpec spec
+    ) throws JSONException {
+        JSONArray tools = request.optJSONArray("tools");
+        if (tools == null || tools.length() == 0) return false;
+        Object choice = request.opt("tool_choice");
+        boolean automatic = choice == null || JSONObject.NULL.equals(choice) || "auto".equals(String.valueOf(choice));
+        if (!automatic) return false;
+        boolean reliableAutomaticTools = spec.capabilities.contains(TaiModelSpec.CAPABILITY_TOOL_USE)
+            && spec.endpointContextWindow >= 16_384
+            && !TaiModelSpec.TOOL_MODE_PROMPT_FALLBACK.equals(spec.toolMode);
+        if (reliableAutomaticTools) return false;
+        request.remove("tools");
+        request.put("tool_choice", "none");
+        return true;
     }
 
     @NonNull

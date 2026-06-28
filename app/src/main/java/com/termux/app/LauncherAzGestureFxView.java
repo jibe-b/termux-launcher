@@ -215,6 +215,7 @@ public final class LauncherAzGestureFxView extends View {
                 hasPreviewPosition = false;
             }
         }
+        refreshVisibility();
         invalidate();
     }
 
@@ -427,7 +428,13 @@ public final class LauncherAzGestureFxView extends View {
     private void refreshVisibility() {
         boolean shouldDrawInteractionOverflow = interactionOverflowActive
             && (interactionCanPageLeft || interactionCanPageRight || interactionPageCount > 1);
-        setVisibility(shouldDrawInteractionOverflow || edgeDwellProgress > 0.01f || focusedAppPreviewProgress > 0.01f ? VISIBLE : GONE);
+        boolean shouldDrawFocusRing = focusedIconRingEnabled
+            && dragActive
+            && interactionMode == InteractionMode.ICON_TRACK_LOCKED
+            && hasFocus
+            && !focusRawRect.isEmpty();
+        setVisibility(shouldDrawInteractionOverflow || edgeDwellProgress > 0.01f
+            || focusedAppPreviewProgress > 0.01f || shouldDrawFocusRing ? VISIBLE : GONE);
     }
 
     public void playLaunchBloom(float rawX, float rawY) {
@@ -463,7 +470,11 @@ public final class LauncherAzGestureFxView extends View {
 
         boolean shouldDrawInteractionOverflow = interactionOverflowActive
             && (interactionCanPageLeft || interactionCanPageRight || interactionPageCount > 1);
-        boolean drawFocusRing = focusedIconRingEnabled && hasFocus && !focusRawRect.isEmpty();
+        boolean drawFocusRing = focusedIconRingEnabled
+            && dragActive
+            && interactionMode == InteractionMode.ICON_TRACK_LOCKED
+            && hasFocus
+            && !focusRawRect.isEmpty();
         if (!shouldDrawInteractionOverflow && edgeDwellProgress <= 0.01f
             && focusedAppPreviewProgress <= 0.01f && !drawFocusRing) {
             return;
