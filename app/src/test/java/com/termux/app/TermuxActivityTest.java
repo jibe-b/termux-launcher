@@ -29,4 +29,14 @@ public class TermuxActivityTest {
         Assert.assertFalse(TermuxActivity.shouldShowInRecents(false, false));
         Assert.assertFalse(TermuxActivity.shouldShowInRecents(false, true));
     }
+
+    @Test
+    public void testDockGlassOpacityUsesMeaningfulRangeWithoutHidingBlur() {
+        Assert.assertEquals(0, TermuxActivity.dockGlassBaseAlpha(0f));
+        Assert.assertEquals(70, TermuxActivity.dockGlassBaseAlpha(0.5f));
+        Assert.assertEquals(140, TermuxActivity.dockGlassBaseAlpha(1f));
+        Assert.assertEquals(0, TermuxActivity.dockGlassBaseAlpha(-1f));
+        Assert.assertEquals(140, TermuxActivity.dockGlassBaseAlpha(2f));
+        Assert.assertTrue(TermuxActivity.DOCK_GLASS_BASE_MAX_ALPHA < 255);
+    }
 }

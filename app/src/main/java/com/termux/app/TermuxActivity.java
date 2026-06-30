@@ -1028,11 +1028,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int base = resolveAccessoryGlassBaseColor();
         int accent = resolveDockAccentColor();
         float clamped = barAlpha < 0f ? 0f : (barAlpha > 1f ? 1f : barAlpha);
-        // Translucent base — NOT an opaque card. This is the single biggest lever for the glass read:
-        // the blurred wallpaper behind the dock now shows THROUGH the surface. The user's opacity
-        // preference scales how much shows through (it is baked into the drawable so the light model
-        // below is not also crushed by the view's own alpha — callers set view alpha to 1f).
-        int baseAlpha = Math.round(clamped * DOCK_GLASS_BASE_MAX_ALPHA);
+        // Keep opacity in this tint drawable instead of applying it to the host view. The AGSL
+        // wallpaper backdrop is a separate layer below this one and must remain fully active; only
+        // the dock's material surface, sheen and grain should respond to the opacity preference.
+        int baseAlpha = dockGlassBaseAlpha(clamped);
+        int topSheenAlpha = Math.round(16f * clamped);
+        int midSheenAlpha = Math.round(8f * clamped);
+        int bottomFootAlpha = Math.round(20f * clamped);
         GradientDrawable baseLayer = new GradientDrawable();
         baseLayer.setColor(withAlphaComponent(base, baseAlpha));
         baseLayer.setDither(true);
@@ -1045,10 +1047,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             new int[] {
                 // No broad white sheen — a near-white wash over the wallpaper reads as frosted
                 // plastic. A faint cool accent lift at the top keeps the glass tinted, not milky.
-                withAlphaComponent(accent, 16),
-                withAlphaComponent(accent, 8),
+                withAlphaComponent(accent, topSheenAlpha),
+                withAlphaComponent(accent, midSheenAlpha),
                 Color.TRANSPARENT,
-                withAlphaComponent(Color.BLACK, 20)
+                withAlphaComponent(Color.BLACK, bottomFootAlpha)
             }
         );
         lightLayer.setDither(true);
@@ -1059,7 +1061,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             ? mPreferences.getDockGlassGrain()
             : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN;
         if (grain > 0) {
-            return new LayerDrawable(new Drawable[] { baseLayer, lightLayer, buildDockGrainLayer(grain) });
+            return new LayerDrawable(new Drawable[] { baseLayer, lightLayer, buildDockGrainLayer(grain, clamped) });
         }
         return new LayerDrawable(new Drawable[] { baseLayer, lightLayer });
     }
@@ -1084,20 +1086,27 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return mDockGrainBitmap;
     }
 
-    /** A tiled grain layer whose overall strength scales with {@code grainPercent} (1..100). */
+    /** A tiled grain layer whose strength scales with both grain and dock-surface opacity. */
     @NonNull
-    private Drawable buildDockGrainLayer(int grainPercent) {
+    private Drawable buildDockGrainLayer(int grainPercent, float surfaceAlpha) {
         BitmapDrawable grain = new BitmapDrawable(getResources(), getDockGrainBitmap());
         grain.setTileModeXY(Shader.TileMode.REPEAT, Shader.TileMode.REPEAT);
         grain.setDither(true);
         // Cap the strength so even at 100% it stays a texture, not visual static.
-        grain.setAlpha(Math.round(Math.max(0, Math.min(100, grainPercent)) / 100f * 60f));
+        float clampedSurfaceAlpha = Math.max(0f, Math.min(1f, surfaceAlpha));
+        grain.setAlpha(Math.round(Math.max(0, Math.min(100, grainPercent)) / 100f * 60f * clampedSurfaceAlpha));
         return grain;
     }
 
-    /** Max alpha (of 255) the translucent dock-glass base reaches at full user opacity. Kept low so
-     *  the blurred wallpaper carries the glass body; the base is just a faint legibility tint. */
-    private static final int DOCK_GLASS_BASE_MAX_ALPHA = 20;
+    /**
+     * Max tint alpha at 100% dock opacity. This deliberately remains below 255 so the AGSL-blurred
+     * wallpaper continues to carry the glass body instead of being hidden by an opaque card.
+     */
+    static final int DOCK_GLASS_BASE_MAX_ALPHA = 140;
+
+    static int dockGlassBaseAlpha(float opacity) {
+        return Math.round(Math.max(0f, Math.min(1f, opacity)) * DOCK_GLASS_BASE_MAX_ALPHA);
+    }
 
     /** Cached light-scatter filter applied to the blurred wallpaper backdrop. */
     @Nullable private ColorMatrixColorFilter mGlassFrostFilter;
