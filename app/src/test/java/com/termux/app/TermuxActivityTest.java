@@ -32,8 +32,8 @@ public class TermuxActivityTest {
 
     @Test
     public void testDockGlassOpacityUsesMeaningfulRangeWithoutHidingBlur() {
-        Assert.assertEquals(0, TermuxActivity.dockGlassBaseAlpha(0f));
-        Assert.assertEquals(70, TermuxActivity.dockGlassBaseAlpha(0.5f));
+        Assert.assertEquals(42, TermuxActivity.dockGlassBaseAlpha(0f));
+        Assert.assertEquals(112, TermuxActivity.dockGlassBaseAlpha(0.5f));
         Assert.assertEquals(140, TermuxActivity.dockGlassBaseAlpha(1f));
         Assert.assertEquals(0, TermuxActivity.dockGlassBaseAlpha(-1f));
         Assert.assertEquals(140, TermuxActivity.dockGlassBaseAlpha(2f));

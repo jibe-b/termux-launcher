@@ -1103,9 +1103,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * wallpaper continues to carry the glass body instead of being hidden by an opaque card.
      */
     static final int DOCK_GLASS_BASE_MAX_ALPHA = 140;
+    static final float DOCK_GLASS_OPACITY_OFFSET = 0.30f;
 
     static int dockGlassBaseAlpha(float opacity) {
-        return Math.round(Math.max(0f, Math.min(1f, opacity)) * DOCK_GLASS_BASE_MAX_ALPHA);
+        float adjustedOpacity = Math.max(0f, Math.min(1f, opacity + DOCK_GLASS_OPACITY_OFFSET));
+        return Math.round(adjustedOpacity * DOCK_GLASS_BASE_MAX_ALPHA);
     }
 
     /** Cached light-scatter filter applied to the blurred wallpaper backdrop. */
