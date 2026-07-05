@@ -15,7 +15,7 @@ import java.util.Properties;
 public class TerminalBitmap {
 
     private static int initMaxBitmapSize() {
-        int defaultSize = Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM ?
+        int defaultSize = Build.VERSION.SDK_INT >= 35 /* VANILLA_ICE_CREAM */ ?
             150 * 1024 * 1024 : 100 * 1024 * 1024;
 
         Properties systemProperties = AndroidUtils.getSystemProperties(LOG_TAG);

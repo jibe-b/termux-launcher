@@ -356,7 +356,7 @@ public final class TermuxConstants {
      * Termux package name
      */
     // Default: "com.termux"
-    public static final String TERMUX_PACKAGE_NAME = "com.termux";
+    public static final String TERMUX_PACKAGE_NAME = "fr.alpaga.termux_launcher";
 
     /**
      * Termux GitHub repo name
